@@ -93,9 +93,17 @@ class MasterAgent:
         self.tts_engine = tts_engine or os.getenv("TTS_ENGINE") or cfg.get("voice", {}).get("engine", "edge_tts")
 
         if is_burmese:
-            self.tts_voice = cfg["voice"]["myanmar_voice"]
+            self.tts_voice = (
+                cfg["voice"].get("myanmar_voice")
+                or cfg["voice"].get("tts_voice_mm")
+                or "my-MM-ThihaNeural"
+            )
         else:
-            self.tts_voice = cfg["voice"]["english_voice"]
+            self.tts_voice = (
+                cfg["voice"].get("english_voice")
+                or cfg["voice"].get("tts_voice_en")
+                or "en-US-GuyNeural"
+            )
 
         self.whisper_model          = whisper_model
         self.tts_enabled            = cfg["voice"]["enabled"]
