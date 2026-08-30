@@ -980,6 +980,7 @@
                 body: JSON.stringify({ input, language: lang, subtitle_mode: subtitleMode, tts_engine: ttsEngine })
             });
             const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
             if (data.error) throw new Error(data.error);
             startStreamingLogs(data.job_id);
         } catch (e) {
@@ -1009,6 +1010,7 @@
                 body: JSON.stringify({ inputs, language: lang, subtitle_mode: subtitleMode, tts_engine: ttsEngine })
             });
             const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
             if (data.error) throw new Error(data.error);
             startStreamingLogs(data.job_id);
         } catch (e) {
@@ -1273,6 +1275,7 @@
                 body: JSON.stringify({ keys: keysArr })
             });
             const data = await res.json();
+            if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
             if (data.error) throw new Error(data.error);
             showAlert(`✅ Saved ${data.keys_count} API Key(s) to config.json!`);
             document.getElementById('key-editor-box').style.display = 'none';
