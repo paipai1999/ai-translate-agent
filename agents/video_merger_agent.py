@@ -270,8 +270,8 @@ class VideoMergerAgent:
                     place_time = max(sim_curr_t, starts[idx])
                     sim_curr_t = place_time + c.duration + 0.05
                 
-                if sim_curr_t > video_dur:
-                    factor = video_dur / sim_curr_t
+                if video_dur > 0 and sim_curr_t > video_dur:
+                    factor = max(0.2, video_dur / sim_curr_t)
                     print(f"[*] VideoMerger: Audio total ({sim_curr_t:.1f}s) exceeds video ({video_dur:.1f}s).")
                     print(f"[*] VideoMerger: Applying SLOW MOTION (factor {factor:.2f}x) to fit audio perfectly!")
                     try:
