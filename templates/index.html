@@ -1,0 +1,1701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Recap AI 🎬</title>
+    <meta name="description" content="AI-powered movie recap video generator with Hybrid Native Video Processing, Descriptive Storytelling, and Myanmar neural voice">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Padauk:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #fafafa;
+            --bg2: #ffffff;
+            --accent: #ff4757; /* Bright vibrant music app style red/pink */
+            --accent2: #ff6b81;
+            --accent-glow: rgba(255, 71, 87, 0.25);
+            --success: #2ed573;
+            --warn: #ffa502;
+            --error: #ff4757;
+            --card: rgba(255, 255, 255, 0.85);
+            --card-border: rgba(0, 0, 0, 0.04);
+            --text: #2f3542;
+            --muted: #747d8c;
+            --muted2: #a4b0be;
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(22px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes floatGlow {
+            0%,100% { transform: translate3d(0,0,0) scale(1); opacity: 0.8; }
+            50% { transform: translate3d(0,-8px,0) scale(1.03); opacity: 1; }
+        }
+        @keyframes pulseSoft {
+            0%,100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(124,58,237,0.28); }
+            50% { transform: scale(1.01); box-shadow: 0 0 0 10px rgba(124,58,237,0); }
+        }
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes statusPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(124,58,237,0.14); }
+            50% { transform: scale(1.05); box-shadow: 0 0 12px rgba(124,58,237,0.4); }
+        }
+        @keyframes connector-flow {
+            0% { left: -50%; }
+            100% { left: 120%; }
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', 'Padauk', 'Pyidaungsu', sans-serif;
+            background: linear-gradient(135deg, #f1f2f6 0%, #ffffff 100%);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative;
+            animation: fadeInUp 0.7s ease-out both;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: radial-gradient(circle at top left, rgba(255,107,129,0.08), transparent 40%),
+                        radial-gradient(circle at bottom right, rgba(112,161,255,0.08), transparent 40%);
+            pointer-events: none;
+            z-index: -1;
+        }
+        body::after {
+            display: none;
+        }
+
+        .bg-stars,
+        .bg-gradient,
+        .bg-grid,
+        .bg-particles {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 0;
+        }
+        .bg-stars {
+            background: radial-gradient(circle at 25% 10%, rgba(255,71,87,0.04), transparent 15%),
+                        radial-gradient(circle at 75% 85%, rgba(46,213,115,0.04), transparent 15%);
+        }
+        .bg-gradient {
+            background: radial-gradient(circle at 50% 50%, rgba(255,255,255,0.4), transparent 50%);
+            filter: blur(20px);
+        }
+        .bg-grid {
+            background-image: repeating-linear-gradient(180deg, rgba(0,0,0,0.02) 0 1px, transparent 1px 32px),
+                              repeating-linear-gradient(90deg, rgba(0,0,0,0.02) 0 1px, transparent 1px 32px);
+            opacity: 0.5;
+        }
+
+        .light-canvas {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 1;
+            opacity: 1;
+        }
+
+        .animate-in {
+            animation: fadeInUp 0.65s ease both;
+        }
+
+        .hero-card, .progress-card, .section-card, .key-card {
+            animation: fadeUp 0.5s ease-out backwards;
+        }
+
+        .hero-card::after {
+            animation: floatGlow 8s ease-in-out infinite;
+        }
+
+        .status-pill.running {
+            animation: statusPulse 2s ease-in-out infinite;
+        }
+
+        .prog-bar {
+            background-size: 200% 100%;
+            animation: shimmer 2.3s linear infinite;
+        }
+
+        .btn-primary, .btn-nav, .btn-success, .btn-delete, .btn-delete-all, .btn-use, .download-btn {
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.25s, box-shadow 0.25s, opacity 0.25s, border-color 0.25s;
+        }
+        .btn-primary::after, .btn-nav::after, .btn-success::after, .btn-delete::after, .btn-delete-all::after, .btn-use::after, .download-btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.16), transparent);
+            transform: translateX(-120%);
+            transition: transform 0.6s ease;
+        }
+        .btn-primary:hover::after, .btn-nav:hover::after, .btn-success:hover::after, .btn-delete:hover::after, .btn-use:hover::after, .download-btn:hover::after {
+            transform: translateX(120%);
+        }
+
+        .url-input, .batch-textarea, select.lang-select {
+            transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+        }
+        .url-input:focus, .batch-textarea:focus, select.lang-select:focus {
+            transform: translateY(-1px);
+        }
+
+
+        /* ── Top Nav ── */
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 2.5rem;
+            border-bottom: 1px solid rgba(0,0,0,0.04);
+            backdrop-filter: blur(18px);
+            background: rgba(255, 255, 255, 0.76);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .nav-brand {
+            display: flex; align-items: center; gap: 0.75rem;
+        }
+        .nav-brand .logo {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem;
+            box-shadow: 0 6px 16px var(--accent-glow);
+            color: white;
+        }
+        .nav-brand h1 {
+            font-size: 1.2rem; font-weight: 700;
+            color: var(--text);
+            letter-spacing: -0.5px;
+        }
+        .nav-actions { display: flex; gap: 0.75rem; align-items: center; }
+        .nav-model-pill {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.45rem 1rem;
+            background: rgba(255, 71, 87, 0.1);
+            border: 1px solid rgba(255, 71, 87, 0.2);
+            border-radius: 22px;
+            font-size: 0.78rem; font-weight: 600; color: var(--accent);
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 15px rgba(255, 71, 87, 0.05);
+        }
+        .pulse-dot {
+            width: 7px; height: 7px;
+            background: var(--success);
+            border-radius: 50%;
+        }
+        .btn-nav {
+            padding: 0.42rem 1rem;
+            border-radius: 12px;
+            border: 1px solid rgba(0,0,0,0.05);
+            background: rgba(0,0,0,0.03);
+            color: var(--muted);
+            font-size: 0.82rem; font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, border-color 0.2s, background 0.2s;
+        }
+        .btn-nav:hover {
+            background: rgba(0,0,0,0.06);
+            color: var(--text);
+            transform: translateY(-1px);
+        }
+
+        /* ── Main layout ── */
+        .page { max-width: 1100px; margin: 0 auto; padding: 2.5rem 2rem 4rem; position: relative; z-index: 2; }
+
+        /* ── Hero Input Card ── */
+        .hero-card {
+            background: var(--card);
+            backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--card-border);
+            border-radius: 26px;
+            padding: 2rem 2.5rem;
+            margin-bottom: 1.75rem;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.05), inset 0 1px 0 rgba(255,255,255,1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .section-label {
+            font-size: 0.75rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.1em;
+            color: var(--muted); margin-bottom: 1.25rem;
+        }
+
+        /* ── Mode Tabs ── */
+        .tabs {
+            display: flex; gap: 0.5rem;
+            background: rgba(0,0,0,0.04);
+            padding: 0.3rem;
+            border-radius: 12px;
+            margin-bottom: 1.5rem;
+            width: fit-content;
+        }
+        .tab-btn {
+            padding: 0.45rem 1.2rem;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            color: var(--muted);
+            font-size: 0.85rem; font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s;
+        }
+        .tab-btn.active {
+            background: white;
+            color: var(--text);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        /* ── Input row ── */
+        .input-row {
+            display: flex; gap: 0.75rem; margin-bottom: 1.25rem;
+        }
+        .url-input {
+            flex: 1;
+            padding: 0.9rem 1.25rem;
+            border-radius: 12px;
+            border: 1px solid rgba(0,0,0,0.08);
+            background: white;
+            color: var(--text);
+            font-size: 0.95rem;
+            font-family: inherit;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.01);
+        }
+        .url-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px var(--accent-glow);
+        }
+        .url-input::placeholder { color: var(--muted2); }
+
+        select.lang-select {
+            padding: 0.9rem 1rem;
+            border-radius: 12px;
+            border: 1px solid rgba(0,0,0,0.08);
+            background: white;
+            color: var(--text);
+            font-family: inherit;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            outline: none;
+        }
+
+        .btn-primary {
+            display: inline-flex; align-items: center; gap: 0.6rem;
+            padding: 0.95rem 1.8rem;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            color: white;
+            font-size: 0.95rem; font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.25s, box-shadow 0.25s, opacity 0.25s;
+            box-shadow: 0 6px 18px var(--accent-glow);
+            white-space: nowrap;
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 24px var(--accent-glow); }
+        .btn-primary:active { transform: translateY(0) scale(0.98); }
+        .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--success), #20bf6b);
+            box-shadow: 0 4px 18px rgba(46,213,115,0.3);
+        }
+        .btn-success:hover { box-shadow: 0 8px 24px rgba(46,213,115,0.4); }
+
+        /* ── Anti-copyright strip ── */
+        .options-strip {
+            display: flex; align-items: center; gap: 1.5rem;
+            padding: 0.8rem 1.2rem;
+            background: rgba(255,255,255,0.5);
+            border-radius: 12px;
+            border: 1px solid var(--card-border);
+            flex-wrap: wrap;
+        }
+        .options-strip label {
+            display: flex; align-items: center; gap: 0.5rem;
+            font-size: 0.85rem; color: var(--muted2);
+            cursor: pointer; user-select: none;
+        }
+        .options-strip input[type=checkbox] {
+            accent-color: var(--accent);
+            width: 15px; height: 15px;
+        }
+        .strip-title { font-size: 0.82rem; font-weight: 700; color: #c4b5fd; }
+
+        /* ── Progress Card ── */
+        .progress-card {
+            display: none;
+            background: var(--card);
+            backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--card-border);
+            border-radius: 26px;
+            padding: 1.75rem 2.25rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.05);
+            position: relative;
+            z-index: 1;
+            overflow: visible;
+        }
+        .progress-card.visible { display: block; }
+
+        /* Phase steps */
+        .phase-steps {
+            display: flex; align-items: center; gap: 0;
+            margin-bottom: 1.5rem; flex-wrap: nowrap; overflow-x: auto;
+            scroll-behavior: smooth;
+        }
+        .phase-step {
+            display: flex; align-items: center; gap: 0;
+            flex-shrink: 0;
+        }
+        .phase-node {
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            position: relative;
+        }
+        .phase-circle {
+            width: 34px; height: 34px;
+            border-radius: 50%;
+            background: rgba(0,0,0,0.02);
+            border: 2px solid rgba(0,0,0,0.08);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.75rem; font-weight: 700; color: var(--muted);
+            transition: all 0.4s ease;
+        }
+        .phase-circle.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+            box-shadow: 0 4px 12px var(--accent-glow);
+        }
+        .phase-circle.done {
+            background: var(--success);
+            border-color: var(--success);
+            color: white;
+        }
+        .phase-label {
+            font-size: 0.72rem; font-weight: 600;
+            line-height: 1.3;
+            color: var(--muted); text-align: center; white-space: nowrap;
+            transition: color 0.3s;
+        }
+        .phase-label.active { color: var(--accent); font-weight: 700; }
+        .phase-label.done { color: var(--success); }
+        .phase-connector {
+            width: 48px; height: 2px;
+            background: rgba(0,0,0,0.06);
+            margin: 0 2px;
+            position: relative; bottom: 10px;
+            flex-shrink: 0;
+            overflow: hidden;
+            transition: background 0.5s;
+        }
+        .phase-connector::before {
+            content: '';
+            position: absolute; top: 0; left: -50%;
+            width: 40%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 71, 87, 0.9), transparent);
+            transform: skewX(-20deg);
+            animation: connector-flow 1.4s linear infinite;
+        }
+        .phase-connector.done::before { display: none; }
+        .phase-connector.done {
+            background: var(--success);
+        }
+
+        .prog-bar-wrap {
+            width: 100%;
+            height: 12px;
+            border-radius: 999px;
+            background: rgba(0,0,0,0.04);
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 1.5rem;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.04);
+        }
+        .prog-bar {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--accent2));
+            border-radius: 999px;
+            position: relative;
+            overflow: hidden;
+            transition: width 0.45s ease;
+        }
+        .prog-bar::after {
+            content: '';
+            position: absolute;
+            top: 0; left: -50%;
+            width: 50%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+            filter: blur(4px);
+        }
+
+
+        /* Log box */
+        .log-box {
+            background: white;
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.8rem;
+            line-height: 1.65;
+            height: 180px;
+            overflow-y: auto;
+            color: var(--text);
+            border: 1px solid rgba(0,0,0,0.08);
+            scroll-behavior: smooth;
+            position: relative;
+            z-index: 1;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.02);
+        }
+
+        .log-box .log-ok { color: var(--success); }
+        .log-box .log-warn { color: var(--warn); }
+        .log-box .log-err { color: var(--error); }
+        .log-box .log-info { color: #3742fa; }
+
+        @property --beam-angle {
+            syntax: '<angle>';
+            initial-value: 0deg;
+            inherits: false;
+        }
+        .log-box-wrap {
+            position: relative;
+            border-radius: 11px;
+            margin-bottom: 1rem;
+        }
+        .log-box-wrap::after {
+            content: '';
+            position: absolute; inset: -1px; border-radius: 11px;
+            pointer-events: none; z-index: 2;
+            transition: border-color 0.4s ease;
+        }
+        .log-box-wrap::before {
+            content: '';
+            position: absolute; inset: -1px; border-radius: 11px;
+            background: conic-gradient(from var(--beam-angle), transparent 0deg, transparent 50deg, #3b1a6e 68deg, #7c3aed 82deg, #818cf8 90deg, #38bdf8 97deg, #818cf8 105deg, #7c3aed 118deg, #3b1a6e 132deg, transparent 150deg, transparent 360deg);
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor; mask-composite: exclude;
+            padding: 1.5px; opacity: 0; pointer-events: none; z-index: 3; transition: opacity 0.35s ease;
+        }
+        .log-box-wrap.running::before {
+            opacity: 1;
+            animation: beam-travel 2.2s linear infinite;
+        }
+        .log-box-wrap.running::after {
+            border-color: rgba(124, 58, 237, 0.25);
+        }
+        @keyframes beam-travel {
+            to { --beam-angle: 360deg; }
+        }
+
+        .status-pill {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            padding: 0.3rem 0.9rem;
+            border-radius: 20px;
+            font-size: 0.8rem; font-weight: 700;
+            margin-top: 0.9rem;
+        }
+        .status-pill.running { background: rgba(255, 71, 87, 0.1); color: var(--accent); border: 1px solid rgba(255, 71, 87, 0.2); }
+        .status-pill.done { background: rgba(46, 213, 115, 0.1); color: var(--success); border: 1px solid rgba(46, 213, 115, 0.2); }
+        .status-pill.error { background: rgba(239, 68, 68, 0.1); color: var(--error); border: 1px solid rgba(239, 68, 68, 0.2); }
+
+        /* ── API Keys Card ── */
+        .section-card {
+            background: var(--card);
+            backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+            border: 1px solid var(--card-border);
+            border-radius: 26px;
+            padding: 1.75rem 2.25rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.05);
+        }
+        .section-header {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-bottom: 1.25rem;
+        }
+        .section-header h2 {
+            font-size: 1rem; font-weight: 700; color: var(--text);
+            display: flex; align-items: center; gap: 0.5rem;
+            letter-spacing: 0.01em;
+        }
+        .section-header h2::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            margin-left: 0.85rem;
+            background: linear-gradient(90deg, transparent, rgba(0,0,0,0.05), transparent);
+        }
+        .quota-badge {
+            font-size: 0.8rem; padding: 0.3rem 0.85rem;
+            background: rgba(46, 213, 115, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(46, 213, 115, 0.2);
+            border-radius: 20px; font-weight: 600;
+        }
+        .keys-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+            gap: 1rem;
+        }
+        .key-card {
+            background: white;
+            border-radius: 16px; padding: 1.1rem 1.25rem;
+            border: 1px solid rgba(0,0,0,0.08);
+            transition: border-color 0.3s, transform 0.25s, box-shadow 0.25s;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.02);
+        }
+        .key-card:hover { border-color: var(--accent); transform: translateY(-3px); box-shadow: 0 18px 36px rgba(0,0,0,0.08); }
+
+        /* ── Outputs / Movies Grid ── */
+        .outputs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 1.25rem;
+            margin-top: 1.25rem;
+        }
+        .output-card {
+            background: white;
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 20px; padding: 1.5rem;
+            transition: border-color 0.3s, transform 0.25s, box-shadow 0.25s;
+            box-shadow: 0 18px 40px rgba(0,0,0,0.03);
+            backdrop-filter: blur(8px);
+        }
+        .output-card:hover { border-color: var(--accent); transform: translateY(-4px); box-shadow: 0 24px 48px rgba(0,0,0,0.08); }
+        .output-card h3 {
+            color: var(--accent); font-size: 1.05rem; margin-bottom: 0.5rem;
+        }
+        .file-link {
+            display: flex; align-items: center; gap: 0.4rem;
+            color: var(--muted); text-decoration: none;
+            padding: 0.45rem 0;
+            border-bottom: 1px solid rgba(0,0,0,0.04);
+            font-size: 0.85rem;
+            transition: color 0.2s;
+        }
+        .file-link:hover { color: var(--accent); }
+        audio { width: 100%; margin-top: 0.4rem; height: 34px; }
+        video { border-radius: 10px; background: #000; }
+
+        .video-wrap {
+            margin: 0.75rem 0;
+            background: white;
+            border: 1px solid rgba(0,0,0,0.08);
+            border-radius: 14px; padding: 1rem;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.02);
+        }
+        .video-title {
+            font-size: 0.88rem; font-weight: 700; color: var(--accent);
+            margin-bottom: 0.6rem;
+        }
+        .download-btn {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            padding: 0.45rem 1rem;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            color: white; text-decoration: none;
+            border-radius: 7px; font-size: 0.82rem; font-weight: 600;
+            transition: all 0.2s;
+        }
+        .download-btn:hover { opacity: 0.85; transform: scale(1.02); }
+
+        .btn-delete {
+            padding: 0.35rem 0.75rem;
+            background: rgba(239,68,68,0.12);
+            color: var(--error);
+            border: 1px solid rgba(239,68,68,0.25);
+            border-radius: 7px; font-size: 0.8rem; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .btn-delete:hover { background: rgba(239,68,68,0.25); }
+        .btn-use {
+            padding: 0.35rem 0.75rem;
+            background: rgba(16,185,129,0.12);
+            color: var(--success);
+            border: 1px solid rgba(16,185,129,0.25);
+            border-radius: 7px; font-size: 0.8rem; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .btn-use:hover { background: rgba(16,185,129,0.25); }
+
+        .empty-state {
+            color: var(--muted); font-style: italic;
+            font-size: 0.9rem; grid-column: 1/-1;
+            text-align: center; padding: 2rem;
+        }
+
+        /* Batch textarea */
+        .batch-textarea {
+            width: 100%; padding: 1rem;
+            border-radius: 12px;
+            border: 1px solid rgba(0,0,0,0.08);
+            background: white;
+            color: var(--text);
+            font-family: monospace; font-size: 0.85rem;
+            resize: vertical; min-height: 100px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.01);
+        }
+        .batch-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-glow); }
+
+        select.lang-select option { background: white; color: var(--text); }
+        .log-box::-webkit-scrollbar, .phase-steps::-webkit-scrollbar { height: 6px; width: 6px; }
+        .log-box::-webkit-scrollbar-thumb, .phase-steps::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
+
+        /* Responsive */
+        @media(max-width: 640px) {
+            nav { padding: 0.75rem 1.25rem; }
+            .page { padding: 1.5rem 1rem 3rem; }
+            .input-row { flex-direction: column; }
+            .input-row > * { width: 100%; }
+            .phase-connector { width: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="lightCanvas" class="light-canvas"></canvas>
+    <div class="bg-stars"></div>
+    <div class="bg-gradient"></div>
+    <div class="bg-grid"></div>
+
+<!-- ══ TOP NAV ══ -->
+<nav>
+    <div class="nav-brand">
+        <div class="logo">🎬</div>
+        <div style="display: flex; flex-direction: column;">
+            <h1>Movie Recap AI</h1>
+            <span style="font-size: 0.75rem; color: var(--success); letter-spacing: 0.5px; font-weight: 600; text-transform: uppercase; margin-top: -2px;">✨ Hybrid Native Video & Descriptive AI</span>
+        </div>
+    </div>
+    <div class="nav-actions">
+        <div id="encoder-badge" class="nav-model-pill" style="background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.25); color: var(--success);" title="Video Rendering Hardware Acceleration">
+            <span>⚡ GPU: Detecting...</span>
+        </div>
+        <div class="nav-model-pill">
+            <div class="pulse-dot"></div>
+            <span id="model-display">gemini-2.5-flash</span>
+        </div>
+        <button class="btn-nav" onclick="loadKeyStatus()">🔄 Refresh Keys</button>
+        <button class="btn-nav" onclick="clearCache()">🧹 Clear Cache</button>
+        <button class="btn-nav" style="background:var(--danger);" onclick="deleteAll('all')">🚨 Delete All (Sources + Outputs)</button>
+    </div>
+</nav>
+
+<!-- ══ PAGE CONTENT ══ -->
+<div class="page">
+
+    <!-- ── Hero Input Card ── -->
+    <div class="hero-card animate-in">
+        <div class="section-label">🚀 Pipeline Control</div>
+
+        <!-- Mode Tabs -->
+        <div class="tabs">
+            <button id="tab-single" class="tab-btn active" onclick="switchMode('single')">🎥 Single Video</button>
+            <button id="tab-batch" class="tab-btn" onclick="switchMode('batch')">📋 Batch Queue</button>
+        </div>
+
+        <!-- Single mode -->
+        <div id="single-group">
+            <div class="input-row" style="position: relative;">
+                <input class="url-input" type="text" id="input-source"
+                    placeholder="Paste YouTube / DramaBox URL or local video path...">
+                
+                <input type="file" id="file-upload" accept="video/*" style="display: none;" onchange="handleFileUpload(this)">
+                <button class="btn-primary" id="btn-upload" style="background: white; border: 1px solid rgba(0,0,0,0.1); color: var(--text); box-shadow: 0 4px 10px rgba(0,0,0,0.03);" onclick="document.getElementById('file-upload').click()" title="Upload a video file from your computer">
+                    <span id="btn-upload-text">📁 Upload</span>
+                </button>
+                <select class="lang-select" id="select-lang">
+                    <option value="burmese" selected>🇲🇲 မြန်မာ (ThihaNeural)</option>
+                    <option value="english">🇺🇸 English (GuyNeural)</option>
+                </select>
+                <select class="lang-select" id="select-tts-engine" onchange="updateEngineSetting(this.value)" title="Choose TTS Engine">
+                    <option value="edge_tts" selected>⚡ Edge TTS ($0 Fast)</option>
+                    <option value="f5_tts">🧬 F5-TTS (Voice Cloning)</option>
+                </select>
+                <button class="btn-primary" id="btn-start" onclick="startJob()">
+                    <span id="btn-start-text">▶ Start Pipeline</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Batch mode -->
+        <div id="batch-group" style="display:none;">
+            <textarea class="batch-textarea" id="batch-inputs"
+                placeholder="Paste multiple URLs or video paths — one per line:&#10;https://www.youtube.com/watch?v=...&#10;https://www.dramaboxdb.com/ep/...&#10;movies/my_local_file.mp4"></textarea>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.75rem; flex-wrap:wrap; gap:0.5rem;">
+                <span style="font-size:0.82rem; color:var(--muted);">🌙 Runs sequentially overnight with auto API key rotation</span>
+                <button class="btn-primary btn-success" id="btn-batch" onclick="startBatchJob()">
+                    🚀 Start Overnight Batch
+                </button>
+            </div>
+        </div>
+
+        <!-- Anti-copyright, Subtitle & Voice strip -->
+        <div class="options-strip" style="margin-top:1.25rem; flex-wrap:wrap; gap:1.25rem; align-items:center;">
+            <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">🎙️ Voice Engine:</span>
+                <select class="lang-select" id="select-tts-engine-strip" onchange="updateEngineSetting(this.value)" style="padding:0.35rem 0.75rem; font-size:0.82rem; border-radius:8px;">
+                    <option value="edge_tts" selected>⚡ Edge TTS (Neural Speech - Free)</option>
+                    <option value="f5_tts">🧬 F5-TTS (Character Voice Cloning)</option>
+                </select>
+            </div>
+            <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">📜 Subtitle Mode:</span>
+                <select class="lang-select" id="select-subtitle-mode" style="padding:0.35rem 0.75rem; font-size:0.82rem; border-radius:8px;">
+                    <option value="auto" selected>🔍 Auto-Detect Subtitles (Hybrid Native/Vision AI)</option>
+                    <option value="yes">📝 Has Subtitles (Force Blur)</option>
+                    <option value="no">🚫 No Subtitles (Disable Blur)</option>
+                </select>
+            </div>
+            <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <span class="strip-title">🛡️ Anti-Copyright:</span>
+                <label style="font-size:0.82rem; cursor:pointer;">
+                    <input type="checkbox" id="chk-mirror" onchange="updateMirrorSetting(this.checked)">
+                    🪞 Mirror Video (ဘယ်ညာလှည့် — Maximum Protection)
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Progress Card ── -->
+    <div class="progress-card animate-in" id="progress-card">
+        <div class="section-label">📡 Pipeline Progress</div>
+
+        <!-- Phase steps -->
+        <div class="phase-steps" id="phase-steps">
+            <!-- Steps injected by JS -->
+        </div>
+
+        <!-- Progress bar -->
+        <div class="prog-bar-wrap">
+            <div class="prog-bar" id="prog-bar"></div>
+        </div>
+
+        <!-- Live log -->
+        <div class="log-box-wrap" id="log-box-wrap">
+            <div class="log-box" id="log-box">Waiting for pipeline to start...</div>
+        </div>
+
+        <div style="display: flex; align-items: center; flex-wrap: wrap;">
+            <div id="status-pill" class="status-pill running">
+                <span class="pulse-dot" id="status-dot"></span>
+                <span id="status-text">Starting...</span>
+            </div>
+            <div id="batch-progress-pill" class="status-pill" style="display:none; background:rgba(59,130,246,0.2); color:#93c5fd; border:1px solid rgba(59,130,246,0.4); margin-left:0.75rem;">
+                <span id="batch-status-text"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── API Keys Card ── -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2>🔑 Gemini API Keys</h2>
+            <div style="display:flex; align-items:center; gap:0.75rem;">
+                <button class="btn-nav" onclick="toggleKeyEditor()">✏️ Edit / Add Keys</button>
+                <span class="quota-badge" id="api-total-badge">Loading quota...</span>
+            </div>
+        </div>
+
+        <!-- Key Edit Box (collapsible) -->
+        <div id="key-editor-box" style="display:none; background:rgba(0,0,0,0.4); border:1px solid var(--accent); border-radius:12px; padding:1.25rem; margin-bottom:1.25rem;">
+            <div style="font-size:0.88rem; font-weight:700; color:#c4b5fd; margin-bottom:0.5rem;">
+                ✏️ Edit Gemini API Keys (Paste one key per line):
+            </div>
+            <textarea id="key-editor-textarea" style="width:100%; height:120px; background:rgba(0,0,0,0.5); border:1px solid var(--card-border); border-radius:8px; padding:0.75rem; color:var(--text); font-family:monospace; font-size:0.85rem; outline:none; margin-bottom:0.75rem;" placeholder="Paste API Keys here, one per line..."></textarea>
+            <div style="display:flex; justify-content:flex-end; gap:0.6rem;">
+                <button class="btn-nav" onclick="toggleKeyEditor()">Cancel</button>
+                <button class="btn-primary" style="padding:0.45rem 1.2rem; font-size:0.85rem;" onclick="saveKeysFromUI()">💾 Save API Keys</button>
+            </div>
+        </div>
+
+        <div class="keys-grid" id="keys-grid">
+            <div style="color:var(--muted); font-size:0.85rem;">Fetching key status...</div>
+        </div>
+    </div>
+
+    <!-- ── Source Movies ── -->
+    <div class="section-card animate-in">
+        <div class="section-header">
+            <h2>🎞️ Source Movies (movies/ folder)</h2>
+            <div style="display:flex; gap:0.75rem;">
+                <button class="btn-delete-all" onclick="deleteAll('movies')">🚨 Delete All Sources</button>
+                <button class="btn-nav" onclick="loadMovies()">🔄 Refresh</button>
+            </div>
+        </div>
+        <div class="outputs-grid" id="movies-grid">
+            <div class="empty-state">Loading...</div>
+        </div>
+    </div>
+
+    <!-- ── Generated Outputs ── -->
+    <div class="section-card animate-in">
+        <div class="section-header">
+            <h2>📁 Generated Outputs</h2>
+            <div style="display:flex; gap:0.75rem;">
+                <button class="btn-delete-all" onclick="deleteAll('outputs')">🚨 Delete All Outputs</button>
+                <button class="btn-nav" onclick="loadOutputs(); loadMovies();">🔄 Refresh</button>
+            </div>
+        </div>
+        <div class="outputs-grid" id="outputs-grid">
+            <div class="empty-state">Loading...</div>
+        </div>
+    </div>
+
+</div><!-- /page -->
+
+<script>
+    async function handleFileUpload(inputElement) {
+        if (!inputElement.files || inputElement.files.length === 0) return;
+        const file = inputElement.files[0];
+        
+        if (!file.type.startsWith('video/') && !file.name.match(/\.(mp4|mkv|avi|mov|webm|flv|m4v)$/i)) {
+            alert("Please select a valid video file.");
+            inputElement.value = '';
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('video', file);
+        
+        const uploadBtnText = document.getElementById('btn-upload-text');
+        const origText = uploadBtnText.innerText;
+        uploadBtnText.innerText = "⏳ Uploading...";
+        document.getElementById('btn-upload').disabled = true;
+        
+        try {
+            const res = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                document.getElementById('input-source').value = data.filename;
+                loadMovies();
+            } else {
+                alert("Upload failed: " + (data.error || "Unknown error"));
+            }
+        } catch (err) {
+            alert("Upload error: " + err);
+        } finally {
+            uploadBtnText.innerText = origText;
+            document.getElementById('btn-upload').disabled = false;
+            inputElement.value = '';
+        }
+    }
+
+    function applyEntranceAnimation(element, delay = 0) {
+        if (!element) return;
+        element.classList.add('animate-in');
+        element.style.animationDelay = `${delay}ms`;
+    }
+
+    // ── State ──
+    let currentJobId = null;
+    let pollTimer = null;
+    let pollErrors = 0;
+    const PHASES = [
+        { num: 1, label: 'Metadata' },
+        { num: 2, label: 'STT + Scenes' },
+        { num: 3, label: 'Story AI' },
+        { num: 4, label: 'Script + SEO' },
+        { num: 5, label: 'Voice TTS' },
+        { num: 6, label: 'Merge & Subtitle Blur' },
+    ];
+
+    // ── Build phase steps on load ──
+    (function buildPhaseSteps() {
+        const container = document.getElementById('phase-steps');
+        PHASES.forEach((p, i) => {
+            const step = document.createElement('div');
+            step.className = 'phase-step';
+            step.innerHTML = `
+                <div class="phase-node">
+                    <div class="phase-circle" id="pc-${p.num}">${p.num}</div>
+                    <div class="phase-label" id="pl-${p.num}">${p.label}</div>
+                </div>
+            `;
+            container.appendChild(step);
+            if (i < PHASES.length - 1) {
+                const conn = document.createElement('div');
+                conn.className = 'phase-connector';
+                conn.id = `pcon-${p.num}`;
+                container.appendChild(conn);
+            }
+        });
+    })();
+
+    // ── Mode switch ──
+    function switchMode(mode) {
+        const sg = document.getElementById('single-group');
+        const bg = document.getElementById('batch-group');
+        const ts = document.getElementById('tab-single');
+        const tb = document.getElementById('tab-batch');
+        if (mode === 'single') {
+            sg.style.display = 'block'; bg.style.display = 'none';
+            ts.classList.add('active'); tb.classList.remove('active');
+        } else {
+            sg.style.display = 'none'; bg.style.display = 'block';
+            ts.classList.remove('active'); tb.classList.add('active');
+        }
+    }
+
+    // ── Start single job ──
+    async function startJob() {
+        const input = document.getElementById('input-source').value.trim();
+        if (!input) { showAlert('Please enter a video URL or local path.'); return; }
+        const lang = document.getElementById('select-lang').value;
+        const subtitleMode = document.getElementById('select-subtitle-mode').value;
+        const ttsEngine = document.getElementById('select-tts-engine').value;
+        const btn = document.getElementById('btn-start');
+        const btnText = document.getElementById('btn-start-text');
+
+        btn.disabled = true;
+        btnText.textContent = 'Running...';
+
+        showProgress('Initializing pipeline...');
+
+        try {
+            const res = await fetch('/api/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ input, language: lang, subtitle_mode: subtitleMode, tts_engine: ttsEngine })
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            startStreamingLogs(data.job_id);
+        } catch (e) {
+            showAlert('Error starting pipeline: ' + e.message);
+            btn.disabled = false;
+            btnText.textContent = '▶ Start Pipeline';
+        }
+    }
+
+    // ── Start batch job ──
+    async function startBatchJob() {
+        const raw = document.getElementById('batch-inputs').value.trim();
+        if (!raw) { showAlert('Please paste at least one URL or path.'); return; }
+        const inputs = raw.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+        const lang = document.getElementById('select-lang').value;
+        const subtitleMode = document.getElementById('select-subtitle-mode').value;
+        const ttsEngine = document.getElementById('select-tts-engine').value;
+        const btn = document.getElementById('btn-batch');
+        btn.disabled = true;
+
+        showProgress(`Initializing Batch Queue (${inputs.length} items)...`);
+
+        try {
+            const res = await fetch('/api/batch/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ inputs, language: lang, subtitle_mode: subtitleMode, tts_engine: ttsEngine })
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            startStreamingLogs(data.job_id);
+        } catch (e) {
+            showAlert('Error starting batch: ' + e.message);
+            btn.disabled = false;
+        }
+    }
+
+    // ── Show progress card ──
+    function showProgress(initMsg) {
+        const card = document.getElementById('progress-card');
+        card.classList.add('visible');
+        applyEntranceAnimation(card);
+        setLog(initMsg);
+        resetPhases();
+        setProgressBar(0);
+        setStatus('running', 'Starting...');
+        document.getElementById('log-box-wrap').classList.add('running');
+    }
+
+    let eventSource = null;
+    let sseLogs = [];
+
+    // ── Zero-Latency SSE Log Streamer with Polling Fallback ──
+    function startStreamingLogs(jobId) {
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+        }
+
+        currentJobId = jobId;
+        sseLogs = [];
+
+        if (window.EventSource) {
+            eventSource = new EventSource('/api/stream/' + jobId);
+
+            eventSource.addEventListener('log', function(e) {
+                try {
+                    const data = JSON.parse(e.data);
+                    if (data.line) {
+                        sseLogs.push(data.line);
+                        if (sseLogs.length > 40) sseLogs.shift();
+                        setLog(sseLogs);
+                    }
+                    if (data.phase) {
+                        updatePhases(data.phase);
+                        updateProgressFromPhase(data.phase);
+                    }
+                    if (data.batch_status) {
+                        document.getElementById('batch-progress-pill').style.display = 'inline-flex';
+                        document.getElementById('batch-status-text').textContent = data.batch_status;
+                    }
+                } catch(err) {
+                    console.error('SSE log parse error:', err);
+                }
+            });
+
+            eventSource.addEventListener('done', function(e) {
+                try {
+                    const data = JSON.parse(e.data);
+                    if (eventSource) {
+                        eventSource.close();
+                        eventSource = null;
+                    }
+                    if (data.status === 'done') {
+                        setStatus('done', '✅ Pipeline Complete!');
+                        document.getElementById('log-box-wrap').classList.remove('running');
+                        setProgressBar(100);
+                        markAllDone();
+                        document.getElementById('btn-start').disabled = false;
+                        document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
+                        document.getElementById('btn-batch').disabled = false;
+                        loadOutputs(); loadMovies();
+                    } else {
+                        setStatus('error', '❌ Pipeline Error');
+                        document.getElementById('log-box-wrap').classList.remove('running');
+                        document.getElementById('btn-start').disabled = false;
+                        document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
+                        document.getElementById('btn-batch').disabled = false;
+                    }
+                } catch(err) {
+                    console.error('SSE done parse error:', err);
+                }
+            });
+
+            eventSource.onerror = function() {
+                console.warn('SSE stream disconnected, falling back to polling...');
+                if (eventSource) {
+                    eventSource.close();
+                    eventSource = null;
+                }
+                if (!pollTimer) {
+                    pollTimer = setInterval(checkStatus, 1800);
+                }
+            };
+        } else {
+            pollTimer = setInterval(checkStatus, 1800);
+        }
+    }
+
+    // ── Fallback Polling status ──
+    async function checkStatus() {
+        if (!currentJobId) return;
+        try {
+            pollErrors = 0;
+            const res = await fetch(`/api/status/${currentJobId}`);
+            const data = await res.json();
+
+            if (data.log && data.log.length > 0) {
+                setLog(data.log);
+            }
+
+            updatePhases(data.phase || '');
+            updateProgressFromPhase(data.phase || '');
+
+            if (data.batch_status) {
+                document.getElementById('batch-progress-pill').style.display = 'inline-flex';
+                document.getElementById('batch-status-text').textContent = data.batch_status;
+            } else {
+                document.getElementById('batch-progress-pill').style.display = 'none';
+            }
+
+            if (data.status === 'done') {
+                clearInterval(pollTimer);
+                setStatus('done', '✅ Pipeline Complete!');
+                document.getElementById('log-box-wrap').classList.remove('running');
+                setProgressBar(100);
+                markAllDone();
+
+                document.getElementById('btn-start').disabled = false;
+                document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
+                document.getElementById('btn-batch').disabled = false;
+                loadOutputs(); loadMovies();
+            } else if (data.status === 'error') {
+                clearInterval(pollTimer);
+                setStatus('error', '❌ Pipeline Error');
+                document.getElementById('log-box-wrap').classList.remove('running');
+
+                document.getElementById('btn-start').disabled = false;
+                document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
+                document.getElementById('btn-batch').disabled = false;
+            }
+        } catch (e) {
+            console.error('Polling error:', e);
+            pollErrors++;
+            if (pollErrors >= 5) {
+                clearInterval(pollTimer);
+                setStatus('error', '❌ Network Error: Could not reach server.');
+                document.getElementById('log-box-wrap').classList.remove('running');
+                document.getElementById('btn-start').disabled = false;
+                if (document.getElementById('spinner')) document.getElementById('spinner').style.display = 'none';
+                document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
+                document.getElementById('btn-batch').disabled = false;
+            }
+        }
+    }
+
+    // ── Log display with colored lines ──
+    function setLog(lines) {
+        const box = document.getElementById('log-box');
+        if (typeof lines === 'string') lines = [lines];
+        const html = lines.map(l => {
+            const escaped = l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            if (/\[OK\]|\[DONE\]|successfully|Complete/i.test(l)) return `<div class="log-ok">${escaped}</div>`;
+            if (/\[WARN\]|\[!\]/i.test(l)) return `<div class="log-warn">${escaped}</div>`;
+            if (/\[ERROR\]/i.test(l)) return `<div class="log-err">${escaped}</div>`;
+            if (/\[\*\]|Phase|SAVED/i.test(l)) return `<div class="log-info">${escaped}</div>`;
+            return `<div>${escaped}</div>`;
+        }).join('');
+        box.innerHTML = html;
+        const isNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 50;
+        if (isNearBottom) { box.scrollTop = box.scrollHeight; }
+    }
+
+    // ── Phase UI ──
+    function resetPhases() {
+        PHASES.forEach(p => {
+            document.getElementById('pc-' + p.num).className = 'phase-circle';
+            document.getElementById('pl-' + p.num).className = 'phase-label';
+            const conn = document.getElementById('pcon-' + p.num);
+            if (conn) conn.className = 'phase-connector';
+        });
+    }
+    function updatePhases(phaseText) {
+        const m = phaseText.match(/Phase\s*(\d)/i);
+        if (!m) return;
+        const cur = parseInt(m[1]);
+        PHASES.forEach(p => {
+            const circle = document.getElementById('pc-' + p.num);
+            const label = document.getElementById('pl-' + p.num);
+            const conn = document.getElementById('pcon-' + p.num);
+            if (p.num < cur) {
+                circle.className = 'phase-circle done';
+                label.className = 'phase-label done';
+                if (conn) conn.className = 'phase-connector done';
+            } else if (p.num === cur) {
+                circle.className = 'phase-circle active';
+                label.className = 'phase-label active';
+            } else {
+                circle.className = 'phase-circle';
+                label.className = 'phase-label';
+            }
+        });
+    }
+    function markAllDone() {
+        PHASES.forEach(p => {
+            document.getElementById('pc-' + p.num).className = 'phase-circle done';
+            document.getElementById('pl-' + p.num).className = 'phase-label done';
+            const conn = document.getElementById('pcon-' + p.num);
+            if (conn) conn.className = 'phase-connector done';
+        });
+    }
+
+    function updateProgressFromPhase(phaseText) {
+        const map = { 1: 12, 2: 28, 3: 50, 4: 67, 5: 82, 6: 94 };
+        const m = phaseText.match(/Phase\s*(\d)/i);
+        if (m) setProgressBar(map[parseInt(m[1])] || 0);
+    }
+    function setProgressBar(pct) {
+        document.getElementById('prog-bar').style.width = pct + '%';
+    }
+    function setStatus(state, text) {
+        const pill = document.getElementById('status-pill');
+        const dot = document.getElementById('status-dot');
+        const txt = document.getElementById('status-text');
+        pill.className = 'status-pill ' + state;
+        txt.textContent = text;
+        dot.style.background = state === 'done' ? 'var(--success)' : state === 'error' ? 'var(--error)' : '#a78bfa';
+    }
+
+    // ── API Key Management ──
+    async function toggleKeyEditor() {
+        const box = document.getElementById('key-editor-box');
+        if (box.style.display === 'none' || !box.style.display) {
+            try {
+                const res = await fetch('/api/keys/list');
+                const data = await res.json();
+                document.getElementById('key-editor-textarea').value = (data.keys || []).join('\n');
+            } catch (e) {
+                console.error('Failed to load raw keys:', e);
+            }
+            box.style.display = 'block';
+        } else {
+            box.style.display = 'none';
+        }
+    }
+
+    async function saveKeysFromUI() {
+        const rawText = document.getElementById('key-editor-textarea').value;
+        const keysArr = rawText.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+        if (!keysArr.length) {
+            if (!confirm('Warning: All API keys will be removed. Proceed?')) return;
+        }
+        try {
+            const res = await fetch('/api/keys/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ keys: keysArr })
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            showAlert(`✅ Saved ${data.keys_count} API Key(s) to config.json!`);
+            document.getElementById('key-editor-box').style.display = 'none';
+            loadKeyStatus();
+        } catch (e) {
+            showAlert('Failed to save API keys: ' + e.message);
+        }
+    }
+
+    // ── API Keys ──
+    async function loadKeyStatus() {
+        try {
+            const res = await fetch('/api/keys/status');
+            const data = await res.json();
+
+            document.getElementById('api-total-badge').textContent =
+                `⚡ ${data.total_remaining_requests} API Requests Left Today`;
+
+            if (data.hardware_encoder) {
+                const encBadge = document.getElementById('encoder-badge');
+                if (encBadge) {
+                    const isGpu = data.hardware_encoder.type === 'gpu';
+                    encBadge.innerHTML = `<span>⚡ ${data.hardware_encoder.label}</span>`;
+                    encBadge.style.color = isGpu ? 'var(--success)' : 'var(--muted)';
+                    encBadge.style.background = isGpu ? 'rgba(16, 185, 129, 0.1)' : 'rgba(100, 116, 139, 0.1)';
+                    encBadge.style.borderColor = isGpu ? 'rgba(16, 185, 129, 0.25)' : 'rgba(100, 116, 139, 0.2)';
+                }
+            }
+
+            // Also show current model
+            if (data.keys && data.keys.length > 0 && data.keys[0].model) {
+                document.getElementById('model-display').textContent = data.keys[0].model;
+            }
+
+            const grid = document.getElementById('keys-grid');
+            if (!data.keys || data.keys.length === 0) {
+                grid.innerHTML = '<div class="empty-state">No API keys configured.</div>';
+                return;
+            }
+            grid.innerHTML = '';
+            data.keys.forEach((k, i) => {
+                const isOnline = k.live_status === 'ONLINE';
+                const isRateLimited = k.live_status && k.live_status.includes('RATE');
+                const statusColor = isOnline ? 'var(--success)' : isRateLimited ? 'var(--warn)' : 'var(--error)';
+                
+                const card = document.createElement('div');
+                card.className = 'key-card';
+                applyEntranceAnimation(card, i * 70);
+                
+                let modelsHtml = '';
+                if (k.models && k.models.length > 0) {
+                    k.models.forEach(m => {
+                        const pct = Math.max(0, Math.min(100, Math.round((m.remaining / m.limit) * 100)));
+                        modelsHtml += `
+                        <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.05);">
+                            <div style="font-size:0.78rem; color:var(--muted); display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+                                <span><b style="color:#a78bfa;">${m.name}</b></span>
+                                <span style="color:#c4b5fd;"><b>${m.remaining}</b> Left</span>
+                            </div>
+                            <div style="font-size:0.72rem; color:var(--muted); display:flex; justify-content:space-between; margin-bottom:0.4rem;">
+                                <span>Used: <b style="color:var(--text);">${m.used_today}</b> / ${m.limit}</span>
+                            </div>
+                            <div style="width:100%; height:4px; background:rgba(255,255,255,0.07); border-radius:2px; overflow:hidden;">
+                                <div style="width:${pct}%; height:100%; background:${statusColor}; border-radius:2px; transition:width 0.5s;"></div>
+                            </div>
+                        </div>
+                        `;
+                    });
+                }
+                
+                card.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="font-weight:700; font-size:0.88rem;">🔑 Key ${i+1}: <code style="color:#c4b5fd; background:rgba(124,58,237,0.15); padding:0.1rem 0.4rem; border-radius:4px; font-size:0.8rem;">${k.key}</code></span>
+                        <span style="font-size:0.72rem; font-weight:700; color:${statusColor}; border:1px solid ${statusColor}; opacity:0.85; padding:0.15rem 0.55rem; border-radius:4px;">● ${k.live_status}</span>
+                    </div>
+                    ${modelsHtml}
+                `;
+                grid.appendChild(card);
+            });
+        } catch (e) {
+            console.error('Key status error:', e);
+        }
+    }
+
+    // ── Movies ──
+    async function loadMovies() {
+        try {
+            const res = await fetch('/api/movies');
+            const movies = await res.json();
+            const grid = document.getElementById('movies-grid');
+            if (!movies.length) {
+                grid.innerHTML = '<div class="empty-state">No videos in movies/ folder yet.</div>';
+                return;
+            }
+            grid.innerHTML = '';
+            movies.forEach((f, index) => {
+                const card = document.createElement('div');
+                card.className = 'output-card';
+                applyEntranceAnimation(card, index * 60);
+                const name = f.replace(/'/g, "\\'");
+                card.innerHTML = `
+                    <h3>🎞️ ${f}</h3>
+                    <div style="display:flex; gap:0.6rem; margin-top:1rem;">
+                        <button class="btn-use" onclick="useMovie('${name}')">⚡ Use This</button>
+                        <button class="btn-rename" onclick="renameMovie('${name}')">✏️ Rename</button>
+                        <button class="btn-delete" onclick="deleteItem('movies','${name}')">🗑️ Delete</button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        } catch (e) { console.error(e); }
+    }
+
+    function useMovie(fn) {
+        document.getElementById('input-source').value = fn;
+        switchMode('single');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ── Outputs ──
+    async function loadOutputs() {
+        try {
+            const res = await fetch('/api/outputs');
+            const data = await res.json();
+            const grid = document.getElementById('outputs-grid');
+            const metadata = Array.isArray(data.metadata) ? data.metadata : [];
+            const outputs = data.outputs || {};
+            const metadataMap = Object.fromEntries(metadata.map(item => [item.project_dir, item]));
+
+            if (!Object.keys(outputs).length && !metadata.length) {
+                grid.innerHTML = '<div class="empty-state">No recap outputs generated yet. Run a pipeline first!</div>';
+                return;
+            }
+            grid.innerHTML = '';
+            for (const [movie, mdata] of Object.entries(outputs)) {
+                const files = mdata.files || [];
+                const progress = mdata.progress || 0;
+                const phase = mdata.phase || 'Done';
+                const meta = metadataMap[movie] || {};
+                const safeMovie = movie.replace(/'/g, "\\'");
+
+                const card = document.createElement('div');
+                card.className = 'output-card';
+
+                let durHtml = '';
+                if (mdata.total_duration) {
+                    durHtml = `<span style="background:rgba(59,130,246,0.15); color:#60a5fa; border:1px solid rgba(59,130,246,0.3); padding:0.2rem 0.5rem; border-radius:6px; font-size:0.75rem; font-weight:600;">⏱️ Duration: ${mdata.total_duration}</span>`;
+                }
+
+                let progHtml = progress < 100
+                    ? `<div style="margin-bottom:0.75rem; background:rgba(0,0,0,0.4); padding:0.6rem 0.75rem; border-radius:8px; border:1px solid rgba(255,255,255,0.07);">
+                           <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--muted); margin-bottom:0.4rem;"><span>⏳ ${phase}</span><span style="color:var(--accent); font-weight:700;">${progress}%</span></div>
+                           <div style="width:100%; height:5px; background:#3f3f46; border-radius:3px; overflow:hidden;"><div style="width:${progress}%; height:100%; background:var(--accent); transition:width 0.5s;"></div></div>
+                       </div>`
+                    : `<div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.75rem; font-size:0.8rem;">
+                           <span style="color:var(--success); font-weight:700;">✅ Completed</span>
+                           ${durHtml}
+                       </div>`;
+
+                let metaHtml = '';
+                if (meta.language || meta.whisper_model || meta.updated_at) {
+                    const lang = meta.language ? `Language: ${meta.language}` : '';
+                    const whisper = meta.whisper_model ? `Whisper: ${meta.whisper_model}` : '';
+                    const updated = meta.updated_at ? `Updated: ${new Date(meta.updated_at).toLocaleString()}` : '';
+                    metaHtml = `<div style="display:flex; flex-wrap:wrap; gap:0.75rem; font-size:0.78rem; color:var(--muted); margin-bottom:0.75rem;">
+                        ${lang ? `<span>${lang}</span>` : ''}
+                        ${whisper ? `<span>${whisper}</span>` : ''}
+                        ${updated ? `<span>${updated}</span>` : ''}
+                    </div>`;
+                }
+
+                let bodyHtml = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; padding-bottom:0.6rem; border-bottom:1px solid rgba(255,255,255,0.07);">
+                        <h3 style="margin:0;">🎬 ${movie}</h3>
+                        <div style="display:flex; gap:0.5rem;">
+                            <a href="/api/logs/${safeMovie}" target="_blank" class="download-btn" style="padding:0.3rem 0.6rem; font-size:0.75rem; text-decoration:none;">📄 View Log</a>
+                            <button class="btn-delete" onclick="deleteItem('outputs','${safeMovie}')">🗑️ Delete</button>
+                        </div>
+                    </div>
+                    ${metaHtml}
+                    ${progHtml}
+                `;
+
+                files.forEach(f => {
+                    const fname = f.split('/').pop();
+                    if (['voiceover','temp','state.json'].includes(fname) || f.endsWith('state.json')) return;
+                    const safePath = f.split('/').map(encodeURIComponent).join('/');
+                    const url = `/api/outputs/file?path=${safePath}`;
+                    if (f.endsWith('.mp4')) {
+                        bodyHtml += `<div class="video-wrap">
+                            <div class="video-title">✨ ${f}</div>
+                            <video controls preload="metadata" style="width:100%; max-height:400px;" src="${url}"></video>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.6rem; flex-wrap:wrap; gap:0.5rem;">
+                                <span style="font-size:0.78rem; color:var(--muted);">🔥 Preview or download</span>
+                                <a class="download-btn" href="${url}" target="_blank" download>⬇️ Download MP4</a>
+                            </div>
+                        </div>`;
+                    } else if (f.endsWith('.mp3')) {
+                        bodyHtml += `<div style="margin:0.4rem 0;"><div style="font-size:0.8rem; color:var(--muted); margin-bottom:0.2rem;">🔊 ${f}</div><audio controls preload="none" src="${url}"></audio></div>`;
+                    } else {
+                        bodyHtml += `<a href="${url}" class="file-link" target="_blank" download>📄 ${f}</a>`;
+                    }
+                });
+
+                card.innerHTML = bodyHtml;
+                grid.appendChild(card);
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    // ── Config ──
+    async function loadConfig() {
+        try {
+            const res = await fetch('/api/config');
+            const cfg = await res.json();
+            if (cfg.copyright_protection) {
+                document.getElementById('chk-mirror').checked = !!cfg.copyright_protection.mirror_video;
+            }
+            if (cfg.voice && cfg.voice.engine) {
+                const eng = cfg.voice.engine;
+                const sel = document.getElementById('select-tts-engine');
+                if (sel) sel.value = eng;
+                const selStrip = document.getElementById('select-tts-engine-strip');
+                if (selStrip) selStrip.value = eng;
+            }
+            if (cfg.gemini && cfg.gemini.model) {
+                document.getElementById('model-display').textContent = cfg.gemini.model;
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    async function updateMirrorSetting(enabled) {
+        try {
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mirror_video: enabled })
+            });
+        } catch (e) { console.error(e); }
+    }
+
+    async function updateEngineSetting(engine) {
+        const sel = document.getElementById('select-tts-engine');
+        if (sel) sel.value = engine;
+        const selStrip = document.getElementById('select-tts-engine-strip');
+        if (selStrip) selStrip.value = engine;
+        try {
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tts_engine: engine })
+            });
+        } catch (e) { console.error(e); }
+    }
+
+    // ── Delete ──
+    async function renameMovie(oldName) {
+        const newName = prompt(`Enter new filename (must end with video extension):`, oldName);
+        if (!newName || newName === oldName) return;
+        
+        try {
+            const res = await fetch('/api/rename/movie', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ old_name: oldName, new_name: newName })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                alert(`Renamed successfully to ${data.name}`);
+                loadMovies();
+            } else {
+                alert(`Rename failed: ${data.error}`);
+            }
+        } catch (e) {
+            alert(`Rename request failed: ${e.message}`);
+        }
+    }
+
+    async function deleteItem(type, name) {
+        const label = type === 'outputs' ? 'output အားလုံး' : 'ဗီဒီယိုဖိုင်';
+        if (!confirm(`"${name}" ၏ ${label}ကို ဖျက်ရန် သေချာပါသလား?`)) return;
+        try {
+            const res = await fetch(`/api/delete/${type}/${encodeURIComponent(name)}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            if (type === 'outputs') loadOutputs();
+            else loadMovies();
+        } catch (e) { showAlert('Delete error: ' + e.message); }
+    }
+
+    async function deleteAll(type) {
+        let msg = '';
+        if (type === 'movies') msg = 'Source ဗီဒီယို အားလုံးကို အပြီးတိုင် ဖျက်ရန် သေချာပါသလား?';
+        else if (type === 'outputs') msg = 'Output အားလုံးကို အပြီးတိုင် ဖျက်ရန် သေချာပါသလား?';
+        else msg = 'Source ဗီဒီယိုများနှင့် Output အားလုံးကို အပြီးတိုင် ဖျက်ရန် သေချာပါသလား?';
+
+        if (!confirm(`🚨 သတိပေးချက်: ${msg}`)) return;
+        try {
+            const res = await fetch(`/api/delete_all/${type}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            showAlert(`✅ အောင်မြင်စွာ ဖျက်သိမ်းပြီးပါပြီ! (ဖျက်ခဲ့သော အရေအတွက်: ${data.deleted_items})`);
+            loadMovies();
+            loadOutputs();
+        } catch (e) { showAlert('Delete error: ' + e.message); }
+    }
+
+    // ── Clear cache ──
+    async function clearCache() {
+        if (!confirm('Clear all temp/voiceover cache? Final outputs will NOT be deleted.')) return;
+        try {
+            const res = await fetch('/api/delete/cache', { method: 'DELETE' });
+            const data = await res.json();
+            showAlert(`✅ Cleared ${data.cleared_items} temp items!`);
+        } catch (e) { showAlert('Error: ' + e.message); }
+    }
+
+    function showAlert(msg) { alert(msg); }
+
+    // ── Init ──
+    document.querySelectorAll('.hero-card, .section-card, .progress-card').forEach((el, idx) => {
+        applyEntranceAnimation(el, idx * 80);
+    });
+
+    loadConfig();
+    loadKeyStatus();
+    loadMovies();
+    loadOutputs();
+
+    // ── Background Particles ──
+    function initializeLightCanvas() {
+        const canvas = document.getElementById('lightCanvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+        const lights = [];
+        const lightCount = 28;
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        for (let i = 0; i < lightCount; i++) {
+            lights.push({
+                x: Math.random() * width,
+                y: Math.random() * height,
+                vx: (Math.random() - 0.5) * 0.8,
+                vy: -0.3 - Math.random() * 0.7,
+                radius: 2.0 + Math.random() * 3.5,
+                hue: 230 + Math.random() * 60,
+                pulseSpeed: 0.02 + Math.random() * 0.03,
+                pulseAngle: Math.random() * Math.PI * 2,
+            });
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+            ctx.globalCompositeOperation = 'lighter';
+
+            lights.forEach((light, idx) => {
+                light.x += light.vx;
+                light.y += light.vy;
+                light.pulseAngle += light.pulseSpeed;
+
+                if (light.y < -50) {
+                    light.y = height + 50;
+                    light.x = Math.random() * width;
+                }
+                if (light.x < -50) light.x = width + 50;
+                if (light.x > width + 50) light.x = -50;
+
+                const currentRadius = light.radius + Math.sin(light.pulseAngle) * 1.2;
+                const alpha = 0.4 + Math.sin(light.pulseAngle) * 0.25;
+
+                const auraGradient = ctx.createRadialGradient(
+                    light.x, light.y, 0,
+                    light.x, light.y, currentRadius * 18
+                );
+                auraGradient.addColorStop(0, `hsla(${light.hue}, 95%, 85%, ${alpha * 0.45})`);
+                auraGradient.addColorStop(0.4, `hsla(${light.hue}, 85%, 75%, ${alpha * 0.18})`);
+                auraGradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+                ctx.fillStyle = auraGradient;
+                ctx.beginPath();
+                ctx.arc(light.x, light.y, currentRadius * 18, 0, Math.PI * 2);
+                ctx.fill();
+
+                const coreGradient = ctx.createRadialGradient(
+                    light.x, light.y, 0,
+                    light.x, light.y, currentRadius * 2
+                );
+                coreGradient.addColorStop(0, `hsla(${light.hue}, 100%, 98%, ${alpha * 0.9})`);
+                coreGradient.addColorStop(0.5, `hsla(${light.hue}, 90%, 85%, ${alpha * 0.6})`);
+                coreGradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+                ctx.fillStyle = coreGradient;
+                ctx.beginPath();
+                ctx.arc(light.x, light.y, currentRadius * 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                if (idx % 2 === 0) {
+                    const next = lights[(idx + 3) % lightCount];
+                    const dist = Math.hypot(light.x - next.x, light.y - next.y);
+                    if (dist < 180) {
+                        const lineAlpha = (1 - dist / 180) * 0.12;
+                        ctx.strokeStyle = `hsla(${light.hue}, 85%, 75%, ${lineAlpha})`;
+                        ctx.lineWidth = 1.0;
+                        ctx.beginPath();
+                        ctx.moveTo(light.x, light.y);
+                        ctx.lineTo(next.x, next.y);
+                        ctx.stroke();
+                    }
+                }
+            });
+            requestAnimationFrame(draw);
+        }
+        draw();
+    }
+    initializeLightCanvas();
+</script>
+</body>
+</html>

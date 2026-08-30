@@ -1,0 +1,19 @@
+.venv/
+movies/
+outputs/
+temp/
+__pycache__/
+voiceover/
+*.mp4
+*.wav
+*.mp3
+*.pyc
+*TEMP_MPY*
+*.log
+
+# Local credentials and machine-specific settings. Keep the safe template tracked.
+config.json
+config.json.tmp
+.env
+
+.tmp.driveupload/

@@ -1,0 +1,372 @@
+import os
+import sys
+import io
+import time
+import datetime
+from copy import deepcopy
+from brain.memory import MovieState
+from brain import config
+from brain.sqlite_store import save_movie_state
+from agents.video_agent import VideoAgent
+from agents.audio_agent import AudioAgent
+from agents.writer_agent import WriterAgent
+from agents.seo_agent import SEOAgent
+from agents.voice_agent import VoiceAgent
+from agents.video_merger_agent import VideoMergerAgent
+from agents.thumbnail_agent import ThumbnailAgent
+from agents.qa_agent import QAAgent
+import contextvars
+
+# Force UTF-8 output on Windows to prevent emoji/Unicode encode errors
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+class _PipelineLogWriter:
+    """Tee logger that writes to console and appends to the movie's pipeline.log with timestamps."""
+    def __init__(self, log_file_path: str, stream):
+        self.log_file_path = log_file_path
+        self.stream = stream
+        os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
+
+    def write(self, text: str):
+        self.stream.write(text)
+        try:
+            self.stream.flush()
+        except Exception:
+            pass
+        if text.strip():
+            ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                with open(self.log_file_path, "a", encoding="utf-8") as f:
+                    for line in text.splitlines():
+                        if line.strip():
+                            f.write(f"[{ts}] {line}\n")
+                    f.flush()
+            except Exception:
+                pass
+
+    def flush(self):
+        try:
+            self.stream.flush()
+        except Exception:
+            pass
+
+    def isatty(self):
+        return getattr(self.stream, "isatty", lambda: False)()
+
+    def fileno(self):
+        if hasattr(self.stream, "fileno"):
+            return self.stream.fileno()
+        raise io.UnsupportedOperation("fileno")
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+
+class MasterAgent:
+    def __init__(self, movie_path: str, language: str = None, subtitle_mode: str = "auto", tts_engine: str = None):
+        self.movie_path = movie_path
+        movie_name = os.path.splitext(os.path.basename(movie_path))[0]
+        cfg = config.load_config()
+
+        self.state = MovieState(movie_name=movie_name)
+        self.state.movie_path = movie_path
+        self.state.subtitle_mode = subtitle_mode or "auto"
+
+        # Read config values for agents
+        whisper_model  = cfg["pipeline"]["whisper_model"]
+        output_dir     = cfg["paths"]["output_dir"]
+
+        # Preserve existing subtitle detection cache if the same movie already ran before
+        state_file = os.path.join(output_dir, self.state.project_dir, "state.json")
+        if os.path.exists(state_file):
+            try:
+                prev_state = MovieState.load_from_json(state_file)
+                self.state.subtitle_detection = prev_state.subtitle_detection
+            except Exception:
+                pass
+
+        # Determine active language and corresponding TTS voice
+        self.language  = language or cfg["pipeline"].get("language", "burmese")
+        self.state.language = self.language
+        is_burmese     = self.language.lower() in ["burmese", "mm", "myanmar"]
+        self.tts_engine = tts_engine or os.getenv("TTS_ENGINE") or cfg.get("voice", {}).get("engine", "edge_tts")
+
+        if is_burmese:
+            self.tts_voice = cfg["voice"]["myanmar_voice"]
+        else:
+            self.tts_voice = cfg["voice"]["english_voice"]
+
+        self.whisper_model          = whisper_model
+        self.tts_enabled            = cfg["voice"]["enabled"]
+        self.subtitle_blur_override = None
+        self.output_dir             = output_dir
+
+        # Instantiate all agents
+        self.video_agent     = VideoAgent()
+        self.audio_agent     = AudioAgent()
+        self.writer_agent    = WriterAgent(language=self.language)
+        self.seo_agent       = SEOAgent(language=self.language)
+        self.voice_agent     = VoiceAgent(
+            voice=self.tts_voice,
+            output_dir=os.path.join(output_dir, self.state.project_dir, "voiceover"),
+            tts_engine=self.tts_engine,
+        )
+        self.video_merger    = VideoMergerAgent(
+            output_dir=output_dir,
+            subtitle_blur_override=self.subtitle_blur_override,
+        )
+        self.thumbnail_agent = ThumbnailAgent()
+        self.qa_agent        = QAAgent(
+            output_dir=output_dir,
+            auto_rewrite_threshold=cfg.get("qa", {}).get("auto_rewrite_threshold", 6),
+        )
+
+    @staticmethod
+    def _format_duration(seconds: float) -> str:
+        """Formats seconds into readable HH:MM:SS or MM:SS format."""
+        s = int(round(seconds))
+        m, s = divmod(s, 60)
+        h, m = divmod(m, 60)
+        if h > 0:
+            return f"{h:02d}:{m:02d}:{s:02d}"
+        return f"{m:02d}:{s:02d}"
+
+    def run_pipeline(self):
+        total_start = time.time()
+        self.state.start_time = datetime.datetime.now().isoformat()
+        
+        # Setup real-time process log file
+        log_dir = os.path.join(self.output_dir, self.state.project_dir)
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, "pipeline.log")
+
+        orig_stdout = sys.stdout
+        orig_stderr = sys.stderr
+        pipe_logger = _PipelineLogWriter(log_path, orig_stdout)
+        sys.stdout = pipe_logger
+        sys.stderr = pipe_logger
+
+        try:
+            print(f"\n{'='*60}")
+            print(f"[MOVIE RECAP AI] End-to-End Autonomous Pipeline")
+            print(f"[INPUT] {self.movie_path}")
+            print(f"[CONFIG] Lang: {self.language.upper()} | Voice: {self.tts_voice} | Engine: {self.tts_engine.upper()}")
+            print(f"[LOG FILE] {log_path}")
+            print(f"{'='*60}")
+
+            # Phase 1: Foundation
+            p1_t0 = time.time()
+            self._phase("Phase 1: Video & Metadata Analysis", progress=10)
+            self.state = self.video_agent.analyze_metadata(self.state)
+            self.state.phase_durations["Phase 1: Video Analysis"] = round(time.time() - p1_t0, 2)
+            print(f"[⏱️ TIMING] Phase 1 finished in {self.state.phase_durations['Phase 1: Video Analysis']}s")
+            self.save_state()
+
+            # Phase 2 & 3: Audio STT and Scene Detection (Parallel)
+            p23_t0 = time.time()
+            self._phase("Phase 2 & 3: Audio STT and Scene Detection", progress=25)
+            temp_audio_dir = os.path.join("temp", self.state.project_dir, "audio")
+            
+            import concurrent.futures
+            
+            def run_audio_pipeline(state):
+                state = self.audio_agent.extract_audio(state, temp_audio_dir)
+                print("[*] MasterAgent: Running Whisper Transcription...")
+                state = self.audio_agent.transcribe_audio(state, self.whisper_model)
+                if not state.transcript:
+                    print("[WARN] MasterAgent: No transcript available.")
+                state = self.audio_agent.correct_transcript(state)
+                return state
+                
+            def run_scene_pipeline(state):
+                from agents.scene_agent import SceneAgent
+                scene_agent = SceneAgent()
+                return scene_agent.extract_scenes(state, self.movie_path)
+                
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                ctx_audio = contextvars.copy_context()
+                ctx_scene = contextvars.copy_context()
+                audio_future = executor.submit(ctx_audio.run, run_audio_pipeline, deepcopy(self.state))
+                scene_future = executor.submit(ctx_scene.run, run_scene_pipeline, deepcopy(self.state))
+                
+                futures = [audio_future, scene_future]
+                done, not_done = concurrent.futures.wait(futures, return_when=concurrent.futures.FIRST_EXCEPTION)
+                
+                for f in done:
+                    if f.exception() is not None:
+                        print(f"[CRITICAL ERROR] MasterAgent: Phase 2/3 thread failed: {f.exception()}")
+                        for pending in not_done:
+                            pending.cancel()
+                        self.state.current_phase = "Error"
+                        self.state.progress = -1
+                        self.save_state()
+                        raise f.exception()
+                
+                try:
+                    audio_state = audio_future.result()
+                    scene_state = scene_future.result()
+
+                    self.state = audio_state
+                    self.state.timeline = scene_state.timeline
+                except Exception as e:
+                    print(f"[CRITICAL ERROR] MasterAgent: Audio/Scene pipeline failed: {e}")
+                    self.state.current_phase = "Error"
+                    self.state.progress = -1
+                    self.save_state()
+                    raise e
+            self.state.phase_durations["Phase 2 & 3: Audio STT and Scenes"] = round(time.time() - p23_t0, 2)
+            print(f"[⏱️ TIMING] Phase 2 & 3 finished in {self.state.phase_durations['Phase 2 & 3: Audio STT and Scenes']}s")
+            self.save_state()
+
+            # Phase 4: Script Writing, SEO & Thumbnail
+            p4_t0 = time.time()
+            self._phase("Phase 4: Script Writing, SEO & Thumbnail", progress=65)
+            
+            # 4.1 Script Writing (Needs Phase 2 & 3 outputs)
+            self.state = self.writer_agent.generate_script(self.state)
+            
+            # 4.1b Auto-Rewrite Over-length Blocks (QA Sync)
+            self.state = self.qa_agent.enforce_duration_constraints(self.state)
+            
+            # 4.2 SEO and Thumbnail Frame Extraction (Parallel)
+            def run_seo(state):
+                return self.seo_agent.generate_seo(state)
+                
+            def run_thumbnail_base(state):
+                return self.thumbnail_agent.extract_base_frame(state, self.movie_path)
+                
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                ctx_seo = contextvars.copy_context()
+                ctx_thumb = contextvars.copy_context()
+                seo_future = executor.submit(ctx_seo.run, run_seo, deepcopy(self.state))
+                thumb_future = executor.submit(ctx_thumb.run, run_thumbnail_base, deepcopy(self.state))
+                
+                futures_p4 = [seo_future, thumb_future]
+                done_p4, not_done_p4 = concurrent.futures.wait(futures_p4, return_when=concurrent.futures.FIRST_EXCEPTION)
+                
+                for f in done_p4:
+                    if f.exception() is not None:
+                        print(f"[CRITICAL ERROR] MasterAgent: Phase 4 thread failed: {f.exception()}")
+                        for pending in not_done_p4:
+                            pending.cancel()
+                        self.state.current_phase = "Error"
+                        self.state.progress = -1
+                        self.save_state()
+                        raise f.exception()
+                
+                # Merge SEO state back
+                seo_state = seo_future.result()
+                self.state.seo_metadata = seo_state.seo_metadata
+                self.state.custom_thumb_title = seo_state.custom_thumb_title
+                
+                temp_base_path = thumb_future.result()
+                
+            # 4.3 Thumbnail Text Overlay (Depends on SEO)
+            if temp_base_path:
+                self.state = self.thumbnail_agent.overlay_text(self.state, temp_base_path)
+                
+            self.state.phase_durations["Phase 4: Script, SEO & Thumbnail"] = round(time.time() - p4_t0, 2)
+            print(f"[⏱️ TIMING] Phase 4 finished in {self.state.phase_durations['Phase 4: Script, SEO & Thumbnail']}s")
+            self.save_state()
+
+            # Phase 5: Voice Generation
+            p5_t0 = time.time()
+            if self.tts_enabled:
+                self._phase("Phase 5: Text-to-Speech Voice Generation", progress=80)
+                self.state = self.voice_agent.generate_voiceover(self.state)
+                self.state.phase_durations["Phase 5: Voice Generation"] = round(time.time() - p5_t0, 2)
+                print(f"[⏱️ TIMING] Phase 5 finished in {self.state.phase_durations['Phase 5: Voice Generation']}s")
+                self.save_state()
+            else:
+                print("\n[*] VoiceAgent: Skipped (disabled in config.json -> voice.enabled = false)")
+                self.state.phase_durations["Phase 5: Voice Generation"] = 0.0
+
+            # Phase 6: Video Merge & Subtitle Blur Pass
+            p6_t0 = time.time()
+            self._phase("Phase 6: Merging Video + Voiceover + Subtitle Blur", progress=90)
+            self.state = self.video_merger.merge_video(self.state, self.movie_path)
+            self.state.phase_durations["Phase 6: Video Merge & Subtitles"] = round(time.time() - p6_t0, 2)
+            print(f"[⏱️ TIMING] Phase 6 finished in {self.state.phase_durations['Phase 6: Video Merge & Subtitles']}s")
+            self.save_state()
+
+            # Phase 7: QA Review — Gemini checks sync accuracy & language naturalness
+            p7_t0 = time.time()
+            qa_cfg = config.load_config().get("qa", {})
+            if qa_cfg.get("enabled", False):
+                final_video_path = os.path.join(self.output_dir, self.state.project_dir, "final_recap.mp4")
+                if os.path.exists(final_video_path):
+                    self.state = self.qa_agent.review(
+                        state=self.state,
+                        original_video_path=self.movie_path,
+                        recap_video_path=final_video_path,
+                    )
+                    self.state.phase_durations["Phase 7: QA Review"] = round(time.time() - p7_t0, 2)
+                    print(f"[⏱️ TIMING] Phase 7 finished in {self.state.phase_durations['Phase 7: QA Review']}s")
+                    self.save_state()
+                else:
+                    print("[!] QA: final_recap.mp4 not found — skipping QA phase.")
+                    self.state.phase_durations["Phase 7: QA Review"] = 0.0
+            else:
+                print("[*] QA Phase: Disabled (set qa.enabled=true in config.json to enable)")
+                self.state.phase_durations["Phase 7: QA Review"] = 0.0
+
+            # Calculate total duration
+            total_elapsed = round(time.time() - total_start, 2)
+            self.state.total_duration_sec = total_elapsed
+            self.state.total_duration_formatted = self._format_duration(total_elapsed)
+            self.state.end_time = datetime.datetime.now().isoformat()
+
+            # Done
+            self.state.progress = 100
+            self.state.current_phase = "Done"
+            self.save_state()
+
+            print(f"\n{'='*60}")
+            print(f"🎉 [DONE] Pipeline Complete in {self.state.total_duration_formatted} ({total_elapsed}s)!")
+            print(f"{'='*60}")
+            print(f"⏱️  PHASE DURATION BREAKDOWN:")
+            for phase_name, dur in self.state.phase_durations.items():
+                print(f"   • {phase_name:<42} : {dur:>7.2f}s ({self._format_duration(dur)})")
+            print(f"   {'-'*56}")
+            print(f"   🌟 TOTAL DURATION                          : {total_elapsed:>7.2f}s ({self.state.total_duration_formatted})")
+            print(f"\n📦 OUTPUT DIRECTORY: outputs/{self.state.project_dir}/")
+            print(f"   ├─ final_recap.mp4         (Final Anti-Copyright Video)")
+            print(f"   ├─ thumbnail.jpg           (High-CTR Thumbnail)")
+            print(f"   ├─ final_recap_script.txt  (Narration Script + SEO)")
+            print(f"   ├─ seo_metadata.json       (Title/Tags/Hashtags)")
+            print(f"   ├─ pipeline.log            (Complete Process Log)")
+            print(f"   ├─ state.json              (Full State Metadata)")
+            print(f"   └─ voiceover/              (Audio Clips per Scene)")
+            print(f"{'='*60}\n")
+
+            final_video_path = os.path.join(self.output_dir, self.state.project_dir, "final_recap.mp4")
+            if os.path.exists(final_video_path) and os.name == 'nt':
+                print(f"\n[VIDEO READY] Auto-opening final recap video in your media player...")
+                try:
+                    os.startfile(os.path.abspath(final_video_path))
+                except Exception as e:
+                    print(f"[!] Could not auto-open video: {e}")
+                    output_folder = os.path.join(self.output_dir, self.state.project_dir)
+                    try:
+                        os.startfile(os.path.abspath(output_folder))
+                    except Exception:
+                        pass
+
+        finally:
+            sys.stdout = orig_stdout
+            sys.stderr = orig_stderr
+
+    def _phase(self, label: str, progress: int = 0):
+        print(f"\n--- [{label}] ---")
+        self.state.current_phase = label
+        if progress > 0:
+            self.state.progress = progress
+        self.save_state()
+
+    def save_state(self):
+        output_dir = os.path.join(self.output_dir, self.state.project_dir)
+        os.makedirs(output_dir, exist_ok=True)
+        state_file = os.path.join(output_dir, "state.json")
+        self.state.save_to_json(state_file)
+        save_movie_state(self.state, output_dir=self.output_dir)

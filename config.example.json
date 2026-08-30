@@ -1,0 +1,55 @@
+{
+  "gemini": {
+    "enabled": true,
+    "api_keys": [],
+    "model": "gemini-3.1-flash-lite",
+    "models": {
+      "heavy": "gemini-3.1-flash-lite",
+      "workhorse": "gemini-3.1-flash-lite",
+      "polish": "gemini-3.1-flash-lite"
+    },
+    "model_limits": {
+      "gemini-3.1-flash-lite": 500,
+      "gemini-3.5-flash-lite": 500,
+      "gemini-3.7-flash": 20,
+      "gemini-3.6-flash": 20,
+      "gemini-3.5-flash": 20,
+      "gemini-3-flash": 20,
+      "gemini-2.5-flash": 20,
+      "gemini-2.5-flash-lite": 20
+    }
+  },
+  "pipeline": {
+    "language": "burmese",
+    "whisper_model": "base",
+    "scene_threshold": 30.0,
+    "max_characters": 6,
+    "max_scenes_for_llm": 50,
+    "parallel_processing": true,
+    "use_demucs": true
+  },
+  "voice": {
+    "enabled": true,
+    "engine": "edge_tts",
+    "tts_voice_mm": "my-MM-ThihaNeural",
+    "tts_voice_en": "en-US-GuyNeural",
+    "tts_voice": "my-MM-ThihaNeural",
+    "tts_rate_mm": "+8%",
+    "tts_rate_en": "+15%",
+    "f5_tts": {
+      "model_type": "F5-TTS",
+      "auto_character_cloning": true,
+      "default_ref_audio": "assets/voices/default_ref.wav",
+      "default_ref_text": "",
+      "speed": 1.0,
+      "device": "auto"
+    }
+  },
+  "batch": {"movies_folder": "movies", "max_parallel_jobs": 1, "skip_completed": true},
+  "paths": {"output_dir": "outputs", "temp_dir": "temp"},
+  "copyright_protection": {"enabled": true, "mirror_video": false, "resize_factor": 1.02},
+  "subtitle_blur": {"enabled": true, "region_height_pct": 0.18, "blur_strength": 18},
+  "color_grading": {"enabled": true, "brightness": 0.03, "contrast": 1.02, "saturation": 1.08},
+
+  "logging": {"level": "INFO", "save_log_file": true}
+}
