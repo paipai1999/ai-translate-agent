@@ -111,7 +111,7 @@ class MasterAgent:
         self.output_dir             = output_dir
 
         # Instantiate all agents
-        self.video_agent     = VideoAgent()
+        self.video_agent     = VideoAgent(movie_path=self.movie_path)
         self.audio_agent     = AudioAgent(movie_path=self.movie_path)
         self.writer_agent    = WriterAgent(language=self.language)
         self.seo_agent       = SEOAgent(language=self.language)
