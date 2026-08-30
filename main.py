@@ -147,6 +147,13 @@ def main():
     )
 
     parser.add_argument(
+        "-e", "--engine",
+        dest="engine",
+        choices=["edge_tts", "f5_tts"],
+        default=None,
+        help="TTS Voiceover Engine: 'edge_tts' (free cloud) or 'f5_tts' (zero-shot cloning)"
+    )
+    parser.add_argument(
         "--no-voice",
         action="store_true",
         help="Skip Text-to-Speech voice generation step"
@@ -200,7 +207,7 @@ def main():
                 sys.exit(1)
 
         try:
-            master = MasterAgent(movie_path, language=args.language)
+            master = MasterAgent(movie_path, language=args.language, tts_engine=args.engine)
             master.run_pipeline()
         except Exception as e:
             print(f"\n[ERROR] Pipeline failed: {e}")
@@ -216,7 +223,8 @@ def main():
         BatchProcessor(
             movies_folder=conf.get("batch", {}).get("movies_folder", "movies"),
             skip_completed=skip,
-            language=args.language
+            language=args.language,
+            tts_engine=args.engine
         ).process_all()
 
     # Batch: URL list
@@ -227,7 +235,8 @@ def main():
         BatchProcessor(
             movies_folder=conf.get("batch", {}).get("movies_folder", "movies"),
             skip_completed=skip,
-            language=args.language
+            language=args.language,
+            tts_engine=args.engine
         ).process_all(url_list=args.urls, local_paths=[])
     else:
         parser.print_help()
