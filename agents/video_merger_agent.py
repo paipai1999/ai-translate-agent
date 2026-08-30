@@ -1158,7 +1158,13 @@ class VideoMergerAgent:
                     os.remove(tmp_path)
         except subprocess.TimeoutExpired:
             print("[WARN] PostProcess: FFmpeg timed out. Original video kept.")
+            if os.path.exists(tmp_path):
+                try: os.remove(tmp_path)
+                except Exception: pass
         except Exception as e:
             print(f"[WARN] PostProcess: {e}. Original video kept.")
+            if os.path.exists(tmp_path):
+                try: os.remove(tmp_path)
+                except Exception: pass
 
 
