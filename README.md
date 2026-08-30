@@ -47,16 +47,18 @@ MovieRecapAI/
 
 ## ⚡ Google Colab One-Click Setup (Free GPU Cloud Mode)
 
-Running on **Google Colab** provides **Free NVIDIA T4 GPU (16GB VRAM)**, **1 Gbps Google Cloud network**, and high-speed execution for Whisper STT and F5-TTS Voice Cloning.
+Running on **Google Colab** provides **Free NVIDIA T4 GPU (16GB VRAM)**, **1 Gbps Google Cloud network**, and high-speed execution for Whisper STT, Demucs, and F5-TTS Voice Cloning.
 
-Open a new notebook on [colab.research.google.com](https://colab.research.google.com), set **Runtime > Change runtime type > T4 GPU**, and run the following cells:
+You can directly open and run the included [`MovieRecapAI_Colab.ipynb`](MovieRecapAI_Colab.ipynb) notebook on Google Colab!
+
+Or open a new notebook on [colab.research.google.com](https://colab.research.google.com), set **Runtime > Change runtime type > T4 GPU**, and run the following cells:
 
 ### Cell 1: Clone Repository & Install Dependencies
 ```python
-!git clone https://github.com/paipai1999/AI-Movie-Translate.git recap_app
+!git clone https://github.com/paipai1999/ai-translate-agent.git recap_app
 %cd recap_app
 
-!apt-get update -qq && apt-get install -y ffmpeg
+!apt-get update -qq && apt-get install -y ffmpeg fonts-sil-padauk fonts-noto-cjk fonts-noto-core
 !pip install -r requirements.txt
 ```
 
@@ -80,14 +82,14 @@ print("✅ Configuration Ready!")
 ### Cell 3: Run via CLI or Web UI Dashboard
 ```python
 # Option A: Run a single YouTube video or direct file
-!python main.py "https://www.youtube.com/watch?v=YOUR_VIDEO_ID"
+!python main.py "https://www.youtube.com/watch?v=YOUR_VIDEO_ID" -l burmese -e edge_tts
 
 # Option B: Run Web UI Dashboard accessible from your browser
-!npm install -g localtunnel
+!wget -q -nc https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && chmod +x cloudflared-linux-amd64
 import subprocess, time
 subprocess.Popen(["python", "web_ui.py"])
 time.sleep(3)
-!npx localtunnel --port 5000
+!./cloudflared-linux-amd64 tunnel --url http://127.0.0.1:5000
 ```
 
 ---
@@ -96,8 +98,8 @@ time.sleep(3)
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/paipai1999/AI-Movie-Translate.git
-cd AI-Movie-Translate
+git clone https://github.com/paipai1999/ai-translate-agent.git
+cd ai-translate-agent
 
 # 2. Create virtual environment & install dependencies
 python -m venv .venv

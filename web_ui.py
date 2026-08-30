@@ -771,4 +771,6 @@ async def save_keys(req: SaveKeysRequest):
 
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run(app, host='127.0.0.1', port=5000, log_level='info')
+    host = os.getenv("HOST", "0.0.0.0" if ("COLAB_GPU" in os.environ or "KAGGLE_KERNEL_RUN_TYPE" in os.environ) else "127.0.0.1")
+    port = int(os.getenv("PORT", 5000))
+    uvicorn.run(app, host=host, port=port, log_level='info')
