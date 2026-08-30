@@ -1,7 +1,6 @@
 import os
 import shutil
 import subprocess
-import textwrap
 from brain.memory import MovieState
 from brain import config as cfg
 

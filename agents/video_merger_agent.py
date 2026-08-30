@@ -1,6 +1,5 @@
 import os
 import sys
-import random
 from brain.memory import MovieState
 import brain.config as cfg
 

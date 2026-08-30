@@ -1,7 +1,7 @@
 import json
 import os
 import re
-from typing import List, Optional, Dict, Any, Union
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
 class TranscriptSegment(BaseModel):

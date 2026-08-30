@@ -1,4 +1,3 @@
-import concurrent.futures
 import json
 import math
 import os
@@ -8,7 +7,7 @@ from brain.prompts import (
     FULL_RECAP_SYSTEM_PROMPT,
     get_full_recap_writer_prompt,
 )
-from brain.gemini_client import call_gemini, call_gemini_vision
+from brain.gemini_client import call_gemini
 from brain import config as cfg
 
 

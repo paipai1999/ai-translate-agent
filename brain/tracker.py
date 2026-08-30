@@ -13,7 +13,6 @@ try:
 except Exception:
     try:
         # tzdata package provides IANA timezone database on Windows
-        import importlib.resources
         from zoneinfo import ZoneInfo
         _PT_ZONE = ZoneInfo("America/Los_Angeles")
     except Exception:
