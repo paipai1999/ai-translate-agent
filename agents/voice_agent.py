@@ -7,7 +7,7 @@ from brain.memory import MovieState
 from agents.f5_tts_engine import F5TTSEngine
 
 class VoiceAgent:
-    def __init__(self, voice: str = None, output_dir: str = "outputs", engine: str = None):
+    def __init__(self, voice: str = None, output_dir: str = "outputs", engine: str = None, tts_engine: str = None):
         """
         VoiceAgent supports:
           1. Microsoft Edge TTS (100% free cloud TTS - Thiha / Nilar / Guy)
@@ -17,7 +17,7 @@ class VoiceAgent:
         config_data = cfg.load_config()
         voice_cfg = config_data.get("voice", {})
         
-        self.engine = engine or os.getenv("TTS_ENGINE") or voice_cfg.get("engine", "edge_tts")
+        self.engine = engine or tts_engine or os.getenv("TTS_ENGINE") or voice_cfg.get("engine", "edge_tts")
         self.voice = self._resolve_voice(voice, voice_cfg)
         self.rate_mm = os.getenv("EDGE_TTS_RATE_MM") or voice_cfg.get("tts_rate_mm", "+8%")
         self.rate_en = os.getenv("EDGE_TTS_RATE_EN") or voice_cfg.get("tts_rate_en", "+15%")
