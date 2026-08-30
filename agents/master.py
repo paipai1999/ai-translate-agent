@@ -104,7 +104,7 @@ class MasterAgent:
 
         # Instantiate all agents
         self.video_agent     = VideoAgent()
-        self.audio_agent     = AudioAgent()
+        self.audio_agent     = AudioAgent(movie_path=self.movie_path)
         self.writer_agent    = WriterAgent(language=self.language)
         self.seo_agent       = SEOAgent(language=self.language)
         self.voice_agent     = VoiceAgent(
