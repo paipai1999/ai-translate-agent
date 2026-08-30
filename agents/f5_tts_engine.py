@@ -45,11 +45,11 @@ class F5TTSEngine:
         try:
             from f5_tts.api import F5TTS
             self._is_available = True
-        except ImportError:
+        except (ImportError, OSError, Exception) as e:
             try:
                 import f5_tts
                 self._is_available = True
-            except ImportError:
+            except (ImportError, OSError, Exception):
                 self._is_available = False
         return self._is_available
 
