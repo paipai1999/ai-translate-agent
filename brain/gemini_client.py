@@ -19,12 +19,12 @@ def _mask_key(key: str) -> str:
 # 3. gemini-1.5-flash     : Fallback — stable + proven (15 RPD free tier)
 # ─────────────────────────────────────────────────────────────────────────────
 _FALLBACK_MODELS = [
-    "gemini-3.5-flash-lite",
-    "gemini-3.6-flash",
-    "gemini-flash-latest",
-    "gemini-2.5-flash",
     "gemini-2.0-flash",
     "gemini-1.5-flash",
+    "gemini-2.5-flash",
+    "gemini-flash-latest",
+    "gemini-3.5-flash-lite",
+    "gemini-3.6-flash",
 ]
 
 # How many seconds to wait when ALL keys are rate-limited before retrying.

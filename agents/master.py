@@ -367,6 +367,10 @@ class MasterAgent:
             print(f"   └─ voiceover/              (Audio Clips per Scene)")
             print(f"{'='*60}\n")
 
+            # Auto Cleanup of intermediate temp files if enabled
+            if config_data.get("paths", {}).get("clean_temp_after_merge", True):
+                self._cleanup_temp_files()
+
             final_video_path = os.path.join(self.output_dir, self.state.project_dir, "final_recap.mp4")
             if os.path.exists(final_video_path) and os.name == 'nt':
                 print(f"\n[VIDEO READY] Auto-opening final recap video in your media player...")
@@ -397,3 +401,23 @@ class MasterAgent:
         state_file = os.path.join(output_dir, "state.json")
         self.state.save_to_json(state_file)
         save_movie_state(self.state, output_dir=self.output_dir)
+
+    def _cleanup_temp_files(self):
+        """Safely clean up intermediate temp files to free disk space."""
+        try:
+            temp_dir = os.path.abspath("temp")
+            if os.path.exists(temp_dir):
+                cleaned_count = 0
+                for item in os.listdir(temp_dir):
+                    if item.endswith((".wav", ".mp3", ".tmp", ".part", ".ass")) or item.startswith("temp_"):
+                        item_path = os.path.join(temp_dir, item)
+                        try:
+                            if os.path.isfile(item_path):
+                                os.remove(item_path)
+                                cleaned_count += 1
+                        except Exception:
+                            pass
+                if cleaned_count > 0:
+                    print(f"[*] Disk Optimizer: Cleaned up {cleaned_count} intermediate files from temp/.")
+        except Exception as e:
+            print(f"[!] Disk Optimizer notice: {e}")

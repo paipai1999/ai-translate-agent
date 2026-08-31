@@ -2,21 +2,18 @@
   "gemini": {
     "enabled": true,
     "api_keys": [],
-    "model": "gemini-3.1-flash-lite",
+    "model": "gemini-2.0-flash",
     "models": {
-      "heavy": "gemini-3.1-flash-lite",
-      "workhorse": "gemini-3.1-flash-lite",
-      "polish": "gemini-3.1-flash-lite"
+      "heavy": "gemini-2.0-flash",
+      "workhorse": "gemini-2.0-flash",
+      "polish": "gemini-2.0-flash"
     },
     "model_limits": {
-      "gemini-3.1-flash-lite": 500,
-      "gemini-3.5-flash-lite": 500,
-      "gemini-3.7-flash": 20,
-      "gemini-3.6-flash": 20,
-      "gemini-3.5-flash": 20,
-      "gemini-3-flash": 20,
-      "gemini-2.5-flash": 20,
-      "gemini-2.5-flash-lite": 20
+      "gemini-2.0-flash": 20,
+      "gemini-1.5-flash": 20,
+      "gemini-2.5-flash": 15,
+      "gemini-3.5-flash-lite": 20,
+      "gemini-3.6-flash": 15
     }
   },
   "pipeline": {
@@ -46,10 +43,30 @@
     }
   },
   "batch": {"movies_folder": "movies", "max_parallel_jobs": 1, "skip_completed": true},
-  "paths": {"output_dir": "outputs", "temp_dir": "temp"},
+  "paths": {
+    "output_dir": "outputs",
+    "temp_dir": "temp",
+    "clean_temp_after_merge": true
+  },
   "copyright_protection": {"enabled": true, "mirror_video": false, "resize_factor": 1.02},
   "subtitle_blur": {"enabled": true, "region_height_pct": 0.18, "blur_strength": 18},
   "color_grading": {"enabled": true, "brightness": 0.03, "contrast": 1.02, "saturation": 1.08},
-
+  "watermark": {
+    "enabled": true,
+    "text": "PAI AI Movie Translate",
+    "opacity": 0.4,
+    "margin": 30,
+    "font_size": 40
+  },
+  "subtitle_overlay": {
+    "enabled": true,
+    "font_name": "Myanmar Text",
+    "font_size": 40,
+    "bold": true,
+    "border_style": 3,
+    "outline_width": 4,
+    "margin_bottom": 55,
+    "max_chars_per_line": 28
+  },
   "logging": {"level": "INFO", "save_log_file": true}
 }

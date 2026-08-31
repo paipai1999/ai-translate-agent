@@ -676,15 +676,15 @@ class VideoMergerAgent:
         bold_flag = "-1" if bold else "0"
 
         if border_style == 3:
-            # Box background mode (YouTube-style): Outline=box_padding, Shadow unused
-            outline_val = 8       # box padding in px
-            shadow_val  = 0
-            back_colour = "&H99000000"   # 60% opacity dark box
+            # Box background mode (YouTube-style): Outline=box_padding, Shadow for depth
+            outline_val = 10      # box padding in px
+            shadow_val  = 2       # subtle depth shadow
+            back_colour = "&HB0000000"   # 70% opacity deep dark box for maximum contrast
         else:
             # Classic outline mode
             outline_val = outline_width
-            shadow_val  = 0
-            back_colour = "&H80000000"
+            shadow_val  = 2
+            back_colour = "&H90000000"
 
         header = (
             "[Script Info]\n"
