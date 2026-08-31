@@ -69,5 +69,15 @@
     "margin_bottom": 55,
     "max_chars_per_line": 28
   },
+  "reels": {
+    "enabled": true,
+    "width": 1080,
+    "height": 1920,
+    "blur_background": true,
+    "blur_sigma": 25,
+    "hook_title_color": "&H00D7FF",
+    "font_size": 52,
+    "safe_zone_margin": 160
+  },
   "logging": {"level": "INFO", "save_log_file": true}
 }

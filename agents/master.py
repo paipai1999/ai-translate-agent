@@ -315,6 +315,45 @@ class MasterAgent:
             self.state = self.video_merger.merge_video(self.state, self.movie_path)
             self.state.phase_durations["Phase 6: Video Merge & Subtitles"] = round(time.time() - p6_t0, 2)
             print(f"[⏱️ TIMING] Phase 6 finished in {self.state.phase_durations['Phase 6: Video Merge & Subtitles']}s")
+
+            # Optional Phase 6b: 9:16 Facebook Reels / TikTok Canvas Video Export
+            cfg_data = config.load_config()
+            reels_cfg = cfg_data.get("reels", {})
+            reels_enabled = (os.getenv("ENABLE_REELS") == "true") or reels_cfg.get("enabled", True)
+            if os.getenv("DISABLE_REELS") == "true":
+                reels_enabled = False
+
+            if reels_enabled:
+                final_video_path = os.path.join(self.output_dir, self.state.project_dir, "final_recap.mp4")
+                if os.path.exists(final_video_path):
+                    self._phase("Phase 6b: Generating 9:16 Facebook Reels Canvas Video", progress=95)
+                    hook_title = (
+                        self.custom_thumb_title
+                        or (self.state.seo_metadata.get("title") if isinstance(self.state.seo_metadata, dict) else "")
+                        or self.state.movie_name
+                    )
+                    sub_timings = []
+                    if self.state.generated_script:
+                        for block in self.state.generated_script:
+                            if isinstance(block, dict):
+                                s_start = float(block.get("start_sec") or 0.0)
+                                s_end = float(block.get("end_sec") or (s_start + 3.0))
+                                txt = str(block.get("narration") or block.get("text") or "").strip()
+                                if txt:
+                                    sub_timings.append((s_start, max(s_end - s_start, 0.8), txt))
+                    
+                    try:
+                        reels_path = self.video_merger.generate_reels_video(
+                            source_video_path=final_video_path,
+                            output_dir=os.path.join(self.output_dir, self.state.project_dir),
+                            hook_title=hook_title,
+                            subtitle_timings=sub_timings,
+                            duration_sec=self.state.duration_sec,
+                        )
+                        self.state.reels_video_path = reels_path
+                    except Exception as e:
+                        print(f"[WARN] MasterAgent: Failed to generate Reels video: {e}")
+
             self.save_state()
 
             # Phase 7: QA Review — Gemini checks sync accuracy & language naturalness
@@ -358,7 +397,9 @@ class MasterAgent:
             print(f"   {'-'*56}")
             print(f"   🌟 TOTAL DURATION                          : {total_elapsed:>7.2f}s ({self.state.total_duration_formatted})")
             print(f"\n📦 OUTPUT DIRECTORY: outputs/{self.state.project_dir}/")
-            print(f"   ├─ final_recap.mp4         (Final Anti-Copyright Video)")
+            print(f"   ├─ final_recap.mp4         (16:9 YouTube Video)")
+            if getattr(self.state, "reels_video_path", None) and os.path.exists(self.state.reels_video_path):
+                print(f"   ├─ final_reels.mp4         (9:16 Facebook Reels Canvas Video)")
             print(f"   ├─ thumbnail.jpg           (High-CTR Thumbnail)")
             print(f"   ├─ final_recap_script.txt  (Narration Script + SEO)")
             print(f"   ├─ seo_metadata.json       (Title/Tags/Hashtags)")

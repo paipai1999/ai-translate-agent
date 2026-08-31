@@ -49,6 +49,7 @@ class MovieState(BaseModel):
     subtitle_mode: Optional[str] = "auto"
     custom_thumb_title: Optional[str] = None
     watermark_override: Optional[Dict[str, Any]] = None
+    reels_video_path: Optional[str] = None  # Path to generated 9:16 Facebook Reels video
     uploaded_video_name: Optional[str] = None  # Stores the GenAI file name (e.g. files/abc)
     qa_results: Optional[Dict[str, Any]] = None  # Phase 7: QA Agent review results
     output_video_transcript: List[Any] = Field(default_factory=list)  # Phase 7: Re-extracted output video transcript & actions

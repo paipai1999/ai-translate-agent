@@ -160,8 +160,16 @@ def pipeline_worker(
     watermark_enabled=None,
     watermark_text=None,
     watermark_opacity=None,
+    reels_enabled=True,
 ):
     current_job_id.set(job_id)
+    if reels_enabled is False:
+        os.environ["DISABLE_REELS"] = "true"
+        os.environ.pop("ENABLE_REELS", None)
+    elif reels_enabled is True:
+        os.environ["ENABLE_REELS"] = "true"
+        os.environ.pop("DISABLE_REELS", None)
+
     buffer = io.StringIO()
     thread_stdout.buffers[job_id] = buffer
     with jobs_lock:
@@ -287,6 +295,7 @@ class StartRequest(BaseModel):
     watermark_enabled: Optional[bool] = True
     watermark_text: Optional[str] = None
     watermark_opacity: Optional[float] = None
+    reels_enabled: Optional[bool] = True
 
 class BatchStartRequest(BaseModel):
     inputs: List[str]
@@ -297,6 +306,7 @@ class BatchStartRequest(BaseModel):
     watermark_enabled: Optional[bool] = True
     watermark_text: Optional[str] = None
     watermark_opacity: Optional[float] = None
+    reels_enabled: Optional[bool] = True
 
 class BrandingConfigRequest(BaseModel):
     watermark_enabled: bool = True
@@ -423,6 +433,7 @@ async def start_pipeline(req: StartRequest):
             watermark_enabled,
             watermark_text,
             watermark_opacity,
+            req.reels_enabled,
         ),
         daemon=True,
     )

@@ -188,6 +188,17 @@ def main():
         help="Disable watermark overlay in the video"
     )
     parser.add_argument(
+        "--reels",
+        action="store_true",
+        default=None,
+        help="Force export of 9:16 Facebook Reels / TikTok Canvas video"
+    )
+    parser.add_argument(
+        "--no-reels",
+        action="store_true",
+        help="Disable export of 9:16 Facebook Reels video"
+    )
+    parser.add_argument(
         "--clean",
         action="store_true",
         help="Interactive cleanup menu to delete old source videos or generated outputs"
@@ -199,6 +210,11 @@ def main():
     if args.clean:
         run_interactive_cleanup()
         return
+
+    if args.no_reels:
+        os.environ["DISABLE_REELS"] = "true"
+    elif args.reels:
+        os.environ["ENABLE_REELS"] = "true"
 
     if args.no_voice:
         os.environ["VOICE_ENABLED"] = "false"
