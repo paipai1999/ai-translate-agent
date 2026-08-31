@@ -185,42 +185,37 @@ class VideoMergerAgent:
                 if mirror_enabled:
                     print("[*] -> Applying horizontal mirror/flip effect for max anti-copyright protection...")
                     try:
-                        from moviepy.video.fx import MirrorX
-                        effects.append(MirrorX())
-                    except Exception:
-                        try:
-                            from moviepy.video.fx import mirror_x
-                            main_video = mirror_x(main_video)
-                        except Exception as e:
-                            print(f"[WARN] Failed to apply mirror effect: {e}")
+                        from moviepy import vfx
+                        if hasattr(vfx, "MirrorX"):
+                            effects.append(vfx.MirrorX())
+                        elif hasattr(vfx, "mirror_x"):
+                            main_video = main_video.fx(vfx.mirror_x)
+                    except Exception as e:
+                        print(f"[WARN] Failed to apply mirror effect: {e}")
 
                 resize_factor = float(copyright_cfg.get("resize_factor", 1.02))
                 if resize_factor != 1.0:
                     print(f"[*] -> Applying subtle scale/resize ({resize_factor}x) to modify pixel boundaries...")
                     try:
-                        from moviepy.video.fx.Resize import Resize
-                        effects.append(Resize(resize_factor))
+                        from moviepy import vfx
+                        if hasattr(vfx, "Resize"):
+                            effects.append(vfx.Resize(resize_factor))
+                        elif hasattr(vfx, "resize"):
+                            main_video = main_video.fx(vfx.resize, resize_factor)
                     except Exception as e:
-                        try:
-                            from moviepy.video.fx import resize
-                            main_video = resize(main_video, resize_factor)
-                        except Exception as e2:
-                            print(f"[WARN] Failed to apply resize: {e2}")
+                        print(f"[WARN] Failed to apply resize: {e}")
                 
                 # Apply elegant cinematic transitions (fade-in & fade-out)
                 print("[*] -> Applying cinematic FadeIn and FadeOut transitions (1 second)...")
                 try:
-                    from moviepy.video.fx.FadeIn import FadeIn
-                    from moviepy.video.fx.FadeOut import FadeOut
-                    effects.append(FadeIn(1.0))
-                    effects.append(FadeOut(1.0))
-                except Exception:
-                    try:
-                        from moviepy.video.fx import fadein, fadeout
-                        main_video = fadein(main_video, 1.0)
-                        main_video = fadeout(main_video, 1.0)
-                    except Exception as e:
-                        print(f"[WARN] Failed to apply fade transitions: {e}")
+                    from moviepy import vfx
+                    if hasattr(vfx, "FadeIn") and hasattr(vfx, "FadeOut"):
+                        effects.append(vfx.FadeIn(1.0))
+                        effects.append(vfx.FadeOut(1.0))
+                    elif hasattr(vfx, "fadein") and hasattr(vfx, "fadeout"):
+                        main_video = main_video.fx(vfx.fadein, 1.0).fx(vfx.fadeout, 1.0)
+                except Exception as e:
+                    print(f"[WARN] Failed to apply fade transitions: {e}")
 
                 if effects and hasattr(main_video, "with_effects"):
                     try:
@@ -339,10 +334,10 @@ class VideoMergerAgent:
                         speed_factor = min(c.duration / available_gap, 1.35)
                         print(f"[*] VideoMerger [Hybrid]: Block {idx+1} audio ({c.duration:.1f}s) > gap ({available_gap:.1f}s). Speeding up {speed_factor:.2f}x.")
                         try:
-                            try:
-                                from moviepy.video.fx.MultiplySpeed import MultiplySpeed
-                                c = c.with_effects([MultiplySpeed(speed_factor)])
-                            except ImportError:
+                            from moviepy import vfx
+                            if hasattr(vfx, "MultiplySpeed") and hasattr(c, "with_effects"):
+                                c = c.with_effects([vfx.MultiplySpeed(speed_factor)])
+                            else:
                                 import moviepy.audio.fx.all as afx
                                 c = afx.speedx(c, speed_factor)
                         except Exception as e:
