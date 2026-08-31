@@ -11,10 +11,11 @@ Running on **Google Colab** provides **Free NVIDIA T4 GPU (16GB VRAM)**, **1 Gbp
 👉 **[Open AI_Movie_Translate_Colab.ipynb in Google Colab](https://colab.research.google.com/github/paipai1999/ai-translate-agent/blob/main/AI_Movie_Translate_Colab.ipynb)**
 
 ### ✨ Colab Highlights:
-1. **⚡ 1-Click All-in-One Translation Runner:** Paste your YouTube / DramaBox URL, enter your Gemini API Key, and press Play (▶️) once. The entire pipeline runs autonomously to produce the final dubbed video!
-2. **⚡ Colab Auto Keep-Alive Heartbeat:** Built-in background heartbeat prevents Colab idle session disconnects during long movie translations.
-3. **🌐 Interactive Web UI with Cloudflare Tunnel:** Run Step 4 (Option B) to launch the Glassmorphic Web Dashboard with an automatic browser tab pop-up!
-4. **🎬 In-Notebook Media Player:** Watch the rendered video, review the high-CTR thumbnail, and inspect translated Burmese dialogues directly inside Colab.
+1. **⚡ 1-Click Web UI Dashboard Launcher:** Click Play (▶️) once on `🚀 Launch Web UI Dashboard (1-Click)`. Colab automatically provisions the environment, starts the FastAPI server, opens a secure Cloudflare Tunnel, and launches the Web UI in your browser!
+2. **⚡ Colab Auto Keep-Alive Heartbeat:** Built-in background JavaScript heartbeat keeps the connection active every 60 seconds, completely preventing idle timeout disconnects during long movie translations.
+3. **🛡️ Active Socket Health-Check (Zero 502 Errors):** Actively probes TCP port 5000 before publishing the Cloudflare Tunnel link, guaranteeing immediate connection with zero 502 Bad Gateway errors.
+4. **🤖 YouTube Bot Detection Bypass:** Powered by mobile app client APIs (iOS & Android) with automatic retry client rotation to download YouTube videos without bot challenges or CAPTCHAs.
+5. **📊 Live Download Progress Streaming:** Displays live percentage (`[*] Downloading: 45% at 2.1MiB/s`), speed, and ETA in the Web UI terminal in real-time.
 
 ---
 
@@ -181,6 +182,8 @@ Input (Video File or URL)
 5. **Gemini 2.0 Flash Priority & Multi-Key Failover:** Primary model set to Gemini 2.0 Flash with automatic failover across 6 backup models and key rotation.
 6. **Anti-Copyright Defense Suite:** Multi-layer protection including horizontal mirroring, dynamic shifting film grain (`noise=alls=2:allf=t`), vignette borders, and color grading.
 7. **Auto-Temp Disk Optimizer:** Automatically cleans up intermediate audio/video chunks in `temp/` after the final video is successfully created.
+8. **YouTube Bot Detection Bypass Engine:** Automatically utilizes iOS and Android mobile player client API endpoints with client rotation to bypass YouTube datacenter sign-in / bot challenges without CAPTCHAs.
+9. **Live Download & Pipeline Progress Streaming:** Features real-time log streaming with smooth carriage-return parsing, displaying live download percentage, speed, and ETA directly in the Web UI terminal.
 
 ---
 
