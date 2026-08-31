@@ -1751,10 +1751,30 @@
     });
 
     loadConfig();
+    loadSystemInfo();
     loadKeyStatus();
     loadMovies();
     loadOutputs();
     checkActiveJob();
+
+    async function loadSystemInfo() {
+        try {
+            const res = await fetch('/api/system/info');
+            const data = await res.json();
+            if (data.hardware_encoder) {
+                const encBadge = document.getElementById('encoder-badge');
+                if (encBadge) {
+                    const isGpu = data.hardware_encoder.type === 'gpu';
+                    encBadge.innerHTML = `<span>⚡ ${data.hardware_encoder.label}</span>`;
+                    encBadge.style.color = isGpu ? 'var(--success)' : 'var(--muted)';
+                    encBadge.style.background = isGpu ? 'rgba(16, 185, 129, 0.1)' : 'rgba(100, 116, 139, 0.1)';
+                    encBadge.style.borderColor = isGpu ? 'rgba(16, 185, 129, 0.25)' : 'rgba(100, 116, 139, 0.2)';
+                }
+            }
+        } catch (e) {
+            console.error('Failed to load system info:', e);
+        }
+    }
 
     async function checkActiveJob() {
         try {
