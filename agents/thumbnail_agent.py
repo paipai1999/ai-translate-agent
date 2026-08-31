@@ -298,11 +298,9 @@ Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,50,,{ass_text}
             else:
                 print(f"[WARN] ThumbnailAgent: FFmpeg failed to render thumbnail text: {proc.stderr}")
                 # Fallback to the temp base image if ffmpeg fails
-                import shutil
                 shutil.copy(temp_base, thumbnail_path)
         except Exception as e:
             print(f"[WARN] ThumbnailAgent: Exception during ffmpeg text burn: {e}")
-            import shutil
             shutil.copy(temp_base, thumbnail_path)
         finally:
             if os.path.exists(temp_base):
