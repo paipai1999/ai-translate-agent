@@ -79,7 +79,7 @@ DEFAULT_CONFIG = {
     },
     "watermark": {
         "enabled": True,
-        "text": "PAI Movie AI Recap",
+        "text": "PAI AI Movie Translate",
         "opacity": 0.4,
         "margin": 30,
         "font_size": 40
