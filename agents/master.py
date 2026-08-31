@@ -284,7 +284,8 @@ class MasterAgent:
                 # Merge SEO state back
                 seo_state = seo_future.result()
                 self.state.seo_metadata = seo_state.seo_metadata
-                self.state.custom_thumb_title = seo_state.custom_thumb_title
+                if not self.state.custom_thumb_title and getattr(seo_state, "custom_thumb_title", None):
+                    self.state.custom_thumb_title = seo_state.custom_thumb_title
                 
                 temp_base_path = thumb_future.result()
                 
