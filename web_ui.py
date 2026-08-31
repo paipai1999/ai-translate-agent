@@ -850,6 +850,7 @@ async def rename_movie(req: RenameRequest):
     except OSError as error:
         raise HTTPException(status_code=500, detail=f"Could not rename movie: {error}")
 
+@app.get("/api/keys")
 @app.get("/api/keys/list")
 async def list_raw_keys():
     import brain.config as cfg
