@@ -283,6 +283,8 @@ class ThumbnailAgent:
             font_size = int(height * 0.064)   # ~69px on 1080p
 
         ass_text = title.replace('{', '').replace('}', '')
+        import sys
+        font_family = "Myanmar Text" if sys.platform == "win32" else "Padauk"
         
         # High-CTR YouTube Thumbnail Styling: Top-Center (Alignment: 8), Vibrant Golden Yellow, 6px Deep Black Outline
         ass_content = f"""[Script Info]
@@ -293,7 +295,7 @@ PlayResY: {height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Myanmar Text,{font_size},&H0000F5FF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,6,4,8,60,60,55,1
+Style: Default,{font_family},{font_size},&H0000F5FF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,6,4,8,60,60,55,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

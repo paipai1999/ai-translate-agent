@@ -537,7 +537,7 @@ class VideoMergerAgent:
                     video_path    = final_output,
                     timings       = subtitle_timings,
                     output_dir    = output_dir,
-                    font_name     = sub_cfg.get("font_name", "Myanmar Text"),
+                    font_name     = (sub_cfg.get("font_name") or "Myanmar Text") if sys.platform == "win32" else "Padauk",
                     font_size     = int(sub_cfg.get("font_size", 40)),
                     bold          = bool(sub_cfg.get("bold", True)),
                     border_style  = int(sub_cfg.get("border_style", 3)),
@@ -779,6 +779,9 @@ class VideoMergerAgent:
         Uses ASS format (all styling embedded) to avoid Windows path/space escaping issues.
         ASS file written to temp/ with a simple no-space filename.
         """
+        import sys
+        if sys.platform != "win32" and font_name == "Myanmar Text":
+            font_name = "Padauk"
         import subprocess, shutil, re
 
         # Write ASS to temp/ with no spaces in filename — avoids FFmpeg filter parsing issues

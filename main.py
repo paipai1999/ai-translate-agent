@@ -164,6 +164,24 @@ def main():
         help="Re-process movies even if output already exists (ignore skip_completed)"
     )
     parser.add_argument(
+        "--thumb-title",
+        dest="thumb_title",
+        default=None,
+        help="Custom Myanmar Title to burn on the Thumbnail (leave empty for auto AI title)"
+    )
+    parser.add_argument(
+        "--watermark-text",
+        dest="watermark_text",
+        default=None,
+        help="Custom watermark text to overlay on the video (default: PAI AI Movie Translate)"
+    )
+    parser.add_argument(
+        "--no-watermark",
+        dest="no_watermark",
+        action="store_true",
+        help="Disable watermark overlay in the video"
+    )
+    parser.add_argument(
         "--clean",
         action="store_true",
         help="Interactive cleanup menu to delete old source videos or generated outputs"
@@ -207,7 +225,14 @@ def main():
                 sys.exit(1)
 
         try:
-            master = MasterAgent(movie_path, language=args.language, tts_engine=args.engine)
+            master = MasterAgent(
+                movie_path,
+                language=args.language,
+                tts_engine=args.engine,
+                custom_thumb_title=args.thumb_title,
+                watermark_enabled=False if args.no_watermark else True,
+                watermark_text=args.watermark_text,
+            )
             master.run_pipeline()
         except Exception as e:
             print(f"\n[ERROR] Pipeline failed: {e}")
@@ -224,7 +249,10 @@ def main():
             movies_folder=conf.get("batch", {}).get("movies_folder", "movies"),
             skip_completed=skip,
             language=args.language,
-            tts_engine=args.engine
+            tts_engine=args.engine,
+            custom_thumb_title=args.thumb_title,
+            watermark_enabled=False if args.no_watermark else True,
+            watermark_text=args.watermark_text,
         ).process_all()
 
     # Batch: URL list
@@ -236,7 +264,10 @@ def main():
             movies_folder=conf.get("batch", {}).get("movies_folder", "movies"),
             skip_completed=skip,
             language=args.language,
-            tts_engine=args.engine
+            tts_engine=args.engine,
+            custom_thumb_title=args.thumb_title,
+            watermark_enabled=False if args.no_watermark else True,
+            watermark_text=args.watermark_text,
         ).process_all(url_list=args.urls, local_paths=[])
     else:
         parser.print_help()
