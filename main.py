@@ -117,6 +117,12 @@ def main():
         help="Path to video file or URL to download"
     )
     parser.add_argument(
+        "-i", "--input",
+        dest="input_flag",
+        default=None,
+        help="Path to video file or URL to download"
+    )
+    parser.add_argument(
         "-b", "--batch",
         action="store_true",
         help="Process all videos in movies/ folder sequentially"
@@ -206,8 +212,9 @@ def main():
 
 
     # Single video or URL
-    if args.input_source:
-        src = args.input_source.strip()
+    chosen_input = (args.input_flag or args.input_source or "").strip()
+    if chosen_input:
+        src = chosen_input
 
         if DownloaderAgent.is_url(src):
             print(f"[URL] Detected URL - starting auto-download...")
