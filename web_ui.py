@@ -12,7 +12,7 @@ import contextvars
 from urllib.parse import quote
 from typing import Optional, List
 
-from fastapi import FastAPI, Request, UploadFile, File, HTTPException, Query, status
+from fastapi import FastAPI, Request, UploadFile, File, HTTPException, Query
 from fastapi.responses import HTMLResponse, FileResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -694,6 +694,7 @@ async def handle_config(request: Request):
 async def get_key_status():
     import brain.config as cfg
     import urllib.request
+    import urllib.error
     from concurrent.futures import ThreadPoolExecutor
     
     config_data = cfg.load_config()

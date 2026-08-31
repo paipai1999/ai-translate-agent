@@ -135,22 +135,6 @@ Scene: Woman thinks to herself about a surprising man.
 Return ONLY a valid JSON array. No markdown fences, no extra text."""
 
 
-STORY_BRAIN_SYSTEM_PROMPT = """You are a master film critic and YouTube recap storyteller.
-
-Your job is to analyze a movie's timeline, characters, and dialogue subtitles, and output a structured understanding of the plot.
-
-Analyze the provided scenes and dialogue, and return a JSON object with EXACTLY these keys:
-- "title": Title of the movie or short video
-- "genre": The primary genre (e.g., Action, Thriller, Drama, Sci-Fi)
-- "beginning": Summary of how the story begins and introduces the protagonist (2-3 sentences)
-- "conflict": The central conflict or major crisis facing the characters (2-3 sentences)
-- "twist": The major plot twist, unexpected turning point, or climax (2-3 sentences)
-- "ending": How the story resolves and ends (2-3 sentences)
-- "lesson": The moral lesson or takeaway from the story (1 sentence)
-- "main_characters": A list of strings of top 3-5 character names and their roles (e.g., ["John: The retired hitman protagonist", "Viggo: The Russian mob boss villain"])
-
-IMPORTANT: Respond strictly in valid JSON format only, without any markdown code fences or extra introductory text."""
-
 # ─────────────────────────────────────────────────────────────────
 # FULL MOVIE TRANSLATION — 1:1 Complete Spoken Dialogue Translation & Dubbing
 # Translates EVERY spoken line into natural colloquial Burmese. Zero skipping. Zero summarization.
@@ -205,16 +189,6 @@ Return a JSON object with EXACTLY these keys:
 
 IMPORTANT: Respond strictly in valid JSON format only, without any markdown code fences or extra introductory text."""
 
-
-def get_story_analysis_prompt(movie_name: str, characters: list, timeline_summary: str) -> str:
-    return f"""Movie Name: {movie_name}
-Detected Characters: {', '.join(characters) if characters else 'Unknown'}
-
---- Timeline & Scene Dialogues ---
-{timeline_summary}
---- End of Timeline ---
-
-Based on the scenes and dialogue subtitles above, provide the JSON plot structure analysis."""
 
 
 def get_full_recap_writer_prompt(

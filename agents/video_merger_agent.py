@@ -53,10 +53,10 @@ class VideoMergerAgent:
     def merge_video(self, state, movie_path: str):
         # Lazy import moviepy so the module can still be loaded even if moviepy is missing
         try:
-            from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_audioclips
+            from moviepy.editor import VideoFileClip, AudioFileClip
         except ImportError:
             try:
-                from moviepy import VideoFileClip, AudioFileClip, concatenate_audioclips
+                from moviepy import VideoFileClip, AudioFileClip
             except ImportError:
                 print("[ERROR] VideoMerger: moviepy is not installed. Run: pip install moviepy")
                 return state
@@ -782,7 +782,7 @@ class VideoMergerAgent:
         import sys
         if sys.platform != "win32" and font_name == "Myanmar Text":
             font_name = "Padauk"
-        import subprocess, shutil, re
+        import subprocess, shutil
 
         # Write ASS to temp/ with no spaces in filename — avoids FFmpeg filter parsing issues
         temp_dir = os.path.abspath("temp")
