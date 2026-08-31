@@ -289,6 +289,19 @@ async def system_info():
         "active_jobs": active
     }
 
+@app.get("/api/jobs/active")
+async def get_active_job():
+    with jobs_lock:
+        for jid, jdata in list(jobs.items()):
+            if jdata.get("status") == "running":
+                return {
+                    "job_id": jid,
+                    "status": "running",
+                    "phase": jdata.get("phase", "Running..."),
+                    "created_at": jdata.get("created_at")
+                }
+    return {"job_id": None, "status": "idle"}
+
 @app.post("/api/upload")
 async def upload_file(video: UploadFile = File(...)):
     if not video.filename:

@@ -1110,7 +1110,13 @@
                 })
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+            if (!res.ok) {
+                if (res.status === 409) {
+                    await checkActiveJob();
+                    return;
+                }
+                throw new Error(data.detail || data.error || `HTTP ${res.status}`);
+            }
             if (data.error) throw new Error(data.error);
             startStreamingLogs(data.job_id);
         } catch (e) {
@@ -1748,6 +1754,27 @@
     loadKeyStatus();
     loadMovies();
     loadOutputs();
+    checkActiveJob();
+
+    async function checkActiveJob() {
+        try {
+            const res = await fetch('/api/jobs/active');
+            const data = await res.json();
+            if (data.job_id) {
+                console.log('⚡ Active running pipeline detected:', data.job_id);
+                showProgress('Connecting to active pipeline: ' + (data.phase || 'Running...'));
+                const btn = document.getElementById('btn-start');
+                const btnText = document.getElementById('btn-start-text');
+                if (btn && btnText) {
+                    btn.disabled = true;
+                    btnText.textContent = 'Running...';
+                }
+                startStreamingLogs(data.job_id);
+            }
+        } catch(e) {
+            console.error('Failed to check active job:', e);
+        }
+    }
 
     // ── Background Particles ──
     function initializeLightCanvas() {
