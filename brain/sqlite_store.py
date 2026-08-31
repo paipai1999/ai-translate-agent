@@ -1,8 +1,9 @@
 import json
 import os
 import sqlite3
+import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 from brain.memory import MovieState
 
@@ -13,10 +14,14 @@ def get_db_path(output_dir: str = "outputs") -> str:
 
 
 def ensure_db(output_dir: str = "outputs") -> str:
+    """Ensures database exists and all tables are initialized with WAL mode."""
     db_path = get_db_path(output_dir)
     conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
     try:
         conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        
+        # 1. Movie State Table
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS movie_state (
@@ -32,6 +37,22 @@ def ensure_db(output_dir: str = "outputs") -> str:
             )
             """
         )
+        
+        # 2. Jobs Table (Database-backed job queue for Web UI)
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS jobs (
+                job_id TEXT PRIMARY KEY,
+                input_source TEXT,
+                status TEXT DEFAULT 'running',
+                phase TEXT DEFAULT 'Starting...',
+                created_at REAL,
+                updated_at TEXT
+            )
+            """
+        )
+        
+        # 3. API Key Usage Table (Unified quota tracker)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS api_key_usage (
@@ -50,6 +71,10 @@ def ensure_db(output_dir: str = "outputs") -> str:
         conn.close()
     return db_path
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MOVIE STATE OPERATIONS
+# ─────────────────────────────────────────────────────────────────────────────
 
 def save_movie_state(state: MovieState, output_dir: str = "outputs") -> None:
     db_path = ensure_db(output_dir)
@@ -121,8 +146,6 @@ def load_movie_state(project_dir: str, output_dir: str = "outputs") -> Optional[
     finally:
         conn.close()
 
-
-# Alias for compatibility
 get_movie_state = load_movie_state
 
 
@@ -164,5 +187,203 @@ def list_movie_states(output_dir: str = "outputs") -> list[dict]:
             }
             for row in cursor.fetchall()
         ]
+    finally:
+        conn.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOB QUEUE OPERATIONS (Persistent Web UI State)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def create_job(job_id: str, input_source: str, phase: str = "Starting...", output_dir: str = "outputs") -> None:
+    db_path = ensure_db(output_dir)
+    now_iso = datetime.now(timezone.utc).isoformat()
+    now_ts = time.time()
+
+    conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
+    try:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO jobs (job_id, input_source, status, phase, created_at, updated_at)
+            VALUES (?, ?, 'running', ?, ?, ?)
+            """,
+            (job_id, input_source, phase, now_ts, now_iso)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def update_job(job_id: str, status: Optional[str] = None, phase: Optional[str] = None, output_dir: str = "outputs") -> None:
+    db_path = ensure_db(output_dir)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
+    try:
+        if status and phase:
+            conn.execute("UPDATE jobs SET status = ?, phase = ?, updated_at = ? WHERE job_id = ?", (status, phase, now_iso, job_id))
+        elif status:
+            conn.execute("UPDATE jobs SET status = ?, updated_at = ? WHERE job_id = ?", (status, now_iso, job_id))
+        elif phase:
+            conn.execute("UPDATE jobs SET phase = ?, updated_at = ? WHERE job_id = ?", (phase, now_iso, job_id))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_active_job(output_dir: str = "outputs") -> Optional[dict]:
+    """Returns the most recent currently running job, if any."""
+    db_path = get_db_path(output_dir)
+    if not os.path.exists(db_path):
+        return None
+
+    conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
+    try:
+        cursor = conn.execute(
+            "SELECT job_id, input_source, status, phase, created_at, updated_at FROM jobs WHERE status = 'running' ORDER BY created_at DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "job_id": row[0],
+            "input_source": row[1],
+            "status": row[2],
+            "phase": row[3],
+            "created_at": row[4],
+            "updated_at": row[5]
+        }
+    finally:
+        conn.close()
+
+
+def get_job(job_id: str, output_dir: str = "outputs") -> Optional[dict]:
+    db_path = get_db_path(output_dir)
+    if not os.path.exists(db_path):
+        return None
+
+    conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
+    try:
+        cursor = conn.execute(
+            "SELECT job_id, input_source, status, phase, created_at, updated_at FROM jobs WHERE job_id = ?",
+            (job_id,)
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return {
+            "job_id": row[0],
+            "input_source": row[1],
+            "status": row[2],
+            "phase": row[3],
+            "created_at": row[4],
+            "updated_at": row[5]
+        }
+    finally:
+        conn.close()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# UNIFIED API KEY USAGE OPERATIONS (SQLite Quota Tracker)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def reserve_sqlite_model_usage(masked_key: str, model_name: str, limit: int, utc_date: str, output_dir: str = "outputs") -> bool:
+    """Atomically checks limit and reserves 1 usage if under limit in SQLite."""
+    db_path = ensure_db(output_dir)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
+    try:
+        cursor = conn.execute(
+            "SELECT used_today, utc_date FROM api_key_usage WHERE masked_key = ? AND model_name = ?",
+            (masked_key, model_name)
+        )
+        row = cursor.fetchone()
+        
+        used = 0
+        if row:
+            rec_used, rec_utc = row[0], row[1]
+            if rec_utc == utc_date:
+                used = rec_used
+            else:
+                used = 0  # Date rolled over, reset to 0
+
+        if used >= limit:
+            return False
+
+        # Atomically increment
+        new_used = used + 1
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO api_key_usage (masked_key, model_name, used_today, status, utc_date, last_updated_utc)
+            VALUES (?, ?, ?, 'active', ?, ?)
+            """,
+            (masked_key, model_name, new_used, utc_date, now_iso)
+        )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def record_sqlite_model_usage(masked_key: str, model_name: str, status: str, utc_date: str, output_dir: str = "outputs") -> None:
+    """Records completion status. If error/rate-limited, refunds the reserved usage."""
+    db_path = ensure_db(output_dir)
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
+    try:
+        cursor = conn.execute(
+            "SELECT used_today FROM api_key_usage WHERE masked_key = ? AND model_name = ?",
+            (masked_key, model_name)
+        )
+        row = cursor.fetchone()
+        used = row[0] if row else 0
+
+        if status != "success" and used > 0:
+            used -= 1  # Refund failure
+
+        status_text = "active" if status == "success" else ("rate-limited (RPM)" if status == "rate_limited" else status)
+
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO api_key_usage (masked_key, model_name, used_today, status, utc_date, last_updated_utc)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (masked_key, model_name, used, status_text, utc_date, now_iso)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def load_sqlite_usage_db(utc_date: str, output_dir: str = "outputs") -> dict:
+    """Returns usage dictionary structured identically to legacy tracker for seamless compatibility."""
+    db_path = ensure_db(output_dir)
+    data = {"utc_date": utc_date, "keys": {}}
+
+    conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
+    try:
+        cursor = conn.execute(
+            "SELECT masked_key, model_name, used_today, status, utc_date, last_updated_utc FROM api_key_usage"
+        )
+        for row in cursor.fetchall():
+            m_key, m_name, used, stat, rec_utc, last_up = row[0], row[1], row[2], row[3], row[4], row[5]
+            if rec_utc != utc_date:
+                used = 0
+                stat = "active"
+
+            if m_key not in data["keys"]:
+                data["keys"][m_key] = {
+                    "masked_key": m_key,
+                    "utc_date": utc_date,
+                    "last_updated_utc": last_up,
+                    "models": {}
+                }
+            data["keys"][m_key]["models"][m_name] = {
+                "used_today": used,
+                "status": stat
+            }
+        return data
     finally:
         conn.close()

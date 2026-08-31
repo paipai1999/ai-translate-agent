@@ -58,7 +58,14 @@ def _cleanup_old_jobs():
                 thread_stdout.subscribers.pop(jid, None)
 
 def _has_running_job():
-    # NOTE: Caller must hold jobs_lock or this is best-effort.
+    # Check SQLite database first for persistence across restarts
+    try:
+        from brain.sqlite_store import get_active_job
+        if get_active_job() is not None:
+            return True
+    except Exception:
+        pass
+    # Check in-memory jobs dictionary
     return any(job.get('status') == 'running' for job in jobs.values())
 
 def _resolve_input_source(input_source: str) -> str:
@@ -161,6 +168,12 @@ def pipeline_worker(
         jobs[job_id]['buffer'] = buffer
     
     try:
+        from brain.sqlite_store import create_job, update_job
+        create_job(job_id, str(input_source), phase="Starting...")
+    except Exception:
+        pass
+    
+    try:
         if DownloaderAgent.is_url(input_source):
             print("[URL] Detected URL - starting auto-download...")
             downloader = DownloaderAgent(output_dir="movies")
@@ -181,11 +194,21 @@ def pipeline_worker(
         master.run_pipeline()
         with jobs_lock:
             jobs[job_id]['status'] = 'done'
+        try:
+            from brain.sqlite_store import update_job
+            update_job(job_id, status='done', phase='Done')
+        except Exception:
+            pass
     except Exception as e:
         import traceback
         traceback.print_exc()
         with jobs_lock:
             jobs[job_id]['status'] = 'error'
+        try:
+            from brain.sqlite_store import update_job
+            update_job(job_id, status='error', phase='Error')
+        except Exception:
+            pass
     finally:
         # BUG-C3 Fix: Free log buffer immediately on job end (not after 2-hour JOB_RETENTION).
         # subscriber list and job metadata are still cleaned by _cleanup_old_jobs() later.
@@ -211,6 +234,12 @@ def batch_worker(
         jobs[job_id]['buffer'] = buffer
     
     try:
+        from brain.sqlite_store import create_job, update_job
+        create_job(job_id, f"Batch ({len(inputs_list)} items)", phase="Starting...")
+    except Exception:
+        pass
+    
+    try:
         urls = [i for i in inputs_list if DownloaderAgent.is_url(i)]
         local_paths = [_resolve_input_source(i) for i in inputs_list if not DownloaderAgent.is_url(i)]
         processor = BatchProcessor(
@@ -228,11 +257,21 @@ def batch_worker(
         processor.process_all(url_list=urls, local_paths=local_paths)
         with jobs_lock:
             jobs[job_id]['status'] = 'done'
+        try:
+            from brain.sqlite_store import update_job
+            update_job(job_id, status='done', phase='Done')
+        except Exception:
+            pass
     except Exception as e:
         import traceback
         traceback.print_exc()
         with jobs_lock:
             jobs[job_id]['status'] = 'error'
+        try:
+            from brain.sqlite_store import update_job
+            update_job(job_id, status='error', phase='Error')
+        except Exception:
+            pass
     finally:
         # BUG-C3 Fix: Free log buffer immediately on batch job end.
         if hasattr(thread_stdout, 'buffers'):
@@ -291,6 +330,19 @@ async def system_info():
 
 @app.get("/api/jobs/active")
 async def get_active_job():
+    try:
+        from brain.sqlite_store import get_active_job as _db_active
+        db_job = _db_active()
+        if db_job:
+            return {
+                "job_id": db_job["job_id"],
+                "status": "running",
+                "phase": db_job.get("phase", "Running..."),
+                "created_at": db_job.get("created_at")
+            }
+    except Exception:
+        pass
+
     with jobs_lock:
         for jid, jdata in list(jobs.items()):
             if jdata.get("status") == "running":
