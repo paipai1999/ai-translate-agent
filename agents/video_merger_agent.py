@@ -9,20 +9,26 @@ if sys.platform == "win32":
 
 _DETECTED_ENCODER = None
 
+def _get_ffmpeg_bin() -> str:
+    import shutil
+    ffmpeg_bin = os.environ.get("IMAGEIO_FFMPEG_EXE") or shutil.which("ffmpeg")
+    if not ffmpeg_bin or not os.path.exists(ffmpeg_bin):
+        try:
+            from imageio_ffmpeg import get_ffmpeg_exe
+            ffmpeg_bin = get_ffmpeg_exe()
+            os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_bin
+        except Exception:
+            ffmpeg_bin = "ffmpeg"
+    return ffmpeg_bin
+
 def detect_hardware_encoder() -> dict:
     """Detects available hardware video encoders (NVIDIA NVENC, Intel QSV, AMD AMF) or CPU libx264."""
     global _DETECTED_ENCODER
     if _DETECTED_ENCODER is not None:
         return _DETECTED_ENCODER
 
-    import subprocess, shutil
-    ffmpeg_bin = shutil.which("ffmpeg") or os.environ.get("IMAGEIO_FFMPEG_EXE")
-    if not ffmpeg_bin:
-        try:
-            from imageio_ffmpeg import get_ffmpeg_exe
-            ffmpeg_bin = get_ffmpeg_exe()
-        except Exception:
-            ffmpeg_bin = "ffmpeg"
+    import subprocess
+    ffmpeg_bin = _get_ffmpeg_bin()
 
     candidates = [
         {"codec": "h264_nvenc", "label": "NVIDIA GPU (NVENC)", "type": "gpu", "preset": "p4"},
@@ -817,11 +823,7 @@ class VideoMergerAgent:
         temp_output = f"{name}_subtitled.mp4"
 
         # BUG-M8 Fix: Use consistent ffmpeg lookup: imageio env var → shutil.which → fallback
-        ffmpeg_bin = (
-            os.environ.get("IMAGEIO_FFMPEG_EXE")
-            or shutil.which("ffmpeg")
-            or "ffmpeg"
-        )
+        ffmpeg_bin = _get_ffmpeg_bin()
         cmd = [
             ffmpeg_bin, "-y",
             "-i", abs_video_path,
@@ -1159,11 +1161,7 @@ class VideoMergerAgent:
         filter_args = ["-filter_complex", flt, "-map", last_out]
 
         cmd = [
-            (
-                os.environ.get("IMAGEIO_FFMPEG_EXE")
-                or shutil.which("ffmpeg")
-                or "ffmpeg"
-            ), "-y",
+            _get_ffmpeg_bin(), "-y",
             "-i", video_path,
             *filter_args,
             "-map", "0:a?",
