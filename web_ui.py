@@ -105,12 +105,27 @@ class ThreadedStdout:
 
     def write(self, s):
         jid = current_job_id.get()
+        if not jid and self.buffers:
+            # Fallback: associate with active job buffer if current_job_id wasn't inherited
+            if len(self.buffers) == 1:
+                jid = next(iter(self.buffers.keys()))
+            else:
+                jid = list(self.buffers.keys())[-1]
+
         if jid and jid in self.buffers:
-            self.buffers[jid].write(s)
+            try:
+                self.buffers[jid].write(s)
+            except Exception:
+                pass
             if jid in self.subscribers:
-                for q in list(self.subscribers[jid]):
+                for item in list(self.subscribers.get(jid, [])):
                     try:
-                        q.put_nowait(s)
+                        if isinstance(item, tuple):
+                            q, loop = item
+                            if loop.is_running():
+                                loop.call_soon_threadsafe(q.put_nowait, s)
+                        else:
+                            item.put_nowait(s)
                     except Exception:
                         pass
         try:
@@ -183,10 +198,19 @@ def pipeline_worker(
     
     try:
         if DownloaderAgent.is_url(input_source):
-            print("[URL] Detected URL - starting auto-download...")
+            with jobs_lock:
+                jobs[job_id]['phase'] = 'Downloading Video...'
+            try:
+                from brain.sqlite_store import update_job
+                update_job(job_id, phase='Downloading Video...')
+            except Exception:
+                pass
+            print(f"[URL] Detected URL: {input_source} - starting auto-download...")
             downloader = DownloaderAgent(output_dir="movies")
             movie_path = downloader.download_video(input_source)
         else:
+            with jobs_lock:
+                jobs[job_id]['phase'] = 'Processing Local File...'
             movie_path = _resolve_input_source(input_source)
         
         master = MasterAgent(
@@ -511,20 +535,22 @@ async def stream_job_logs(job_id: str, request: Request):
 
     async def event_generator():
         import re
+        loop = asyncio.get_running_loop()
         q = asyncio.Queue()
+        sub_item = (q, loop)
         if job_id not in thread_stdout.subscribers:
             thread_stdout.subscribers[job_id] = []
-        thread_stdout.subscribers[job_id].append(q)
+        thread_stdout.subscribers[job_id].append(sub_item)
 
         try:
             with jobs_lock:
                 job = jobs.get(job_id, {})
-                buf = job.get('buffer')
+                buf = job.get('buffer') or thread_stdout.buffers.get(job_id)
                 initial_content = buf.getvalue() if buf else ""
 
             if initial_content:
-                lines = [l for l in initial_content.split('\n') if l]
-                for l in lines[-25:]:
+                lines = [l for l in initial_content.split('\n') if l.strip()]
+                for l in lines[-30:]:
                     yield {"event": "log", "data": json.dumps({"line": l})}
 
             while True:
@@ -532,7 +558,7 @@ async def stream_job_logs(job_id: str, request: Request):
                     break
 
                 try:
-                    chunk = await asyncio.wait_for(q.get(), timeout=1.0)
+                    chunk = await asyncio.wait_for(q.get(), timeout=1.5)
                     lines = chunk.replace('\r', '\n').split('\n')
                     for l in lines:
                         if l.strip():
@@ -542,11 +568,12 @@ async def stream_job_logs(job_id: str, request: Request):
                                 current_phase = l.strip().strip('-').strip()
                             elif '[DONE]' in l:
                                 current_phase = 'Done'
+                            elif 'Downloading:' in l or 'Downloading video' in l:
+                                current_phase = 'Downloading Video...'
 
                             m = re.search(r'\[(\d+)/(\d+)\] Processing:\s*(.*)', l)
                             if m: batch_status = f"Queue: {m.group(1)} of {m.group(2)} ({m.group(3)})"
 
-                            # BUG-L2 Fix: Read status under lock to avoid data race
                             with jobs_lock:
                                 cur_status = jobs.get(job_id, {}).get('status', 'running')
 
@@ -560,7 +587,8 @@ async def stream_job_logs(job_id: str, request: Request):
                                 })
                             }
                 except asyncio.TimeoutError:
-                    pass
+                    # Cloudflare keepalive ping to prevent proxy/tunnel dropping the connection
+                    yield {"comment": "ping"}
 
                 with jobs_lock:
                     current_job = jobs.get(job_id)
@@ -576,14 +604,20 @@ async def stream_job_logs(job_id: str, request: Request):
                     break
 
         finally:
-            # BUG-C5 Fix: Always clean up subscriber queue, even on client disconnect / exception
             subs = thread_stdout.subscribers.get(job_id, [])
-            if q in subs:
-                subs.remove(q)
+            if sub_item in subs:
+                subs.remove(sub_item)
             if not subs:
                 thread_stdout.subscribers.pop(job_id, None)
 
-    return EventSourceResponse(event_generator())
+    return EventSourceResponse(
+        event_generator(),
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        }
+    )
 
 @app.get("/api/status/{job_id}")
 async def status_endpoint(job_id: str):
@@ -592,15 +626,15 @@ async def status_endpoint(job_id: str):
             raise HTTPException(status_code=404, detail="Job not found")
         job = jobs[job_id]
         
-    buffer = job.get('buffer')
+    buffer = job.get('buffer') or thread_stdout.buffers.get(job_id)
     log_lines = []
     current_phase = job.get('phase', 'Starting...')
     batch_status = None
     
     if buffer:
         content = buffer.getvalue()
-        lines = content.split('\n')
-        log_lines = [line for line in lines if line][-20:]
+        lines = [line for line in content.split('\n') if line.strip()]
+        log_lines = lines[-35:]
 
         for line in reversed(lines):
             if '--- [Phase' in line or '--- [DONE]' in line:
@@ -608,6 +642,9 @@ async def status_endpoint(job_id: str):
                 break
             if '[DONE]' in line:
                 current_phase = 'Done'
+                break
+            if 'Downloading:' in line or 'Downloading video' in line:
+                current_phase = 'Downloading Video...'
                 break
 
         import re

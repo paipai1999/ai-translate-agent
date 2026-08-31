@@ -1215,70 +1215,77 @@
         currentJobId = jobId;
         sseLogs = [];
 
+        // Always run companion polling (every 1.5s) to guarantee zero-freeze on Cloudflare proxies
+        pollTimer = setInterval(checkStatus, 1500);
+
         if (window.EventSource) {
-            eventSource = new EventSource('/api/stream/' + jobId);
+            try {
+                eventSource = new EventSource('/api/stream/' + jobId);
 
-            eventSource.addEventListener('log', function(e) {
-                try {
-                    const data = JSON.parse(e.data);
-                    if (data.line) {
-                        sseLogs.push(data.line);
-                        if (sseLogs.length > 40) sseLogs.shift();
-                        setLog(sseLogs);
+                eventSource.addEventListener('log', function(e) {
+                    try {
+                        const data = JSON.parse(e.data);
+                        if (data.line) {
+                            sseLogs.push(data.line);
+                            if (sseLogs.length > 50) sseLogs.shift();
+                            setLog(sseLogs);
+                        }
+                        if (data.phase) {
+                            updatePhases(data.phase);
+                            updateProgressFromPhase(data.phase);
+                            setStatus('running', '⏳ ' + data.phase);
+                        }
+                        if (data.batch_status) {
+                            document.getElementById('batch-progress-pill').style.display = 'inline-flex';
+                            document.getElementById('batch-status-text').textContent = data.batch_status;
+                        }
+                    } catch(err) {
+                        console.error('SSE log parse error:', err);
                     }
-                    if (data.phase) {
-                        updatePhases(data.phase);
-                        updateProgressFromPhase(data.phase);
-                    }
-                    if (data.batch_status) {
-                        document.getElementById('batch-progress-pill').style.display = 'inline-flex';
-                        document.getElementById('batch-status-text').textContent = data.batch_status;
-                    }
-                } catch(err) {
-                    console.error('SSE log parse error:', err);
-                }
-            });
+                });
 
-            eventSource.addEventListener('done', function(e) {
-                try {
-                    const data = JSON.parse(e.data);
+                eventSource.addEventListener('done', function(e) {
+                    try {
+                        const data = JSON.parse(e.data);
+                        if (eventSource) {
+                            eventSource.close();
+                            eventSource = null;
+                        }
+                        if (pollTimer) {
+                            clearInterval(pollTimer);
+                            pollTimer = null;
+                        }
+                        if (data.status === 'done') {
+                            setStatus('done', '✅ Pipeline Complete!');
+                            document.getElementById('log-box-wrap').classList.remove('running');
+                            setProgressBar(100);
+                            markAllDone();
+                            document.getElementById('btn-start').disabled = false;
+                            document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
+                            document.getElementById('btn-batch').disabled = false;
+                            loadOutputs(); loadMovies();
+                        } else {
+                            setStatus('error', '❌ Pipeline Error');
+                            document.getElementById('log-box-wrap').classList.remove('running');
+                            document.getElementById('btn-start').disabled = false;
+                            document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
+                            document.getElementById('btn-batch').disabled = false;
+                        }
+                    } catch(err) {
+                        console.error('SSE done parse error:', err);
+                    }
+                });
+
+                eventSource.onerror = function() {
+                    console.warn('SSE stream notice, continuing with polling channel...');
                     if (eventSource) {
                         eventSource.close();
                         eventSource = null;
                     }
-                    if (data.status === 'done') {
-                        setStatus('done', '✅ Pipeline Complete!');
-                        document.getElementById('log-box-wrap').classList.remove('running');
-                        setProgressBar(100);
-                        markAllDone();
-                        document.getElementById('btn-start').disabled = false;
-                        document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
-                        document.getElementById('btn-batch').disabled = false;
-                        loadOutputs(); loadMovies();
-                    } else {
-                        setStatus('error', '❌ Pipeline Error');
-                        document.getElementById('log-box-wrap').classList.remove('running');
-                        document.getElementById('btn-start').disabled = false;
-                        document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
-                        document.getElementById('btn-batch').disabled = false;
-                    }
-                } catch(err) {
-                    console.error('SSE done parse error:', err);
-                }
-            });
-
-            eventSource.onerror = function() {
-                console.warn('SSE stream disconnected, falling back to polling...');
-                if (eventSource) {
-                    eventSource.close();
-                    eventSource = null;
-                }
-                if (!pollTimer) {
-                    pollTimer = setInterval(checkStatus, 1800);
-                }
-            };
-        } else {
-            pollTimer = setInterval(checkStatus, 1800);
+                };
+            } catch (err) {
+                console.warn('EventSource init error:', err);
+            }
         }
     }
 
@@ -1294,8 +1301,13 @@
                 setLog(data.log);
             }
 
-            updatePhases(data.phase || '');
-            updateProgressFromPhase(data.phase || '');
+            if (data.phase) {
+                updatePhases(data.phase);
+                updateProgressFromPhase(data.phase);
+                if (data.status === 'running') {
+                    setStatus('running', '⏳ ' + data.phase);
+                }
+            }
 
             if (data.batch_status) {
                 document.getElementById('batch-progress-pill').style.display = 'inline-flex';
