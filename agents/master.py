@@ -64,7 +64,17 @@ class _PipelineLogWriter:
 
 
 class MasterAgent:
-    def __init__(self, movie_path: str, language: str = None, subtitle_mode: str = "auto", tts_engine: str = None):
+    def __init__(
+        self,
+        movie_path: str,
+        language: str = None,
+        subtitle_mode: str = "auto",
+        tts_engine: str = None,
+        custom_thumb_title: str = None,
+        watermark_enabled: bool = None,
+        watermark_text: str = None,
+        watermark_opacity: float = None,
+    ):
         self.movie_path = movie_path
         movie_name = os.path.splitext(os.path.basename(movie_path))[0]
         cfg = config.load_config()
@@ -72,6 +82,14 @@ class MasterAgent:
         self.state = MovieState(movie_name=movie_name)
         self.state.movie_path = movie_path
         self.state.subtitle_mode = subtitle_mode or "auto"
+        if custom_thumb_title:
+            self.state.custom_thumb_title = custom_thumb_title.strip()
+        if watermark_enabled is not None or watermark_text or watermark_opacity is not None:
+            self.state.watermark_override = {
+                "enabled": watermark_enabled if watermark_enabled is not None else True,
+                "text": watermark_text,
+                "opacity": watermark_opacity,
+            }
 
         # Read config values for agents
         whisper_model  = cfg["pipeline"]["whisper_model"]

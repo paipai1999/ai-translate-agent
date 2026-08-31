@@ -8,12 +8,27 @@ from brain.memory import MovieState  # Fix: was missing — caused NameError in 
 import brain.config as cfg
 
 class BatchProcessor:
-    def __init__(self, movies_folder: str = "movies", skip_completed: bool = True, language: str = None, subtitle_mode: str = "auto", tts_engine: str = None):
+    def __init__(
+        self,
+        movies_folder: str = "movies",
+        skip_completed: bool = True,
+        language: str = None,
+        subtitle_mode: str = "auto",
+        tts_engine: str = None,
+        custom_thumb_title: str = None,
+        watermark_enabled: bool = None,
+        watermark_text: str = None,
+        watermark_opacity: float = None,
+    ):
         self.movies_folder = movies_folder
         self.skip_completed = skip_completed
         self.language = language
         self.subtitle_mode = subtitle_mode
         self.tts_engine = tts_engine
+        self.custom_thumb_title = custom_thumb_title
+        self.watermark_enabled = watermark_enabled
+        self.watermark_text = watermark_text
+        self.watermark_opacity = watermark_opacity
         self.supported_extensions = [".mp4", ".mkv", ".avi", ".mov", ".webm"]
         self.results = []
 
@@ -87,7 +102,16 @@ class BatchProcessor:
                 continue
 
             try:
-                master = MasterAgent(movie_path, language=self.language, subtitle_mode=self.subtitle_mode, tts_engine=self.tts_engine)
+                master = MasterAgent(
+                    movie_path,
+                    language=self.language,
+                    subtitle_mode=self.subtitle_mode,
+                    tts_engine=self.tts_engine,
+                    custom_thumb_title=self.custom_thumb_title,
+                    watermark_enabled=self.watermark_enabled,
+                    watermark_text=self.watermark_text,
+                    watermark_opacity=self.watermark_opacity,
+                )
                 master.run_pipeline()
                 self.results.append({"movie": movie_name, "status": "SUCCESS"})
                 print(f"[OK] [{idx}/{total}] Completed: {movie_name}")

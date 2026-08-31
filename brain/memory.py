@@ -48,6 +48,7 @@ class MovieState(BaseModel):
     subtitle_detection: Optional[Dict[str, Any]] = None
     subtitle_mode: Optional[str] = "auto"
     custom_thumb_title: Optional[str] = None
+    watermark_override: Optional[Dict[str, Any]] = None
     uploaded_video_name: Optional[str] = None  # Stores the GenAI file name (e.g. files/abc)
     qa_results: Optional[Dict[str, Any]] = None  # Phase 7: QA Agent review results
     output_video_transcript: List[Any] = Field(default_factory=list)  # Phase 7: Re-extracted output video transcript & actions

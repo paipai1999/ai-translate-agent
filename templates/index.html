@@ -773,6 +773,48 @@
                 </label>
             </div>
         </div>
+
+        <!-- ── Thumbnail Title & Watermark Branding Strip ── -->
+        <div class="branding-strip" style="margin-top:1.25rem; padding-top:1rem; border-top:1px dashed rgba(255,255,255,0.12); display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:1rem;">
+            <!-- Thumbnail Title Section -->
+            <div style="background:rgba(255,255,255,0.03); padding:0.75rem 1rem; border-radius:10px; border:1px solid rgba(255,255,255,0.08);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                    <span style="font-size:0.85rem; font-weight:700; color:var(--text);">🖼️ Thumbnail မြန်မာ Title:</span>
+                    <span id="thumb-mode-badge" style="font-size:0.72rem; padding:2px 8px; border-radius:4px; background:rgba(0,255,136,0.15); color:#00ff88; font-weight:600;">🤖 Auto (AI Generated)</span>
+                </div>
+                <input type="text" id="input-thumb-title" placeholder="အလွတ်ထားပါက AI က Auto ရေးပေးမည် (သို့) မိမိစိတ်ကြိုက် Title ရိုက်ထည့်ပါ..." 
+                       oninput="updateThumbBadge(this.value)"
+                       style="width:100%; box-sizing:border-box; padding:0.5rem 0.75rem; font-size:0.82rem; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:6px; color:#fff;">
+                <div style="font-size:0.73rem; color:var(--muted); margin-top:4px;">
+                    💡 အလွတ်ထားပါက AI က SEO High-CTR မြန်မာခေါင်းစဉ်ကို Auto ထုတ်ယူပေးမည်။
+                </div>
+            </div>
+
+            <!-- Watermark Branding Section -->
+            <div style="background:rgba(255,255,255,0.03); padding:0.75rem 1rem; border-radius:10px; border:1px solid rgba(255,255,255,0.08);">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                    <label style="font-size:0.85rem; font-weight:700; color:var(--text); cursor:pointer; display:flex; align-items:center; gap:0.4rem;">
+                        <input type="checkbox" id="chk-watermark" checked onchange="toggleWatermarkControls(this.checked)">
+                        🛡️ Watermark (ရေစာထိုးမည်)
+                    </label>
+                    <button type="button" onclick="saveWatermarkDefault()" style="background:transparent; border:none; color:#38bdf8; font-size:0.75rem; cursor:pointer; padding:0; text-decoration:underline;">💾 Save Default</button>
+                </div>
+                <div id="watermark-inputs-wrap" style="display:flex; gap:0.5rem; align-items:center;">
+                    <input type="text" id="input-watermark-text" value="PAI AI Movie Translate" placeholder="Channel Name or Branding..."
+                           style="flex:1; box-sizing:border-box; padding:0.5rem 0.75rem; font-size:0.82rem; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:6px; color:#fff;">
+                    <select id="select-watermark-opacity" style="padding:0.5rem 0.5rem; font-size:0.82rem; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.15); border-radius:6px; color:#fff;">
+                        <option value="0.2">20% အလွန်ပါး</option>
+                        <option value="0.4" selected>40% သင့်တင့် (Recommended)</option>
+                        <option value="0.6">60% ထင်ရှား</option>
+                        <option value="0.8">80% အလွန်ထင်ရှား</option>
+                        <option value="1.0">100% Solid</option>
+                    </select>
+                </div>
+                <div style="font-size:0.73rem; color:var(--muted); margin-top:4px;">
+                    📌 ဗီဒီယို၏ ညာဘက်အပေါ်ထောင့် (Top-Right) တွင် Transparent ရေစာအဖြစ် ထိုးပေးမည်။
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- ── Progress Card ── -->
@@ -958,6 +1000,80 @@
         }
     }
 
+    // ── Branding Helpers ──
+    function updateThumbBadge(val) {
+        const badge = document.getElementById('thumb-mode-badge');
+        if (!badge) return;
+        if (val && val.trim().length > 0) {
+            badge.textContent = '✏️ Custom Mode';
+            badge.style.background = 'rgba(56,189,248,0.2)';
+            badge.style.color = '#38bdf8';
+        } else {
+            badge.textContent = '🤖 Auto (AI Generated)';
+            badge.style.background = 'rgba(0,255,136,0.15)';
+            badge.style.color = '#00ff88';
+        }
+    }
+
+    function toggleWatermarkControls(enabled) {
+        const wrap = document.getElementById('watermark-inputs-wrap');
+        if (wrap) {
+            wrap.style.opacity = enabled ? '1' : '0.4';
+            wrap.style.pointerEvents = enabled ? 'auto' : 'none';
+        }
+    }
+
+    async function loadBrandingSettings() {
+        try {
+            const res = await fetch('/api/config/branding');
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.watermark) {
+                    const wm = data.watermark;
+                    if (document.getElementById('chk-watermark') && wm.enabled !== undefined) {
+                        document.getElementById('chk-watermark').checked = wm.enabled;
+                        toggleWatermarkControls(wm.enabled);
+                    }
+                    if (document.getElementById('input-watermark-text') && wm.text) {
+                        document.getElementById('input-watermark-text').value = wm.text;
+                    }
+                    if (document.getElementById('select-watermark-opacity') && wm.opacity !== undefined) {
+                        document.getElementById('select-watermark-opacity').value = String(wm.opacity);
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Could not load branding config:', e);
+        }
+    }
+
+    async function saveWatermarkDefault() {
+        const enabled = document.getElementById('chk-watermark') ? document.getElementById('chk-watermark').checked : true;
+        const text = (document.getElementById('input-watermark-text') && document.getElementById('input-watermark-text').value.trim()) || "PAI AI Movie Translate";
+        const opacity = document.getElementById('select-watermark-opacity') ? parseFloat(document.getElementById('select-watermark-opacity').value) : 0.4;
+
+        try {
+            const res = await fetch('/api/config/branding', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    watermark_enabled: enabled,
+                    watermark_text: text,
+                    watermark_opacity: opacity,
+                    watermark_margin: 30,
+                    watermark_font_size: 40
+                })
+            });
+            if (res.ok) {
+                showAlert('Watermark settings saved as default in config.json! ✅');
+            } else {
+                showAlert('Failed to save watermark settings.');
+            }
+        } catch (e) {
+            showAlert('Failed to save watermark default: ' + e.message);
+        }
+    }
+
     // ── Start single job ──
     async function startJob() {
         const input = document.getElementById('input-source').value.trim();
@@ -965,6 +1081,11 @@
         const lang = document.getElementById('select-lang').value;
         const subtitleMode = document.getElementById('select-subtitle-mode').value;
         const ttsEngine = document.getElementById('select-tts-engine').value;
+        const customThumbTitle = (document.getElementById('input-thumb-title') && document.getElementById('input-thumb-title').value.trim()) || null;
+        const watermarkEnabled = document.getElementById('chk-watermark') ? document.getElementById('chk-watermark').checked : true;
+        const watermarkText = (document.getElementById('input-watermark-text') && document.getElementById('input-watermark-text').value.trim()) || "PAI AI Movie Translate";
+        const watermarkOpacity = document.getElementById('select-watermark-opacity') ? parseFloat(document.getElementById('select-watermark-opacity').value) : 0.4;
+
         const btn = document.getElementById('btn-start');
         const btnText = document.getElementById('btn-start-text');
 
@@ -977,7 +1098,16 @@
             const res = await fetch('/api/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ input, language: lang, subtitle_mode: subtitleMode, tts_engine: ttsEngine })
+                body: JSON.stringify({
+                    input,
+                    language: lang,
+                    subtitle_mode: subtitleMode,
+                    tts_engine: ttsEngine,
+                    custom_thumb_title: customThumbTitle,
+                    watermark_enabled: watermarkEnabled,
+                    watermark_text: watermarkText,
+                    watermark_opacity: watermarkOpacity
+                })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
@@ -998,6 +1128,11 @@
         const lang = document.getElementById('select-lang').value;
         const subtitleMode = document.getElementById('select-subtitle-mode').value;
         const ttsEngine = document.getElementById('select-tts-engine').value;
+        const customThumbTitle = (document.getElementById('input-thumb-title') && document.getElementById('input-thumb-title').value.trim()) || null;
+        const watermarkEnabled = document.getElementById('chk-watermark') ? document.getElementById('chk-watermark').checked : true;
+        const watermarkText = (document.getElementById('input-watermark-text') && document.getElementById('input-watermark-text').value.trim()) || "PAI AI Movie Translate";
+        const watermarkOpacity = document.getElementById('select-watermark-opacity') ? parseFloat(document.getElementById('select-watermark-opacity').value) : 0.4;
+
         const btn = document.getElementById('btn-batch');
         btn.disabled = true;
 
@@ -1007,7 +1142,16 @@
             const res = await fetch('/api/batch/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ inputs, language: lang, subtitle_mode: subtitleMode, tts_engine: ttsEngine })
+                body: JSON.stringify({
+                    inputs,
+                    language: lang,
+                    subtitle_mode: subtitleMode,
+                    tts_engine: ttsEngine,
+                    custom_thumb_title: customThumbTitle,
+                    watermark_enabled: watermarkEnabled,
+                    watermark_text: watermarkText,
+                    watermark_opacity: watermarkOpacity
+                })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
@@ -1699,6 +1843,7 @@
         draw();
     }
     initializeLightCanvas();
+    loadBrandingSettings();
 </script>
 </body>
 </html>

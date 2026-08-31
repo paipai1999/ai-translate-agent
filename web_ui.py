@@ -22,6 +22,7 @@ from agents.downloader_agent import DownloaderAgent
 from agents.master import MasterAgent
 from agents.video_merger_agent import detect_hardware_encoder
 from brain.sqlite_store import delete_movie_state, list_movie_states
+from brain import config as cfg
 from main import check_dependencies
 
 # Setup FFmpeg path at startup
@@ -142,7 +143,17 @@ thread_stdout = ThreadedStdout(sys.stdout)
 sys.stdout = thread_stdout
 sys.stderr = thread_stdout
 
-def pipeline_worker(job_id, input_source, language="burmese", subtitle_mode="auto", tts_engine=None):
+def pipeline_worker(
+    job_id,
+    input_source,
+    language="burmese",
+    subtitle_mode="auto",
+    tts_engine=None,
+    custom_thumb_title=None,
+    watermark_enabled=None,
+    watermark_text=None,
+    watermark_opacity=None,
+):
     current_job_id.set(job_id)
     buffer = io.StringIO()
     thread_stdout.buffers[job_id] = buffer
@@ -157,7 +168,16 @@ def pipeline_worker(job_id, input_source, language="burmese", subtitle_mode="aut
         else:
             movie_path = _resolve_input_source(input_source)
         
-        master = MasterAgent(movie_path, language=language, subtitle_mode=subtitle_mode, tts_engine=tts_engine)
+        master = MasterAgent(
+            movie_path,
+            language=language,
+            subtitle_mode=subtitle_mode,
+            tts_engine=tts_engine,
+            custom_thumb_title=custom_thumb_title,
+            watermark_enabled=watermark_enabled,
+            watermark_text=watermark_text,
+            watermark_opacity=watermark_opacity,
+        )
         master.run_pipeline()
         with jobs_lock:
             jobs[job_id]['status'] = 'done'
@@ -172,7 +192,17 @@ def pipeline_worker(job_id, input_source, language="burmese", subtitle_mode="aut
         if hasattr(thread_stdout, 'buffers'):
             thread_stdout.buffers.pop(job_id, None)
 
-def batch_worker(job_id, inputs_list, language="burmese", subtitle_mode="auto", tts_engine=None):
+def batch_worker(
+    job_id,
+    inputs_list,
+    language="burmese",
+    subtitle_mode="auto",
+    tts_engine=None,
+    custom_thumb_title=None,
+    watermark_enabled=None,
+    watermark_text=None,
+    watermark_opacity=None,
+):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
     buffer = io.StringIO()
@@ -183,7 +213,17 @@ def batch_worker(job_id, inputs_list, language="burmese", subtitle_mode="auto", 
     try:
         urls = [i for i in inputs_list if DownloaderAgent.is_url(i)]
         local_paths = [_resolve_input_source(i) for i in inputs_list if not DownloaderAgent.is_url(i)]
-        processor = BatchProcessor(movies_folder="movies", skip_completed=True, language=language, subtitle_mode=subtitle_mode, tts_engine=tts_engine)
+        processor = BatchProcessor(
+            movies_folder="movies",
+            skip_completed=True,
+            language=language,
+            subtitle_mode=subtitle_mode,
+            tts_engine=tts_engine,
+            custom_thumb_title=custom_thumb_title,
+            watermark_enabled=watermark_enabled,
+            watermark_text=watermark_text,
+            watermark_opacity=watermark_opacity,
+        )
         print(f"[*] Batch Mode: Starting batch run for {len(inputs_list)} item(s)...")
         processor.process_all(url_list=urls, local_paths=local_paths)
         with jobs_lock:
@@ -204,12 +244,27 @@ class StartRequest(BaseModel):
     language: Optional[str] = "burmese"
     subtitle_mode: Optional[str] = "auto"
     tts_engine: Optional[str] = None
+    custom_thumb_title: Optional[str] = None
+    watermark_enabled: Optional[bool] = True
+    watermark_text: Optional[str] = None
+    watermark_opacity: Optional[float] = None
 
 class BatchStartRequest(BaseModel):
     inputs: List[str]
     language: Optional[str] = "burmese"
     subtitle_mode: Optional[str] = "auto"
     tts_engine: Optional[str] = None
+    custom_thumb_title: Optional[str] = None
+    watermark_enabled: Optional[bool] = True
+    watermark_text: Optional[str] = None
+    watermark_opacity: Optional[float] = None
+
+class BrandingConfigRequest(BaseModel):
+    watermark_enabled: bool = True
+    watermark_text: str = "PAI AI Movie Translate"
+    watermark_opacity: float = 0.4
+    watermark_margin: int = 30
+    watermark_font_size: int = 40
 
 class RenameRequest(BaseModel):
     old_name: str
@@ -271,6 +326,11 @@ async def start_pipeline(req: StartRequest):
     language = req.language or 'burmese'
     subtitle_mode = req.subtitle_mode or 'auto'
     tts_engine = req.tts_engine
+    custom_thumb_title = req.custom_thumb_title
+    watermark_enabled = req.watermark_enabled
+    watermark_text = req.watermark_text
+    watermark_opacity = req.watermark_opacity
+
     if not input_source:
         raise HTTPException(status_code=400, detail="No input provided")
     
@@ -286,7 +346,21 @@ async def start_pipeline(req: StartRequest):
             "created_at": time.time()
         }
     
-    t = threading.Thread(target=pipeline_worker, args=(job_id, input_source, language, subtitle_mode, tts_engine), daemon=True)
+    t = threading.Thread(
+        target=pipeline_worker,
+        args=(
+            job_id,
+            input_source,
+            language,
+            subtitle_mode,
+            tts_engine,
+            custom_thumb_title,
+            watermark_enabled,
+            watermark_text,
+            watermark_opacity,
+        ),
+        daemon=True,
+    )
     t.start()
     return {"job_id": job_id}
 
@@ -296,6 +370,11 @@ async def start_batch_pipeline(req: BatchStartRequest):
     language = req.language or 'burmese'
     subtitle_mode = req.subtitle_mode or 'auto'
     tts_engine = req.tts_engine
+    custom_thumb_title = req.custom_thumb_title
+    watermark_enabled = req.watermark_enabled
+    watermark_text = req.watermark_text
+    watermark_opacity = req.watermark_opacity
+
     if not inputs or not all(isinstance(item, str) and item.strip() for item in inputs):
         raise HTTPException(status_code=400, detail="No inputs provided for batch mode")
         
@@ -311,9 +390,41 @@ async def start_batch_pipeline(req: BatchStartRequest):
             "created_at": time.time()
         }
     
-    t = threading.Thread(target=batch_worker, args=(job_id, inputs, language, subtitle_mode, tts_engine), daemon=True)
+    t = threading.Thread(
+        target=batch_worker,
+        args=(
+            job_id,
+            inputs,
+            language,
+            subtitle_mode,
+            tts_engine,
+            custom_thumb_title,
+            watermark_enabled,
+            watermark_text,
+            watermark_opacity,
+        ),
+        daemon=True,
+    )
     t.start()
     return {"job_id": job_id}
+
+@app.get("/api/config/branding")
+async def get_branding_config():
+    c = cfg.load_config()
+    return {"watermark": c.get("watermark", {})}
+
+@app.post("/api/config/branding")
+async def save_branding_config(req: BrandingConfigRequest):
+    c = cfg.load_config()
+    if "watermark" not in c:
+        c["watermark"] = {}
+    c["watermark"]["enabled"] = req.watermark_enabled
+    c["watermark"]["text"] = req.watermark_text
+    c["watermark"]["opacity"] = req.watermark_opacity
+    c["watermark"]["margin"] = req.watermark_margin
+    c["watermark"]["font_size"] = req.watermark_font_size
+    cfg.save_config(c)
+    return {"status": "ok", "watermark": c["watermark"]}
 
 @app.get("/api/stream/{job_id}")
 async def stream_job_logs(job_id: str, request: Request):

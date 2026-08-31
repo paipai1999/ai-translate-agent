@@ -410,11 +410,13 @@ class VideoMergerAgent:
 
             # --- WATERMARK OVERLAY ---
             wm_cfg = config_data.get("watermark", {})
-            if wm_cfg.get("enabled", False):
-                wm_text = wm_cfg.get("text", "PAI Movie AI Recap")
-                wm_opacity = float(wm_cfg.get("opacity", 0.4))
-                wm_font_size = int(wm_cfg.get("font_size", 40))
-                wm_margin = int(wm_cfg.get("margin", 30))
+            wm_override = getattr(state, "watermark_override", {}) or {}
+            wm_enabled = wm_override.get("enabled", wm_cfg.get("enabled", False))
+            if wm_enabled:
+                wm_text = wm_override.get("text") or wm_cfg.get("text", "PAI AI Movie Translate")
+                wm_opacity = float(wm_override.get("opacity") if wm_override.get("opacity") is not None else wm_cfg.get("opacity", 0.4))
+                wm_font_size = int(wm_override.get("font_size") or wm_cfg.get("font_size", 40))
+                wm_margin = int(wm_override.get("margin") or wm_cfg.get("margin", 30))
                 
                 try:
                     wm_png = self._create_watermark_image(wm_text, wm_font_size, wm_opacity)
