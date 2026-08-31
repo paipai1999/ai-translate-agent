@@ -402,9 +402,21 @@ async def upload_file(video: UploadFile = File(...)):
         return fname or "upload"
 
     filename = _secure_filename(video.filename)
+    # Support automatic YouTube cookies.txt installation
+    if filename.lower() in ["cookies.txt", "cookie.txt"] or filename.lower().endswith(".txt"):
+        content = await video.read()
+        if b"youtube" in content.lower() or b"# Netscape" in content or b"# HTTP Cookie File" in content:
+            with open("cookies.txt", "wb") as f:
+                f.write(content)
+            os.makedirs("assets", exist_ok=True)
+            with open(os.path.join("assets", "cookies.txt"), "wb") as f:
+                f.write(content)
+            print("[*] Upload: cookies.txt installed successfully into root and assets/!")
+            return {"success": True, "filename": "cookies.txt", "message": "YouTube cookies installed successfully!"}
+
     ext = os.path.splitext(filename)[1].lower()
     if ext not in VIDEO_EXTENSIONS:
-        raise HTTPException(status_code=400, detail="File is not a supported video format")
+        raise HTTPException(status_code=400, detail="File is not a supported video format or cookies.txt")
         
     os.makedirs("movies", exist_ok=True)
     save_path = os.path.join("movies", filename)

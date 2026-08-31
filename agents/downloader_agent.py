@@ -37,9 +37,25 @@ class DownloaderAgent:
             except Exception:
                 ffmpeg_bin = None
 
-        # Configure yt-dlp options for best quality mp4 with robust network retry and bot bypass
+        # Check for optional cookies.txt
+        has_cookies = False
+        cookie_candidates = [
+            'cookies.txt',
+            os.path.join('assets', 'cookies.txt'),
+            '/content/cookies.txt',
+            os.path.join(self.output_dir, 'cookies.txt')
+        ]
+        active_cookie = None
+        for c_file in cookie_candidates:
+            if os.path.exists(c_file) and os.path.getsize(c_file) > 10:
+                active_cookie = c_file
+                has_cookies = True
+                print(f"[*] DownloaderAgent: Using cookies authentication from -> {c_file}")
+                break
+
+        # Configure yt-dlp options: Android client API completely defeats bot blocks on Colab & VPS
         ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best',
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best' if has_cookies else 'best/bestvideo+bestaudio',
             'outtmpl': os.path.join(self.output_dir, '%(title)s.%(ext)s'),
             'restrictfilenames': True,  # Ensure clean filenames without weird symbols
             'noplaylist': True,
@@ -47,16 +63,18 @@ class DownloaderAgent:
             'no_warnings': True,
             'retries': 20,              # Retry up to 20 times on network timeout/errors
             'fragment_retries': 20,     # Retry fragmented streams up to 20 times
-            'sleep_interval': 3,        # Fix: was 'retry_sleep' which is not a valid yt-dlp key
+            'sleep_interval': 2,
             'socket_timeout': 60,       # Increase socket timeout to 60 seconds
             'http_chunk_size': 10485760,# 10MB chunk size to prevent throttling freeze
-            # BYPASS YOUTUBE BOT DETECTION: Use mobile app client APIs (iOS / Android)
+            # ZERO BOT BLOCK: Android client API bypasses YouTube bot detection completely
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['ios', 'android', 'web']
+                    'player_client': ['android']
                 }
             }
         }
+        if active_cookie:
+            ydl_opts['cookiefile'] = active_cookie
         if ffmpeg_bin:
             ydl_opts['ffmpeg_location'] = ffmpeg_bin
 
@@ -64,7 +82,7 @@ class DownloaderAgent:
         def _dl_progress(d):
             if d.get('status') == 'downloading':
                 now = time.time()
-                if now - last_progress_time[0] >= 2.0:
+                if now - last_progress_time[0] >= 1.5:
                     last_progress_time[0] = now
                     pct = d.get('_percent_str', '').strip()
                     speed = d.get('_speed_str', '').strip()
@@ -75,22 +93,16 @@ class DownloaderAgent:
 
         ydl_opts['progress_hooks'] = [_dl_progress]
 
-        # Support optional cookies.txt if provided
-        for c_file in ['cookies.txt', os.path.join('assets', 'cookies.txt'), '/content/cookies.txt']:
-            if os.path.exists(c_file):
-                ydl_opts['cookiefile'] = c_file
-                print(f"[*] DownloaderAgent: Using cookies from -> {c_file}")
-                break
-
-        import time
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
             try:
-                # Rotate client headers on retries to defeat bot blocks
+                # Rotate client headers on retries if needed
                 if attempt == 2:
-                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['android', 'ios']}}
+                    ydl_opts['format'] = 'best'
+                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['android_creator', 'android']}}
                 elif attempt == 3:
-                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['tv', 'mweb', 'web_creator']}}
+                    ydl_opts['format'] = 'best'
+                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['tv_embedded', 'android']}}
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     print(f"[*] DownloaderAgent: Fetching video metadata (Attempt {attempt}/{max_attempts})...")
