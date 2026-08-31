@@ -58,6 +58,21 @@ class DownloaderAgent:
         if ffmpeg_bin:
             ydl_opts['ffmpeg_location'] = ffmpeg_bin
 
+        last_progress_time = [0]
+        def _dl_progress(d):
+            if d.get('status') == 'downloading':
+                now = time.time()
+                if now - last_progress_time[0] >= 2.0:
+                    last_progress_time[0] = now
+                    pct = d.get('_percent_str', '').strip()
+                    speed = d.get('_speed_str', '').strip()
+                    eta = d.get('_eta_str', '').strip()
+                    print(f"[*] Downloading: {pct} at {speed} (ETA: {eta})")
+            elif d.get('status') == 'finished':
+                print("[*] Download completed. Processing video streams...")
+
+        ydl_opts['progress_hooks'] = [_dl_progress]
+
         # Support optional cookies.txt if provided
         for c_file in ['cookies.txt', os.path.join('assets', 'cookies.txt'), '/content/cookies.txt']:
             if os.path.exists(c_file):

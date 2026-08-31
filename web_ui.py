@@ -457,7 +457,7 @@ async def stream_job_logs(job_id: str, request: Request):
 
                 try:
                     chunk = await asyncio.wait_for(q.get(), timeout=1.0)
-                    lines = chunk.split('\n')
+                    lines = chunk.replace('\r', '\n').split('\n')
                     for l in lines:
                         if l.strip():
                             current_phase = "Running..."
