@@ -228,6 +228,7 @@ def main():
             master = MasterAgent(
                 movie_path,
                 language=args.language,
+                subtitle_mode="burn" if args.subtitle else "auto",
                 tts_engine=args.engine,
                 custom_thumb_title=args.thumb_title,
                 watermark_enabled=False if args.no_watermark else True,
