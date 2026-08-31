@@ -3,6 +3,27 @@ import shutil
 import subprocess
 from typing import Optional
 
+# Safe torchaudio.load patch with soundfile fallback to avoid torchcodec crash on Windows
+try:
+    import torchaudio, torch, soundfile as sf
+    _orig_torchaudio_load = torchaudio.load
+
+    def _safe_torchaudio_load(uri, *args, **kwargs):
+        try:
+            data, sr = sf.read(uri)
+            tensor = torch.from_numpy(data).float()
+            if tensor.ndim == 1:
+                tensor = tensor.unsqueeze(0)
+            elif tensor.ndim == 2:
+                tensor = tensor.t()
+            return tensor, sr
+        except Exception:
+            return _orig_torchaudio_load(uri, *args, **kwargs)
+
+    torchaudio.load = _safe_torchaudio_load
+except Exception:
+    pass
+
 class F5TTSEngine:
     """
     F5-TTS (Zero-Shot Flow-Matching Voice Cloning) Engine Wrapper.
