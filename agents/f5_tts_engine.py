@@ -64,7 +64,13 @@ class F5TTSEngine:
         print(f"[*] F5-TTS: Initializing {self.model_type} model on device: {self.device.upper()}...")
         try:
             from f5_tts.api import F5TTS
-            self._f5_model = F5TTS(model_type=self.model_type, device=self.device)
+            try:
+                # Modern f5-tts (>=0.1.0) uses model='F5TTS_v1_Base'
+                model_name = self.model_type if "v1" in self.model_type else "F5TTS_v1_Base"
+                self._f5_model = F5TTS(model=model_name, device=self.device)
+            except TypeError:
+                # Older f5-tts versions used model_type
+                self._f5_model = F5TTS(model_type=self.model_type, device=self.device)
             print(f"[OK] F5-TTS: Model loaded successfully on {self.device.upper()}!")
             return self._f5_model
         except Exception as e:
