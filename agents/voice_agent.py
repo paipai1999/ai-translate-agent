@@ -160,7 +160,12 @@ class VoiceAgent:
             print("[!] VoiceAgent: No script found. Skipping TTS generation.")
             return state
 
-        audio_out_dir = os.path.join(self.output_dir, state.project_dir, "voiceover")
+        if self.output_dir.endswith("voiceover"):
+            audio_out_dir = self.output_dir
+        elif state.project_dir in self.output_dir:
+            audio_out_dir = os.path.join(self.output_dir, "voiceover")
+        else:
+            audio_out_dir = os.path.join(self.output_dir, state.project_dir, "voiceover")
         os.makedirs(audio_out_dir, exist_ok=True)
         for old_file in os.listdir(audio_out_dir):
             if old_file.endswith(".mp3"):

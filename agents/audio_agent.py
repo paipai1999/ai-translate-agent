@@ -62,7 +62,7 @@ class AudioAgent:
         else:
             # Fallback to python module execution (for virtualenv without global PATH)
             try:
-                r = subprocess.run([sys.executable, "-m", "demucs", "--help"], capture_output=True, timeout=5)
+                r = subprocess.run([sys.executable, "-m", "demucs", "--help"], capture_output=True, timeout=15)
                 if r.returncode == 0:
                     demucs_cmd = [sys.executable, "-m", "demucs"]
             except Exception:

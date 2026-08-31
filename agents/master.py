@@ -135,7 +135,7 @@ class MasterAgent:
         self.seo_agent       = SEOAgent(language=self.language)
         self.voice_agent     = VoiceAgent(
             voice=self.tts_voice,
-            output_dir=os.path.join(output_dir, self.state.project_dir, "voiceover"),
+            output_dir=output_dir,
             tts_engine=self.tts_engine,
         )
         self.video_merger    = VideoMergerAgent(

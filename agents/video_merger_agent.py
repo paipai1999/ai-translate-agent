@@ -105,6 +105,11 @@ class VideoMergerAgent:
                 # So we MUST use the same chronological enumerate index here to match filenames
                 fname = f"scene_{(sorted_idx+1):04d}.mp3"
                 fpath = os.path.join(voiceover_dir, fname)
+                if not os.path.exists(fpath):
+                    for root, _, files in os.walk(voiceover_dir):
+                        if fname in files:
+                            fpath = os.path.join(root, fname)
+                            break
                 if os.path.exists(fpath):
                     try:
                         audio_clips.append(AudioFileClip(fpath))
@@ -384,8 +389,8 @@ class VideoMergerAgent:
                                 if hasattr(orig_audio, 'volumex'):
                                     orig_audio = orig_audio.volumex(sfx_vol)
 
-                    # Mix original audio with positioned voiceover clips
-                    if orig_audio is not None:
+                    # Mix original audio with positioned voiceover clips only if vocals were removed
+                    if orig_audio is not None and has_no_vocals:
                         final_audio = CompositeAudioClip([orig_audio] + positioned_clips)
                     else:
                         final_audio = CompositeAudioClip(positioned_clips)
@@ -532,7 +537,7 @@ class VideoMergerAgent:
 
             # ── Myanmar Subtitle Overlay Post-pass (FFmpeg drawtext) ─────────
             sub_cfg = config_data.get("subtitle_overlay", {})
-            if sub_cfg.get("enabled", False) and subtitle_timings:
+            if sub_cfg.get("enabled", True) and subtitle_timings:
                 self._burn_myanmar_subtitles(
                     video_path    = final_output,
                     timings       = subtitle_timings,
