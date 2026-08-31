@@ -1368,14 +1368,33 @@ Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}
                 return reels_output
             else:
                 err_msg = (res.stderr or "")[-500:]
-                print(f"[WARN] ReelsExporter: Hardware encoding failed (code={res.returncode}). Retrying with CPU ultrafast...")
-                # Fallback to libx264
-                cmd[cmd.index("-c:v") + 1] = "libx264"
-                cmd[cmd.index("-preset") + 1] = "ultrafast"
-                res2 = subprocess.run(cmd, cwd=temp_dir, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout_sec)
+                print(f"[WARN] ReelsExporter: Hardware encoding/filter failed (code={res.returncode}). Retrying with CPU fallback...")
+                
+                # Fallback: Retry with libx264 and clean canvas (overlay only, safe against missing libass)
+                clean_filter = (
+                    f"[0:v]scale={bg_w}:{bg_h}:force_original_aspect_ratio=increase,"
+                    f"crop={bg_w}:{bg_h},boxblur=12:3,"
+                    f"scale={w_target}:{h_target}[bg];"
+                    f"[0:v]scale={w_target}:-2[fg];"
+                    f"[bg][fg]overlay=0:({h_target}-h)/2[out]"
+                )
+                cmd_fallback = [
+                    ffmpeg_bin, "-y",
+                    "-i", abs_src,
+                    "-filter_complex", clean_filter,
+                    "-map", "[out]",
+                    "-map", "0:a?",
+                    "-c:v", "libx264",
+                    "-preset", "ultrafast",
+                    "-pix_fmt", "yuv420p",
+                    "-c:a", "copy",
+                    "-movflags", "+faststart",
+                    temp_reels_out
+                ]
+                res2 = subprocess.run(cmd_fallback, cwd=temp_dir, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout_sec)
                 if res2.returncode == 0 and os.path.exists(temp_reels_out) and os.path.getsize(temp_reels_out) > 500_000:
                     shutil.move(temp_reels_out, reels_output)
-                    print(f"🎉 [OK] ReelsExporter: Created 9:16 Reels video via CPU fallback -> {reels_output}")
+                    print(f"🎉 [OK] ReelsExporter: Created 9:16 Reels video via fallback -> {reels_output}")
                     return reels_output
                 else:
                     print(f"[ERROR] ReelsExporter failed completely: {(res2.stderr or '')[-400:]}")

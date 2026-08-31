@@ -373,6 +373,24 @@ class QAAgent:
                         return data
                     except json.JSONDecodeError:
                         pass
+        
+        # Robust partial recovery: extract any fully-formed JSON objects {...} if the array was cut off mid-response
+        try:
+            object_matches = re.findall(r'\{[^{}]*\}', raw)
+            if object_matches:
+                recovered = []
+                for m in object_matches:
+                    try:
+                        obj = json.loads(m)
+                        if isinstance(obj, dict) and any(k in obj for k in ["scene_id", "rewritten_narration", "start_sec", "text"]):
+                            recovered.append(obj)
+                    except Exception:
+                        pass
+                if recovered:
+                    return {"blocks": recovered}
+        except Exception:
+            pass
+
         print(f"[!] QAAgent: Could not parse JSON: {raw[:200]}")
         return None
 
