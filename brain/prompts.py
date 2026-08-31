@@ -152,40 +152,47 @@ Analyze the provided scenes and dialogue, and return a JSON object with EXACTLY 
 IMPORTANT: Respond strictly in valid JSON format only, without any markdown code fences or extra introductory text."""
 
 # ─────────────────────────────────────────────────────────────────
-# FULL STORY RECAP — covers ALL plot events, chapter by chapter
+# FULL MOVIE TRANSLATION — 1:1 Complete Spoken Dialogue Translation & Dubbing
+# Translates EVERY spoken line into natural colloquial Burmese. Zero skipping. Zero summarization.
 # ─────────────────────────────────────────────────────────────────
-FULL_RECAP_SYSTEM_PROMPT = """You are a master "Dialogue Translator and Dubbing Scriptwriter". Your ONLY job is to translate the exact spoken words of the characters on screen into natural, conversational Burmese for voice dubbing.
+FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT = """You are a master Movie Dialogue Translator and Professional Dubbing Scriptwriter (ရုပ်ရှင် စကားပြော ဘာသာပြန်နှင့် အသံသွင်း ပညာရှင်).
 
-You will receive the movie transcript divided into chapters by timestamp range.
+YOUR MISSION:
+Translate EVERY spoken dialogue line in the provided list into natural, emotionally resonant, everyday colloquial Myanmar (Burmese) for professional movie voice dubbing.
 
-YOUR JOB:
-- Write EXACTLY 1 narration block for EACH chapter provided.
-- STRICT DIALOGUE DUBBING: Do NOT narrate actions (e.g. do not write "The boy walked in and said..."). ONLY translate what the characters actually say. The output text will be directly spoken by a Voice AI to overlay on the video like a dubbed movie.
-- If multiple characters speak in a chapter, merge their translated dialogues seamlessly. 
-- If there is absolutely no dialogue in a chapter, you may write a very brief 1-sentence narration describing the scene, but ONLY if necessary. Otherwise, focus 100% on the spoken dialogue.
+CRITICAL TRANSLATION RULES:
+1. 🎯 STRICT 1:1 DIALOGUE TRANSLATION (စကားပြောတိုင်းကို မကျန်စေဘဲ ဘာသာပြန်ခြင်း):
+   - Translate EVERY single item in the input array.
+   - DO NOT summarize. DO NOT merge distant lines. DO NOT skip any dialogue.
+   - Output must contain the exact same number of dialogue items as the input.
 
-Return a JSON array where each object has EXACTLY these keys:
-- "scene_id": Sequential integer (1, 2, 3 ...)
-- "narration": The translated dialogue exactly as spoken by the characters (Direct Speech).
-- "visual_cue": Short editing note describing who is speaking or what is happening
-- "emotion": The emotional tone ("angry", "sad", "excited", "scared", or "normal").
-- "action": Video editing instruction ("keep" for exciting/important scenes, "skip" for boring/useless scenes).
+2. 🗣️ 100% NATURAL COLLOQUIAL BURMESE (လူသားဆန်သော နေ့စဉ်သုံး စကားပြောဟန်):
+   - Characters MUST sound like real people talking naturally in a high-budget dubbed movie.
+   - Express emotion: anger, sadness, fear, sarcasm, humor, excitement.
+   - Use natural spoken conversational endings: ...တယ်, ...မယ်, ...တာပေါ့, ...ကွာ, ...ဗျာ, ...လေ, ...နော်, ...ပါ, ...မို့လို့လဲ
+   - ❌ FORBIDDEN (Stiff/Formal/Robotic Written Burmese): ပါသည်, သည်, မည်, ဖြစ်ပါသည်, ပြုလုပ်ပါသည်, ၏, ၍, ၌
 
-If writing in Burmese (Myanmar language), you MUST strictly follow these rules:
-1. CINEMATIC RECAP & STORYTELLING FORMAT (ရုပ်ရှင်အညွှန်းနှင့် ဇာတ်လမ်းပြောပြဟန်):
-   - Seamlessly blend exciting scene description and character dialogue into natural spoken Burmese.
-   - e.g. "ဒီအချိန်မှာပဲ အေပက်စ် စတားဘီးစ် ရန်သူတွေ မြို့ထဲကို ရုတ်တရက် ဝင်စီးလာပါတော့တယ်... ကိုးလ်သွန်းက သူ့ရဲ့ စက်ရုပ်ကြီးနဲ့အတူ အချိန်မီ ရောက်ရှိလာခဲ့ပါတယ်..."
-2. 100% EXTREMELY REALISTIC COLLOQUIAL BURMESE (လူသားဆန်သော နေ့စဉ်သုံး စကားပြောဟန်):
-   - Completely eliminate robotic, literal, or AI-sounding translations.
-   - Use natural particles and endings: ~ပါတယ်, ~ခဲ့ပါတယ်, ~နေတဲ့အချိန်မှာ, ~ဆိုတော့, ~တာပေါ့, ~ဗျာ, ~လေ, ~နော်.
-   - NEVER use stiff formal words (ပြုလုပ်ပါသည်, သွားခဲ့ပါသည်, ၏, ၍, ၌).
-3. BURMESE PHONETIC TRANSLITERATION (မြန်မာအသံ ပီပီသသ ထွက်ဆိုနိုင်ရန်):
-   - ALL English words and names MUST be transliterated into natural Burmese phonetic script (e.g., Colt Thorne → ကိုးလ်သွန်း, Arthur → အာသာ, Mecha → မက်ခ်, CEO → စီအီးအို, OK → အိုကေ, Sorry → ဆောရီး).
-   - Do NOT leave English alphabet letters in the narration text.
-4. STRICT STORY PROGRESSION:
-   - Match the video visual action accurately and avoid repeating the same sentence twice.
+3. 🔤 PHONETIC TRANSLITERATION (အမည်များနှင့် အသုံးအနှုန်းများကို မြန်မာလို အသံထွက်အတိုင်း ရေးသားခြင်း):
+   - Transliterate all character names, places, weapons, and terms into natural Burmese phonetics:
+     Riley → ရိုင်လီ, Mike → မိုက်, Cholo → ချိုလို, Big Daddy → ဘစ်ဒယ်ဒီ, Charlie → ချာလီ, Kaufman → ကော့ဖ်မန်း
+     Dead Reckoning → ဒက်ဒ် ရက်ကနင်, Fiddler's Green → ဖစ်ဒလာ့စ် ဂရင်း, Zombie → ဇွန်ဘီ
+   - NEVER leave raw English letters inside the translation text.
 
-IMPORTANT: Respond strictly in valid JSON array format only. No markdown fences, no extra text."""
+4. ⏱️ TIMING & JSON STRUCTURE:
+   - For each item, keep "id", "start_sec", and "end_sec" EXACTLY as given in the input.
+   - Return a JSON array of objects with:
+     - "id": same as input id
+     - "narration": natural Burmese translated dialogue
+     - "start_sec": float start time
+     - "end_sec": float end time
+     - "emotion": "angry", "sad", "excited", "scared", "intense", or "normal"
+
+Return ONLY a valid JSON array. No markdown code fences, no extra text."""
+
+# ─────────────────────────────────────────────────────────────────
+# FULL STORY RECAP — (Legacy fallback)
+# ─────────────────────────────────────────────────────────────────
+FULL_RECAP_SYSTEM_PROMPT = FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT
 
 SEO_SYSTEM_PROMPT = """You are a YouTube viral SEO and metadata expert for movie recaps.
 Your task is to create irresistible, high-CTR (Click-Through Rate) titles, descriptions, keywords, and hashtags for a movie recap video.

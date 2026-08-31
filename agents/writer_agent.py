@@ -4,15 +4,12 @@ import os
 import re
 from brain.memory import MovieState
 from brain.prompts import (
+    FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT,
     FULL_RECAP_SYSTEM_PROMPT,
     get_full_recap_writer_prompt,
 )
 from brain.gemini_client import call_gemini
 from brain import config as cfg
-
-
-# How many time-based chapters to split the transcript into
-DEFAULT_CHAPTERS = 10
 
 
 class WriterAgent:
@@ -25,144 +22,143 @@ class WriterAgent:
         self.max_blocks = max_blocks or (int(os.getenv("MAX_BLOCKS")) if os.getenv("MAX_BLOCKS") else None)
 
     # ─────────────────────────────────────────────────────
-    # PUBLIC: generate_script
+    # PUBLIC: generate_script (Full Movie Dialogue Translation)
     # ─────────────────────────────────────────────────────
     def generate_script(self, state: MovieState) -> MovieState:
         """
-        Full-story recap script generator.
-        Strategy:
-          1. Split the entire transcript into N time-based chapters.
-          2. Call Gemini with FULL_RECAP_SYSTEM_PROMPT asking for 1 block per chapter.
-          3. If Gemini fails or is disabled, fall back to a transcript-driven heuristic script.
+        Full Movie Dialogue Translation & Dubbing Engine.
+        Translates EVERY spoken dialogue line from Whisper STT into natural, colloquial Burmese.
+        Completely abolishes the 1-block-per-chapter summary recap architecture.
         """
-        print(
-            f"[*] WriterAgent: Generating FULL STORY recap script "
-            f"(Lang: {self.language})..."
-        )
+        print(f"[*] WriterAgent: Generating FULL MOVIE DIALOGUE TRANSLATION (Lang: {self.language})...")
 
-        if not state.transcript and not state.timeline:
-            print("[!] WriterAgent: No transcript or timeline found. Skipping script generation.")
+        if not state.transcript:
+            print("[!] WriterAgent: No transcript found. Skipping dialogue translation.")
             return state
 
-        # ── Build chapter list from transcript ──────────────────────────
-        chapters = self._build_chapters(state)
-        n_chapters = len(chapters)
-        print(f"[*] WriterAgent: Transcript split into {n_chapters} chapters for full-story coverage.")
-
-        # ── Config ─────────────────────────────────────────────────────
         config_data = cfg.load_config()
-        gemini_cfg   = config_data.get("gemini", {})
-        gemini_enabled = gemini_cfg.get("enabled", False)
-        gemini_key   = gemini_cfg.get("api_keys") or os.getenv("GEMINI_API_KEY") or ""
-        gemini_model = gemini_cfg.get("model", "gemini-3.5-flash-lite")
+        gemini_cfg = config_data.get("gemini", {})
+        gemini_key = gemini_cfg.get("api_keys") or os.getenv("GEMINI_API_KEY") or ""
         models_dict = gemini_cfg.get("models", {})
-        model_heavy = models_dict.get("heavy", "gemini-3.5-flash-lite")
         model_workhorse = models_dict.get("workhorse", "gemini-3.5-flash-lite")
 
-        generated = None
-
-        # ── Get previous episode context if available ──────────────────
-        prev_context = self._get_previous_episode_context(state)
-
-        # ── 1. Gemini Vision — per-chapter frame + subtitle grounded narration ──
-        if gemini_enabled and gemini_key:
-            movie_path = getattr(state, "movie_path", None) or getattr(state, "source_path", None)
-            use_vision = bool(movie_path and os.path.exists(str(movie_path)))
-
-            if use_vision:
-                file_size_mb = os.path.getsize(movie_path) / (1024 * 1024)
-                duration_sec = 120.0
-                if getattr(state, "duration", None):
-                    try:
-                        parts = str(state.duration).split(":")
-                        if len(parts) == 3:
-                            duration_sec = int(parts[0])*3600 + int(parts[1])*60 + float(parts[2])
-                    except:
-                        pass
-                else:
-                    if chapters:
-                        duration_sec = chapters[-1].get("t_start", 0) + 15.0
-
-                print(f"[*] WriterAgent (Native Video Mode): Uploading full video ({file_size_mb:.1f}MB, {duration_sec}s) to Gemini for maximum context...")
-                generated = self._native_video_recap(chapters, state, movie_path, gemini_key, model_heavy, model_workhorse)
-                if not generated:
-                    print("[!] Native Video Mode failed.")
-
+        # 1. Extract and clean all Whisper dialogue segments
+        raw_segments = []
+        for i, seg in enumerate(state.transcript):
+            if isinstance(seg, dict):
+                t_start = float(seg.get("start", 0.0) or 0.0)
+                t_end = float(seg.get("end", t_start + 2.0) or (t_start + 2.0))
+                text = str(seg.get("text", "")).strip()
             else:
-                user_prompt = get_full_recap_writer_prompt(
-                    movie_name      = state.movie_name,
-                    genre           = state.genre or "Action / Drama",
-                    story_structure = {},
-                    chapters        = chapters,
-                    language        = self.language,
-                    prev_context    = prev_context,
-                )
+                t_start = float(getattr(seg, "start", 0.0) or 0.0)
+                t_end = float(getattr(seg, "end", t_start + 2.0) or (t_start + 2.0))
+                text = str(getattr(seg, "text", "")).strip()
+
+            if text and len(text) > 1 and t_end > t_start:
+                raw_segments.append({
+                    "id": len(raw_segments) + 1,
+                    "start_sec": round(t_start, 2),
+                    "end_sec": round(t_end, 2),
+                    "text": text
+                })
+
+        if not raw_segments:
+            print("[!] WriterAgent: No valid dialogue text found in transcript.")
+            return state
+
+        total_count = len(raw_segments)
+        if self.max_blocks and self.max_blocks > 0 and total_count > self.max_blocks:
+            raw_segments = raw_segments[:self.max_blocks]
+            total_count = len(raw_segments)
+            print(f"[*] WriterAgent: Limited to MAX_BLOCKS={self.max_blocks} dialogue lines.")
+
+        print(f"[*] WriterAgent: Found {total_count} spoken dialogue segments to translate.")
+
+        # 2. Batch dialogue lines (20 per batch) for fast, reliable Gemini translation
+        BATCH_SIZE = 20
+        all_translated = []
+
+        for b_idx in range(0, total_count, BATCH_SIZE):
+            batch = raw_segments[b_idx:b_idx + BATCH_SIZE]
+            batch_num = (b_idx // BATCH_SIZE) + 1
+            total_batches = math.ceil(total_count / BATCH_SIZE)
+            print(f"[*] WriterAgent: Translating Batch {batch_num}/{total_batches} ({len(batch)} dialogues)...")
+
+            batch_prompt = (
+                f"Target Language: {self.language.upper()}\n"
+                f"Movie Title: {state.movie_name}\n"
+                f"Translate the following movie dialogues into natural colloquial Myanmar (Burmese) for professional dubbing:\n"
+                f"{json.dumps(batch, ensure_ascii=False, indent=2)}\n\n"
+                f"Output a JSON array where each object has: id, narration, start_sec, end_sec, emotion."
+            )
+
+            batch_translated = None
+            if gemini_key:
                 try:
-                    print(f"[*] WriterAgent: Calling Gemini ({model_workhorse}) text-only fallback ({n_chapters} chapters)...")
-                    raw, used_model = call_gemini(
-                        FULL_RECAP_SYSTEM_PROMPT, user_prompt, gemini_key, model_workhorse,
-                        temperature=0.7, max_tokens=8192,
+                    raw_res, used_model = call_gemini(
+                        FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT,
+                        batch_prompt,
+                        gemini_key,
+                        model_workhorse,
+                        temperature=0.3,
+                        max_tokens=4096
                     )
-                    print(f"[*] WriterAgent: Gemini model '{used_model}' responded.")
-                    generated = self._parse_script(raw)
+                    batch_translated = self._parse_script(raw_res)
                 except Exception as e:
-                    print(f"[!] WriterAgent: Gemini text-only failed ({e}). Falling back to heuristic recap...")
-        else:
-            print("[TIP] WriterAgent: Gemini disabled or no API key. Using heuristic recap fallback.")
+                    print(f"[WARN] WriterAgent: Batch {batch_num} Gemini call failed: {e}")
 
-        if not generated:
-            print("[!] WriterAgent: Native Video Mode failed. Raising error to prevent corrupted fallback output.")
-            raise Exception("Gemini API (Native Video Mode) failed. Please try again.")
+            if not batch_translated:
+                batch_translated = []
 
-        if self.max_blocks is not None and self.max_blocks > 0 and len(generated) > self.max_blocks:
-            generated = generated[: self.max_blocks]
-            print(f"[*] WriterAgent: Trimmed script to MAX_BLOCKS={self.max_blocks} narrative blocks.")
+            # Map translated items by id
+            trans_map = {}
+            for item in batch_translated:
+                if isinstance(item, dict) and "id" in item:
+                    try:
+                        trans_map[int(item["id"])] = item
+                    except (ValueError, TypeError):
+                        pass
 
-        # Normalise scene IDs and attach exact subtitle t_start timestamps
-        n_ch = len(chapters) if chapters else 1
-        n_blocks = len(generated)
-        blocks_per_ch = max(1, n_blocks // max(n_ch, 1))
-
-        # Estimate total video duration from chapter data for interpolation
-        total_dur_sec = 120.0
-        if chapters:
-            last_ch = chapters[-1]
-            last_t = last_ch.get("t_start", 0.0)
-            if len(chapters) > 1:
-                avg_chunk = last_t / max(len(chapters) - 1, 1)
-                total_dur_sec = last_t + avg_chunk
-            else:
-                total_dur_sec = max(last_t + 15.0, 120.0)
-
-        for idx, item in enumerate(generated):
-            if not isinstance(item, dict):
-                print(f"[WARN] WriterAgent: Skipping non-dict script block at index {idx}: {type(item)}")
-                continue
-            item["scene_id"] = str(idx + 1)
-            
-            # Skip timestamp interpolation if native video mode already provided exact timestamps
-            if "start_sec" in item and "end_sec" in item:
-                continue
-                
-            ch_idx = min(idx // blocks_per_ch, n_ch - 1)
-            if chapters and ch_idx < len(chapters):
-                ch_t_start = chapters[ch_idx].get("t_start", 0.0)
-                # Interpolate within the chapter window to give each block a unique timestamp
-                if ch_idx + 1 < len(chapters):
-                    ch_t_end = chapters[ch_idx + 1].get("t_start", total_dur_sec)
+            # Ensure EVERY item in the batch is preserved with Burmese translation
+            for seg in batch:
+                s_id = seg["id"]
+                if s_id in trans_map and trans_map[s_id].get("narration"):
+                    item = trans_map[s_id]
+                    narration = str(item.get("narration", "")).strip()
+                    emotion = str(item.get("emotion", "normal")).strip()
                 else:
-                    ch_t_end = total_dur_sec
-                within_ch_idx = idx - (ch_idx * blocks_per_ch)
-                frac = within_ch_idx / max(blocks_per_ch, 1)
-                item["start_sec"] = round(ch_t_start + frac * (ch_t_end - ch_t_start), 2)
-            else:
-                item["start_sec"] = round((idx / max(n_blocks, 1)) * total_dur_sec, 2)
+                    # Individual line fallback if dropped by Gemini
+                    narration = seg["text"]
+                    emotion = "normal"
+                    if gemini_key:
+                        try:
+                            line_res, _ = call_gemini(
+                                FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT,
+                                f"Translate this single dialogue to colloquial Burmese: '{seg['text']}'",
+                                gemini_key,
+                                model_workhorse,
+                                temperature=0.3,
+                                max_tokens=256
+                            )
+                            line_parsed = self._parse_script(line_res)
+                            if line_parsed and isinstance(line_parsed, list) and line_parsed[0].get("narration"):
+                                narration = line_parsed[0]["narration"]
+                            elif line_res and "{" not in line_res and "[" not in line_res:
+                                narration = line_res.strip().strip('"').strip("'")
+                        except Exception:
+                            pass
 
-        state.generated_script = generated
-        print(
-            f"[OK] WriterAgent: Script ready — {len(generated)} narrative blocks "
-            f"covering the full story arc."
-        )
+                all_translated.append({
+                    "scene_id": str(s_id),
+                    "narration": narration,
+                    "start_sec": seg["start_sec"],
+                    "end_sec": seg["end_sec"],
+                    "emotion": emotion,
+                    "visual_cue": f"Dialogue ({seg['start_sec']}s - {seg['end_sec']}s): {seg['text'][:40]}..."
+                })
+
+        state.generated_script = all_translated
+        print(f"[OK] WriterAgent: 100% Full Movie Dialogue Translation complete! Total {len(all_translated)} dialogue lines dubbed.")
         return state
 
     def _native_video_recap(self, chapters: list, state: MovieState, movie_path: str, api_key, model_heavy: str, model_workhorse: str) -> list:
@@ -1045,12 +1041,22 @@ class WriterAgent:
             data = [data]
         result = []
         for i, item in enumerate(data):
-            if not item.get("narration", "").strip():
+            narration = (
+                item.get("narration")
+                or item.get("translation")
+                or item.get("myanmar_text")
+                or item.get("burmese_text")
+                or item.get("text")
+                or ""
+            )
+            if not str(narration).strip():
                 continue
+            block_id = item.get("id", item.get("scene_id", i + 1))
             block = {
-                "scene_id":   str(item.get("scene_id", i + 1)),
-                "narration":  str(item.get("narration", "")),
-                "visual_cue": str(item.get("visual_cue", "Continue narration")),
+                "id":         block_id,
+                "scene_id":   str(block_id),
+                "narration":  str(narration).strip(),
+                "visual_cue": str(item.get("visual_cue", "Dialogue")),
             }
             # Preserve exact timestamps — these drive character lip-sync placement
             if "start_sec" in item:

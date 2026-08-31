@@ -154,15 +154,21 @@ class ThumbnailAgent:
                 try: os.remove(temp_thumb)
                 except Exception: pass
 
-        # Add gradient overlay for text readability
+        # Add cinematic top and bottom gradients for extreme title readability
         gradient = Image.new('RGBA', (width, height), color=(0, 0, 0, 0))
         draw = ImageDraw.Draw(gradient)
         
-        # Darken the bottom 40%
-        grad_height = int(height * 0.4)
-        for y in range(grad_height):
-            alpha = int(255 * (y / grad_height))
-            draw.line([(0, height - grad_height + y), (width, height - grad_height + y)], fill=(0, 0, 0, alpha))
+        # Darken the top 38% for the Myanmar Title
+        top_grad_height = int(height * 0.38)
+        for y in range(top_grad_height):
+            alpha = int(220 * (1.0 - (y / top_grad_height)))
+            draw.line([(0, y), (width, y)], fill=(0, 0, 0, alpha))
+
+        # Darken the bottom 30% for cinematic framing
+        bot_grad_height = int(height * 0.30)
+        for y in range(bot_grad_height):
+            alpha = int(180 * (y / bot_grad_height))
+            draw.line([(0, height - bot_grad_height + y), (width, height - bot_grad_height + y)], fill=(0, 0, 0, alpha))
             
         base_img = Image.alpha_composite(base_img.convert('RGBA'), gradient)
 
@@ -238,7 +244,6 @@ class ThumbnailAgent:
         import re
         
         ass_path = os.path.join(output_folder, 'thumb.ass')
-        font_size = int(width * 0.09)
         
         # Add Part/Episode number if present in movie_name
         part_match = re.search(r'(?:Part|Ep|Episode|Season\s*\d+\s*Ep|S\d+E|အပိုင်း|ပိုင်း)[_\s\-]*(\d+)', state.movie_name, flags=re.IGNORECASE)
@@ -249,11 +254,37 @@ class ThumbnailAgent:
             part_text = f"အပိုင်း {mm_part_num}"
             if "အပိုင်း" not in title:
                 title = f"{title}\\N{part_text}"
+
+        # Smart Line-Wrapping for Myanmar script
+        clean_no_n = title.replace("\\N", "").strip()
+        clean_len = len(re.sub(r'[\s]', '', clean_no_n))
         
-        # Let ASS handle word wrapping automatically (WrapStyle: 1)
+        # If long and not already broken, insert a natural line break around the middle
+        if clean_len > 22 and "\\N" not in title:
+            mid = len(title) // 2
+            # Find nearest space or punctuation to middle
+            split_idx = -1
+            for offset in range(len(title) // 2):
+                for candidate in [mid - offset, mid + offset]:
+                    if 0 <= candidate < len(title) and title[candidate] in (' ', '၊', '။', '-'):
+                        split_idx = candidate
+                        break
+                if split_idx != -1:
+                    break
+            if split_idx != -1:
+                title = title[:split_idx].strip() + "\\N" + title[split_idx:].strip()
+
+        # Dynamic Font Scaling based on character count
+        if clean_len <= 14:
+            font_size = int(height * 0.092)   # ~100px on 1080p
+        elif clean_len <= 26:
+            font_size = int(height * 0.078)   # ~84px on 1080p
+        else:
+            font_size = int(height * 0.064)   # ~69px on 1080p
+
         ass_text = title.replace('{', '').replace('}', '')
         
-        # Create ASS file
+        # High-CTR YouTube Thumbnail Styling: Top-Center (Alignment: 8), Vibrant Golden Yellow, 6px Deep Black Outline
         ass_content = f"""[Script Info]
 ScriptType: v4.00+
 WrapStyle: 1
@@ -262,11 +293,11 @@ PlayResY: {height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Myanmar Text,{font_size},&H0000FFFF,&H000000FF,&H00000000,&H00000000,-1,0,0,0,100,100,0,0,1,4,4,2,50,50,50,1
+Style: Default,Myanmar Text,{font_size},&H0000F5FF,&H000000FF,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,1,6,4,8,60,60,55,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:00.00,0:00:01.00,Default,,0,0,50,,{ass_text}
+Dialogue: 0,0:00:00.00,0:00:01.00,Default,,60,60,55,,{ass_text}
 """
         try:
             with open(ass_path, 'w', encoding='utf-8') as f:

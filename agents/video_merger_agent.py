@@ -845,15 +845,15 @@ class VideoMergerAgent:
     # SUBTITLE BLUR — Vision AI Auto-Detection + FFmpeg Pass
     # ─────────────────────────────────────────────────────
 
-    def _detect_subtitle_region_with_vision(self, video_path: str) -> tuple:
+    def _detect_subtitle_region_with_vision(self, video_path: str, state: MovieState = None):
         """
-        Uses Gemini Vision AI to analyze multiple sample frames from the ORIGINAL SOURCE video
+        Uses Gemini Vision AI to analyze sample frames from the ORIGINAL SOURCE video
         and detect the EXACT vertical region (start_y_pct, height_pct) where
-        hardcoded subtitles appear ANYWHERE on the screen (top, middle, or bottom).
+        hardcoded subtitles appear.
+        Samples frames at Whisper dialogue timestamps to guarantee subtitle visibility.
 
         Returns:
             (start_y_pct, height_pct, subtitle_found)
-            e.g. (0.55, 0.12, True) — subtitle_found=False means skip blur entirely.
         """
         import os, cv2, json
         from brain.gemini_client import call_gemini_vision
@@ -888,15 +888,36 @@ class VideoMergerAgent:
                 frames = []
                 cap = cv2.VideoCapture(video_path)
                 try:
+                    fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
                     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 300)
-                    for sample_pct in pcts:
-                        sample_frame_idx = int(total_frames * sample_pct)
-                        cap.set(cv2.CAP_PROP_POS_FRAMES, sample_frame_idx)
-                        ret, frame = cap.read()
-                        if ret and frame is not None:
-                            frame_path = os.path.join(temp_dir, f"frame_{stage_prefix}_{int(sample_pct*100):03d}.jpg")
-                            cv2.imwrite(frame_path, frame)
-                            frames.append(frame_path)
+                    
+                    dialogue_times = []
+                    if state and getattr(state, "transcript", None):
+                        for s in state.transcript[:15]:
+                            t_val = getattr(s, "start", None) if hasattr(s, "start") else s.get("start") if isinstance(s, dict) else None
+                            if t_val is not None and float(t_val) > 1.0:
+                                dialogue_times.append(float(t_val) + 0.5)
+
+                    if dialogue_times and stage_prefix == "s1":
+                        step = max(1, len(dialogue_times) // 5)
+                        for idx, sec in enumerate(dialogue_times[::step][:5]):
+                            frame_idx = min(int(sec * fps), total_frames - 1)
+                            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+                            ret, frame = cap.read()
+                            if ret and frame is not None:
+                                frame_path = os.path.join(temp_dir, f"frame_dialogue_{idx}_{int(sec)}s.jpg")
+                                cv2.imwrite(frame_path, frame)
+                                frames.append(frame_path)
+
+                    if not frames:
+                        for sample_pct in pcts:
+                            sample_frame_idx = int(total_frames * sample_pct)
+                            cap.set(cv2.CAP_PROP_POS_FRAMES, sample_frame_idx)
+                            ret, frame = cap.read()
+                            if ret and frame is not None:
+                                frame_path = os.path.join(temp_dir, f"frame_{stage_prefix}_{int(sample_pct*100):03d}.jpg")
+                                cv2.imwrite(frame_path, frame)
+                                frames.append(frame_path)
                 finally:
                     cap.release()
                 return frames
@@ -1049,7 +1070,7 @@ class VideoMergerAgent:
 
             if user_sub_mode == "yes":
                 print("[*] Subtitle Blur: User selected 'Has Subtitles' — Forcing subtitle blur mode on.")
-                y, h, found = self._detect_subtitle_region_with_vision(detect_target)
+                y, h, found = self._detect_subtitle_region_with_vision(detect_target, state=state)
                 start_y_pct = y if found else 0.82
                 height_pct = h if found else 0.18
                 subtitle_found = True
@@ -1070,7 +1091,7 @@ class VideoMergerAgent:
                 else:
                     if cache and not cache.get("has_subtitles", False):
                         print("[*] VideoMerger: Previous detection found no subtitles — re-running with improved detector...")
-                    start_y_pct, height_pct, subtitle_found = self._detect_subtitle_region_with_vision(detect_target)
+                    start_y_pct, height_pct, subtitle_found = self._detect_subtitle_region_with_vision(detect_target, state=state)
                 if state is not None:
                     state.subtitle_detection = {
                         "video_path": os.path.abspath(detect_target),
@@ -1138,15 +1159,26 @@ class VideoMergerAgent:
             "-map", "0:a?",
             "-c:v", "libx264",
             "-pix_fmt", "yuv420p",
-            "-preset", "superfast",
+            "-preset", "ultrafast",
             "-crf", "20",
             "-movflags", "+faststart",
             "-c:a", "copy",
             tmp_path,
         ]
 
+        # Dynamically scale timeout to allow ample time for full movies
+        dur_sec = getattr(state, "duration_sec", 0.0) if state else 0.0
+        if not dur_sec and state and getattr(state, "duration", None):
+            try:
+                parts = str(state.duration).split(":")
+                if len(parts) == 3:
+                    dur_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+            except Exception:
+                dur_sec = 600.0
+        dyn_timeout = max(1200, int((dur_sec or 600.0) * 2.5))
+
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=dyn_timeout)
             if result.returncode == 0 and os.path.exists(tmp_path):
                 os.replace(tmp_path, video_path)
                 print("[OK] PostProcess: Copyright-safe post-processing complete!")
