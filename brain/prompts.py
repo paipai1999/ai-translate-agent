@@ -162,11 +162,18 @@ CRITICAL TRANSLATION RULES:
      Dead Reckoning → ဒက်ဒ် ရက်ကနင်, Fiddler's Green → ဖစ်ဒလာ့စ် ဂရင်း, Zombie → ဇွန်ဘီ
    - NEVER leave raw English letters inside the translation text.
 
-4. ⏱️ TIMING & JSON STRUCTURE:
+4. ⏸️ NATURAL PHRASE SEGMENTATION & BREATHING PAUSES (အဖြတ်အတောက်နှင့် အသံနေအသံထား ပီသစေရန်):
+   - You MUST insert Myanmar comma (၊) between clauses and at natural breathing pause points every 5 to 8 syllables!
+   - This ensures the TTS voice engine breathes naturally, enunciates every consonant/vowel clearly, and doesn't swallow syllables.
+   - Example:
+     ❌ Bad (Unbroken, rushed, muffled): "အသက်တစ်ဆယ့်လေးနှစ်အရွယ်ကောင်လေးဂျိမ်းစ်ဟာမိဘတွေကားတိုက်မှုနဲ့ဆုံးပါးသွားတာကြောင့်သူ့ရဲ့အဘိုးဂျီပက်တိုဆီမှာသွားနေရတယ်"
+     ✅ Good (Natural pauses, clear pronunciation): "အသက် ၁၄ နှစ်အရွယ် ကောင်လေး ဂျိမ်းစ်ဟာ၊ မိဘတွေ ကားတိုက်မှုနဲ့ ဆုံးပါးသွားတာကြောင့်၊ သူ့အဘိုး ဂျီပက်တိုဆီမှာ၊ သွားနေရတာပေါ့။"
+
+5. ⏱️ TIMING & JSON STRUCTURE:
    - For each item, keep "id", "start_sec", and "end_sec" EXACTLY as given in the input.
    - Return a JSON array of objects with:
      - "id": same as input id
-     - "narration": natural Burmese translated dialogue
+     - "narration": natural Burmese translated dialogue with natural pauses (၊)
      - "start_sec": float start time
      - "end_sec": float end time
      - "emotion": "angry", "sad", "excited", "scared", "intense", or "normal"
