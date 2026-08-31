@@ -18,6 +18,7 @@ class VoiceAgent:
         voice_cfg = config_data.get("voice", {})
         
         self.engine = engine or tts_engine or os.getenv("TTS_ENGINE") or voice_cfg.get("engine", "edge_tts")
+        self.tts_engine = self.engine
         self.voice = self._resolve_voice(voice, voice_cfg)
         self.rate_mm = os.getenv("EDGE_TTS_RATE_MM") or voice_cfg.get("tts_rate_mm", "+8%")
         self.rate_en = os.getenv("EDGE_TTS_RATE_EN") or voice_cfg.get("tts_rate_en", "+15%")
