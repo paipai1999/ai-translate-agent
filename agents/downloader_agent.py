@@ -35,7 +35,7 @@ class DownloaderAgent:
             except Exception:
                 ffmpeg_bin = None
 
-        # Configure yt-dlp options for best quality mp4 with robust network retry and timeout handling
+        # Configure yt-dlp options for best quality mp4 with robust network retry and bot bypass
         ydl_opts = {
             'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best',
             'outtmpl': os.path.join(self.output_dir, '%(title)s.%(ext)s'),
@@ -45,17 +45,36 @@ class DownloaderAgent:
             'no_warnings': True,
             'retries': 20,              # Retry up to 20 times on network timeout/errors
             'fragment_retries': 20,     # Retry fragmented streams up to 20 times
-            'sleep_interval': 5,        # Fix: was 'retry_sleep' which is not a valid yt-dlp key
+            'sleep_interval': 3,        # Fix: was 'retry_sleep' which is not a valid yt-dlp key
             'socket_timeout': 60,       # Increase socket timeout to 60 seconds
-            'http_chunk_size': 10485760 # 10MB chunk size to prevent throttling freeze
+            'http_chunk_size': 10485760,# 10MB chunk size to prevent throttling freeze
+            # BYPASS YOUTUBE BOT DETECTION: Use mobile app client APIs (iOS / Android)
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['ios', 'android', 'web']
+                }
+            }
         }
         if ffmpeg_bin:
             ydl_opts['ffmpeg_location'] = ffmpeg_bin
+
+        # Support optional cookies.txt if provided
+        for c_file in ['cookies.txt', os.path.join('assets', 'cookies.txt'), '/content/cookies.txt']:
+            if os.path.exists(c_file):
+                ydl_opts['cookiefile'] = c_file
+                print(f"[*] DownloaderAgent: Using cookies from -> {c_file}")
+                break
 
         import time
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
             try:
+                # Rotate client headers on retries to defeat bot blocks
+                if attempt == 2:
+                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['android', 'ios']}}
+                elif attempt == 3:
+                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['tv', 'mweb', 'web_creator']}}
+
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     print(f"[*] DownloaderAgent: Fetching video metadata (Attempt {attempt}/{max_attempts})...")
                     info_dict = ydl.extract_info(url, download=True)
@@ -84,7 +103,7 @@ class DownloaderAgent:
                                 pass
                 if attempt == max_attempts:
                     raise e
-                print(f"[*] Retrying in 5 seconds with fallback format...")
+                print(f"[*] Retrying in 5 seconds with fallback client format...")
                 ydl_opts['format'] = 'bestvideo+bestaudio/best' # Fallback to combined or best stream
                 ydl_opts['socket_timeout'] = 120
                 time.sleep(5)
