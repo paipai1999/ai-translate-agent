@@ -53,9 +53,9 @@ class DownloaderAgent:
                 print(f"[*] DownloaderAgent: Using cookies authentication from -> {c_file}")
                 break
 
-        # Configure yt-dlp options: Android client API completely defeats bot blocks on Colab & VPS
+        # Configure yt-dlp options prioritizing 1080p / 720p Full HD resolution
         ydl_opts = {
-            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best[ext=mp4]/best' if has_cookies else 'best/bestvideo+bestaudio',
+            'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
             'outtmpl': os.path.join(self.output_dir, '%(title)s.%(ext)s'),
             'restrictfilenames': True,  # Ensure clean filenames without weird symbols
             'noplaylist': True,
@@ -66,12 +66,6 @@ class DownloaderAgent:
             'sleep_interval': 2,
             'socket_timeout': 60,       # Increase socket timeout to 60 seconds
             'http_chunk_size': 10485760,# 10MB chunk size to prevent throttling freeze
-            # ZERO BOT BLOCK: Android client API bypasses YouTube bot detection completely
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android']
-                }
-            }
         }
         if active_cookie:
             ydl_opts['cookiefile'] = active_cookie
@@ -96,16 +90,19 @@ class DownloaderAgent:
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
             try:
-                # Rotate client headers on retries if needed
+                # Attempt 1: Crisp 1080p/720p using standard multi-client
+                # Attempt 2: If datacenter bot challenge, fallback to Android mobile client
                 if attempt == 2:
-                    ydl_opts['format'] = 'best'
-                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['android_creator', 'android']}}
+                    print("[*] DownloaderAgent: Attempting with mobile Android client fallback...")
+                    ydl_opts['format'] = 'bestvideo[height<=720]+bestaudio/best'
+                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['android']}}
                 elif attempt == 3:
+                    print("[*] DownloaderAgent: Attempting with legacy fallback...")
                     ydl_opts['format'] = 'best'
                     ydl_opts['extractor_args'] = {'youtube': {'player_client': ['tv_embedded', 'android']}}
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    print(f"[*] DownloaderAgent: Fetching video metadata (Attempt {attempt}/{max_attempts})...")
+                    print(f"[*] DownloaderAgent: Fetching high-resolution video (Attempt {attempt}/{max_attempts})...")
                     info_dict = ydl.extract_info(url, download=True)
                     filename = ydl.prepare_filename(info_dict)
                     
