@@ -368,6 +368,8 @@ class MasterAgent:
             print(f"{'='*60}\n")
 
             # Auto Cleanup of intermediate temp files if enabled
+            import brain.config as cfg
+            config_data = cfg.load_config()
             if config_data.get("paths", {}).get("clean_temp_after_merge", True):
                 self._cleanup_temp_files()
 
