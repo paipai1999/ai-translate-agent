@@ -138,14 +138,36 @@ class F5TTSEngine:
 
             print(f"[*] F5-TTS: Generating voice clone with ref '{os.path.basename(ref_audio_path)}'...")
             
-            # F5-TTS API call
-            f5.infer(
-                ref_file=ref_audio_path,
-                ref_text=clean_ref_text,
-                gen_text=clean_text,
-                file_wave=temp_wav,
-                speed=self.speed
-            )
+            chunks = self._split_text_chunks(clean_text, max_chars=130)
+            if len(chunks) <= 1:
+                f5.infer(
+                    ref_file=ref_audio_path,
+                    ref_text=clean_ref_text,
+                    gen_text=clean_text,
+                    file_wave=temp_wav,
+                    speed=self.speed
+                )
+            else:
+                print(f"[*] F5-TTS: Long text detected ({len(clean_text)} chars). Split into {len(chunks)} chunks to prevent tensor overflow.")
+                chunk_files = []
+                for idx, chunk in enumerate(chunks):
+                    c_wav = f"{base_out}_f5part_{idx}.wav"
+                    f5.infer(
+                        ref_file=ref_audio_path,
+                        ref_text=clean_ref_text,
+                        gen_text=chunk,
+                        file_wave=c_wav,
+                        speed=self.speed
+                    )
+                    if os.path.exists(c_wav) and os.path.getsize(c_wav) > 1000:
+                        chunk_files.append(c_wav)
+                    else:
+                        raise RuntimeError(f"F5-TTS failed to synthesize part {idx+1}/{len(chunks)}")
+                
+                self._concat_wavs(chunk_files, temp_wav)
+                for cf in chunk_files:
+                    try: os.remove(cf)
+                    except Exception: pass
 
             if not os.path.exists(temp_wav) or os.path.getsize(temp_wav) < 1000:
                 raise RuntimeError("F5-TTS generated empty or missing output wave.")
@@ -164,6 +186,52 @@ class F5TTSEngine:
             if os.path.exists(temp_wav) and output_path.lower().endswith(".mp3"):
                 try: os.remove(temp_wav)
                 except Exception: pass
+
+    @staticmethod
+    def _split_text_chunks(text: str, max_chars: int = 130) -> list:
+        """Split text into manageable chunks at sentence/punctuation boundaries to stay under 8192 frame limit."""
+        if len(text) <= max_chars:
+            return [text]
+        import re
+        tokens = re.split(r'([။၊\n])', text)
+        parts = []
+        i = 0
+        while i < len(tokens):
+            part = tokens[i]
+            if i + 1 < len(tokens) and tokens[i+1] in ['။', '၊', '\n']:
+                part += tokens[i+1]
+                i += 1
+            if part.strip():
+                parts.append(part)
+            i += 1
+
+        chunks = []
+        current = ""
+        for part in parts:
+            if len(current) + len(part) <= max_chars:
+                current += part
+            else:
+                if current.strip():
+                    chunks.append(current.strip())
+                current = part
+        if current.strip():
+            chunks.append(current.strip())
+        return chunks or [text]
+
+    @staticmethod
+    def _concat_wavs(wav_paths: list, out_path: str):
+        """Concatenates multiple WAV audio files sequentially using soundfile and numpy."""
+        import soundfile as sf
+        import numpy as np
+        data_list = []
+        sr = None
+        for p in wav_paths:
+            data, curr_sr = sf.read(p)
+            sr = curr_sr
+            data_list.append(data)
+        if data_list and sr:
+            combined = np.concatenate(data_list)
+            sf.write(out_path, combined, sr)
 
     def _finalize_audio(self, raw_wav: str, final_path: str, target_dur: Optional[float] = None):
         """Converts raw WAV to destination format and applies atempo stretch if needed."""

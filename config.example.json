@@ -2,13 +2,14 @@
   "gemini": {
     "enabled": true,
     "api_keys": [],
-    "model": "gemini-2.0-flash",
+    "model": "gemini-flash-latest",
     "models": {
-      "heavy": "gemini-2.0-flash",
-      "workhorse": "gemini-2.0-flash",
-      "polish": "gemini-2.0-flash"
+      "heavy": "gemini-flash-latest",
+      "workhorse": "gemini-flash-latest",
+      "polish": "gemini-flash-latest"
     },
     "model_limits": {
+      "gemini-flash-latest": 20,
       "gemini-2.0-flash": 20,
       "gemini-1.5-flash": 20,
       "gemini-2.5-flash": 15,
