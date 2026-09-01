@@ -74,7 +74,9 @@ class AudioAgent:
             
         print(f"[*] AudioAgent: Separating vocals from {audio_path} using Demucs...")
         try:
-            cmd = [*demucs_cmd, "--two-stems=vocals", "-n", "htdemucs", audio_path, "-o", output_dir]
+            import torch
+            device_flag = ["-d", "cuda"] if torch.cuda.is_available() else ["-d", "cpu"]
+            cmd = [*demucs_cmd, "--two-stems=vocals", "-n", "htdemucs", *device_flag, audio_path, "-o", output_dir]
             subprocess.run(cmd, check=True, capture_output=True)
             
             base_name = os.path.splitext(os.path.basename(audio_path))[0]
