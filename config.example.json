@@ -2,19 +2,17 @@
   "gemini": {
     "enabled": true,
     "api_keys": [],
-    "model": "gemini-flash-latest",
+    "model": "gemini-3.5-flash",
     "models": {
-      "heavy": "gemini-flash-latest",
-      "workhorse": "gemini-flash-latest",
-      "polish": "gemini-flash-latest"
+      "heavy": "gemini-3.5-flash",
+      "workhorse": "gemini-3.5-flash",
+      "polish": "gemini-3.5-flash-lite"
     },
     "model_limits": {
-      "gemini-flash-latest": 20,
-      "gemini-2.0-flash": 20,
-      "gemini-1.5-flash": 20,
-      "gemini-2.5-flash": 15,
-      "gemini-3.5-flash-lite": 20,
-      "gemini-3.6-flash": 15
+      "gemini-3.5-flash": 50,
+      "gemini-3.5-flash-lite": 50,
+      "gemini-3.6-flash": 40,
+      "gemini-flash-lite-latest": 50
     }
   },
   "pipeline": {

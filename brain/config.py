@@ -14,18 +14,17 @@ DEFAULT_CONFIG = {
     "gemini": {
         "enabled": True,                   # Use Gemini API when writing Burmese recap scripts for natural spoken flow
         "api_keys": [],
-        "model": "gemini-3.5-flash-lite",       # Primary model; fallbacks are gemini-3.6-flash and gemini-flash-latest
-        "daily_limit_per_key": 20,
+        "model": "gemini-3.5-flash",       # Primary model: gemini-3.5-flash (fast, reliable 2026 production model)
+        "daily_limit_per_key": 50,
         "model_limits": {
-            "gemini-3.5-flash-lite": 20,
-            "gemini-3.6-flash": 15,
-            "gemini-2.5-flash": 10,
-            "gemini-2.0-flash": 15,
-            "gemini-1.5-flash": 15
+            "gemini-3.5-flash": 50,
+            "gemini-3.5-flash-lite": 50,
+            "gemini-3.6-flash": 40,
+            "gemini-flash-lite-latest": 50
         },
         "models": {
-            "heavy": "gemini-3.5-flash-lite",
-            "workhorse": "gemini-3.5-flash-lite",
+            "heavy": "gemini-3.5-flash",
+            "workhorse": "gemini-3.5-flash",
             "polish": "gemini-3.5-flash-lite"
         }
     },

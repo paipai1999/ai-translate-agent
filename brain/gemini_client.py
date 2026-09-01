@@ -12,19 +12,18 @@ def _mask_key(key: str) -> str:
     return key[:6] + '...' + key[-4:]
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Valid Google AI Studio Gemini Models (as of 2025):
+# Valid Google AI Studio Gemini Models (2026 Production Tier):
 #
-# 1. gemini-2.5-flash     : Primary — best quality + speed (10 RPD free tier)
-# 2. gemini-2.0-flash     : Workhorse — fast + high quota (15 RPD free tier)
-# 3. gemini-1.5-flash     : Fallback — stable + proven (15 RPD free tier)
+# 1. gemini-3.5-flash         : Primary — Best Burmese translation quality + speed
+# 2. gemini-3.5-flash-lite    : Workhorse — Ultra fast + high quota
+# 3. gemini-3.6-flash         : Fallback — High capacity
+# 4. gemini-flash-lite-latest : High-speed fallback
 # ─────────────────────────────────────────────────────────────────────────────
 _FALLBACK_MODELS = [
-    "gemini-flash-latest",
+    "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-2.5-flash",
     "gemini-3.6-flash",
+    "gemini-flash-lite-latest",
 ]
 
 # How many seconds to wait when ALL keys are rate-limited before retrying.
@@ -36,7 +35,7 @@ def call_gemini(
     system_prompt: str,
     user_prompt: str,
     api_key: Union[str, List[str]],
-    model: str = "gemini-3.5-flash-lite",
+    model: str = "gemini-3.5-flash",
     temperature: float = 0.7,
     max_tokens: int = 4096,
 ) -> tuple:
