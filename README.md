@@ -1,21 +1,51 @@
-# AI Movie Translate & Dubbing Agent (v2.2) — $0 Free Local & Cloud-Accelerated Pipeline
+# 🎬 AI Movie Translate & Dubbing Agent (v2.2) — $0 Free Local & Cloud-Accelerated Pipeline
 
-An end-to-end autonomous AI agentic pipeline that transcribes video audio line-by-line, generates natural **1:1 Spoken Dialogue Translations** (in **Colloquial Burmese** or **English**), synthesizes lifelike voiceovers, and renders a fully dubbed video equipped with **Advanced Anti-Copyright Protection**, **Burned Myanmar ASS Subtitles**, **Dynamic High-CTR Thumbnails**, **Custom Watermark Branding**, and **Dual-Engine Voiceover (Edge-TTS & F5-TTS Voice Cloning)**.
+An autonomous, end-to-end AI agentic pipeline designed to automatically translate movies, short dramas, and anime clips line-by-line into natural **Colloquial Burmese** (or English), synthesize lifelike **Multi-Voice Dubbing (Male/Female)**, and produce viral, ready-to-publish videos equipped with **9:16 Facebook Reels Canvas**, **Burned Myanmar ASS Subtitles**, **Subtitle Blur Protection**, **Custom Watermark Branding**, and **High-CTR Thumbnails**.
 
 ---
 
-## ⚡ Google Colab One-Click Setup (Free GPU Cloud Mode)
+## ⚡ Google Colab One-Click Setup (Free Cloud GPU Mode)
 
-Running on **Google Colab** provides **Free NVIDIA T4 GPU (16GB VRAM)**, **1 Gbps Google Cloud network**, and high-speed execution for Whisper STT, Demucs, and F5-TTS Voice Cloning with **Zero Google Drive dependency** (100% high-speed NVMe local SSD).
+Running on **Google Colab** provides **Free NVIDIA T4 GPU (16GB VRAM)**, **1 Gbps Google Cloud network**, and high-speed execution for Whisper STT, Demucs Vocal Isolation, and NVENC Hardware Acceleration with **Permanent Google Drive Storage**.
 
 👉 **[Open AI_Movie_Translate_Colab.ipynb in Google Colab](https://colab.research.google.com/github/paipai1999/ai-translate-agent/blob/main/AI_Movie_Translate_Colab.ipynb)**
 
 ### ✨ Colab Highlights:
-1. **⚡ 1-Click Web UI Dashboard Launcher:** Click Play (▶️) once on `🚀 Launch Web UI Dashboard (1-Click)`. Colab automatically provisions the environment, starts the FastAPI server, opens a secure Cloudflare Tunnel, and launches the Web UI in your browser!
-2. **⚡ Colab Auto Keep-Alive Heartbeat:** Built-in background JavaScript heartbeat keeps the connection active every 60 seconds, completely preventing idle timeout disconnects during long movie translations.
-3. **🛡️ Active Socket Health-Check (Zero 502 Errors):** Actively probes TCP port 5000 before publishing the Cloudflare Tunnel link, guaranteeing immediate connection with zero 502 Bad Gateway errors.
-4. **🤖 YouTube Bot Detection Bypass:** Powered by mobile app client APIs (iOS & Android) with automatic retry client rotation to download YouTube videos without bot challenges or CAPTCHAs.
-5. **📊 Live Download Progress Streaming:** Displays live percentage (`[*] Downloading: 45% at 2.1MiB/s`), speed, and ETA in the Web UI terminal in real-time.
+1. **⚡ 1-Click Web UI Dashboard Launcher:** Click Play (▶️) once on `🚀 Launch Web UI Dashboard`. Colab automatically provisions dependencies, installs GPU NVENC FFmpeg, starts FastAPI, and launches your private Web UI tunnel.
+2. **☁️ Permanent Google Drive Sync:** Automatically backs up and restores `cookies.txt`, `config.json`, `movie_metadata.db` (job history & token usage), and `outputs/` across Colab disconnects.
+3. **⚡ Colab Auto Keep-Alive Heartbeat:** Built-in JavaScript heartbeat keeps the connection active every 60 seconds, preventing idle disconnects during long movie translations.
+4. **🛡️ Active Socket Health-Check (Zero 502 Errors):** Probes TCP port 5000 before publishing the Cloudflare Tunnel link, guaranteeing instant connection without Bad Gateway errors.
+
+---
+
+## 🌟 Key Features (v2.2)
+
+### 🍪 1. Multi-Platform Auto Downloader (Anti-Bot Bypass)
+* **YouTube:** Integrated remote EJS challenge solver + Netscape `cookies.txt` support to bypass all bot challenges (`Sign in to confirm you're not a bot`).
+* **DramaBox (`dramaboxdb.com`):** Direct web & HLS streaming download with VIP authentication.
+* **ReelShort (`reelshort.com`):** Direct short drama download with session cookies.
+* **Local Upload:** Direct Drag & Drop upload of MP4, MKV, WebM files in the Web UI.
+
+### 🛑 2. 1-Click Instant Force Stop Pipeline
+* Emergency **`🛑 Force Stop Pipeline`** button in the Web UI to immediately cancel running jobs.
+* Terminates active child subprocess trees (`ffmpeg`, `whisper`, `demucs`, `yt-dlp`) to instantly release GPU VRAM and CPU memory.
+
+### 📝 3. Subtitle Mode Switch & Standalone SRT Export
+* **🔥 Burn Subtitles (Hardsub - Default):** Burns styled Myanmar ASS subtitles (Padauk / Myanmar Text) directly into the video frame.
+* **🎙️ Voiceover Only (Clean Frame):** Generates clean video with dubbed voice only (no text on video), and automatically exports standalone **`myanmar_subs.srt`** and **`myanmar_subs.ass`** subtitle files for YouTube CC / VLC player.
+
+### ⚙️ 4. Resolution Quality Presets
+* **🌟 1080p Full HD (Default / Highest Quality):** 1920x1080 (16:9 Landscape) & 1080x1920 (9:16 Vertical).
+* **⚡ 720p HD (Faster Render / Smaller File):** 1280x720 (16:9 Landscape) & 720x1280 (9:16 Vertical) for 2x faster encoding.
+
+### 📱 5. 9:16 Facebook Reels & TikTok Dual Canvas Exporter
+* Exports a dedicated **1080x1920 Full HD 9:16 Vertical Video** alongside the standard 16:9 YouTube video.
+* Features a high-speed silky blurred background, golden hook title at top, centered video frame, and safe-zone Myanmar subtitles.
+
+### 👫 6. AI Multi-Voice Character Dubbing & Action Narration Bridge
+* **Multi-Voice Dubbing:** Automatically assigns male characters to `my-MM-ThihaNeural` and female characters to `my-MM-NilarNeural`.
+* **Action Narration Bridge:** Detects non-verbal action scenes (>18s) and uses Gemini 2.0 Flash to synthesize engaging storyline narration so the audience never experiences silence.
+* **Dynamic Audio Ducking:** Automatically lowers background ambient sound to 12% during speech and raises it back to 35% during pauses.
 
 ---
 
@@ -24,36 +54,36 @@ Running on **Google Colab** provides **Free NVIDIA T4 GPU (16GB VRAM)**, **1 Gbp
 ```text
 ai-translate-agent/
 ├── agents/
-│   ├── master.py              ← Pipeline orchestrator (Phases 1–7) with Auto-Temp Cleanup
-│   ├── downloader_agent.py    ← Video downloader with retry & fallback formats (yt-dlp)
-│   ├── video_agent.py         ← Metadata: FPS, duration, resolution (OpenCV & FFprobe)
+│   ├── master.py              ← Pipeline orchestrator (Phases 1–7) & cancellation management
+│   ├── downloader_agent.py    ← Multi-platform downloader with EJS JS solver & Netscape cookies
+│   ├── video_agent.py         ← Video metadata: FPS, duration, resolution (OpenCV & FFprobe)
 │   ├── audio_agent.py         ← Audio extract + Fast Whisper STT (INT8 + VAD) + Demucs Vocal Isolation
-│   ├── writer_agent.py        ← 1:1 Full Spoken Dialogue Translation (Colloquial Burmese & English)
-│   ├── seo_agent.py           ← Viral title, description, tags, hashtags + file export
-│   ├── voice_agent.py         ← Text-to-Speech (Edge-TTS Cloud Neural / F5-TTS Zero-Shot Cloning)
-│   ├── f5_tts_engine.py       ← Local Flow-Matching Voice Cloning with SoundFile Windows patch
-│   ├── video_merger_agent.py  ← Video Merger: High-Contrast ASS Subtitles, Subtitle Blur, Watermark Overlay
-│   ├── thumbnail_agent.py     ← High-CTR Golden Yellow Top-Center Thumbnail Generator with Vision Check
-│   └── qa_agent.py            ← Phase 7 QA: Auto-Rewrite Over-length blocks, Sync score & Language review
+│   ├── writer_agent.py        ← 1:1 Dialogue Translation + Gender Tagging + Action Narration
+│   ├── seo_agent.py           ← Viral Title, Description, Tags, and Hashtags generator
+│   ├── voice_agent.py         ← Multi-Voice TTS (Thiha Male / Nilar Female) & Time Stretch
+│   ├── video_merger_agent.py  ← Video Merger, Dynamic Audio Ducking, 9:16 Reels Canvas, ASS/SRT Exporter
+│   ├── thumbnail_agent.py     ← High-CTR Golden Yellow Top-Center Thumbnail Generator
+│   └── qa_agent.py            ← Sync score & language naturalness QA review
 │
 ├── brain/
 │   ├── memory.py              ← Pydantic shared state (MovieState with atomic JSON persistence)
-│   ├── planner.py             ← Batch Processor with branding & custom thumbnail support
+│   ├── planner.py             ← Overnight Batch Processor with auto API key rotation
 │   ├── prompts.py             ← LLM prompt templates (Dialogue Translation, SEO, QA)
 │   ├── config.py              ← config.json loader with safe defaults
 │   ├── gemini_client.py       ← Gemini API client with Gemini 2.0 Flash priority & key rotation
-│   └── sqlite_store.py        ← SQLite WAL-mode local database for movie states
+│   └── sqlite_store.py        ← SQLite WAL-mode local database for movie states and job logs
 │
 ├── templates/
-│   └── index.html             ← Modern Glassmorphic Web UI Dashboard with Branding & Thumbnail controls
+│   └── index.html             ← Modern Glassmorphic Web UI Dashboard with live progress & controls
 │
-├── web_ui.py                  ← FastAPI Web Dashboard (Direct Upload, Live SSE Logs, Branding API)
+├── web_ui.py                  ← FastAPI Web Dashboard (Direct Upload, Live SSE Logs, Force Stop API)
+├── AI_Movie_Translate_Colab.ipynb ← Official Google Colab One-Click Notebook
 ├── config.json                ← Active runtime configuration (API keys, branding, models)
 ├── config.example.json        ← Default configuration template
-├── main.py                    ← CLI entry point with --thumb-title and --watermark-text flags
+├── cookies.txt                ← Netscape cookie file for YouTube, DramaBox, and ReelShort
+├── main.py                    ← CLI entry point
 ├── requirements.txt           ← Python package dependencies
-├── assets/                    ← Reference voice samples and branding assets
-│   └── voices/default_ref.wav ← Bundled reference voice sample for F5-TTS zero-shot cloning
+├── assets/                    ← Reference voice samples, cookies, and branding assets
 ├── movies/                    ← Place source video files here
 ├── outputs/                   ← Generated final videos, thumbnails, scripts, and logs
 └── temp/                      ← Intermediate audio/video cache (Auto-cleaned after merge)
@@ -77,7 +107,7 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 
-# 3. Add your Gemini API Key in config.json
+# 3. Add your Gemini API Key in config.json (or in Web UI)
 #    Get free API keys from: https://aistudio.google.com
 ```
 
@@ -91,103 +121,23 @@ python web_ui.py
 ```
 *Open your browser at: `http://localhost:5000`*
 
-* **Direct Voice Engine Selector:** Switch seamlessly between `⚡ Edge TTS (Fast $0 Cloud Neural)` and `🧬 F5-TTS (Zero-Shot Voice Cloning)` directly on the UI.
-* **Direct Video Upload & URL Download:** Paste any YouTube, DramaBox, or direct video URL, or click **📁 Upload** to select a file from your computer.
-* **Overnight Batch Queue:** Paste multiple links to process sequentially overnight with automatic API key failover and cache cleanup.
-* **Live SSE Progress Streaming:** Watch real-time log outputs, timeline status, and active rendering percentage.
+* **Direct Video Download & Upload:** Paste any YouTube, DramaBox, or ReelShort URL, or click **📁 Upload** to select a file from your computer.
+* **Subtitle Mode Selector:** Choose between `🔥 Burn Subtitles (Hardsub)` and `🎙️ Voiceover Only (Clean Frame)`.
+* **Resolution Quality Selector:** Choose between `🌟 1080p Full HD` and `⚡ 720p HD`.
+* **9:16 Facebook Reels & TikTok:** Toggle automatic vertical video generation.
+* **Overnight Batch Queue:** Paste multiple links to process sequentially overnight with automatic API key failover.
+* **1-Click Force Stop:** Click `🛑 Force Stop Pipeline` at any time to immediately cancel execution.
 
----
-
-### 💻 Method 2: Command Line Interface (CLI)
-
+### 💻 Method 2: Command Line (CLI)
 ```bash
-# Run a single video file or YouTube URL
-python main.py "https://www.youtube.com/watch?v=5VRSIZwxJso"
+# Run single movie recap with default settings
+python main.py --input "movies/my_movie.mp4"
 
-# Custom Thumbnail Title & Watermark Branding
-python main.py "movies/sample.mp4" --thumb-title "သေမင်းတမန်" --watermark-text "PAI Channel"
-
-# Disable Watermark
-python main.py "movies/sample.mp4" --no-watermark
-
-# Process all videos in movies/ folder sequentially (Batch Mode)
-python main.py --batch
-
-# Select voice engine (edge_tts or f5_tts)
-python main.py "movies/sample.mp4" -e f5_tts
-
-# Select language explicitly (Burmese or English)
-python main.py "movies/sample.mp4" --lang burmese
-
-# Enable Subtitle Blur pass explicitly
-python main.py "movies/sample.mp4" --subtitle
-
-# Interactive Mass Cleanup Utility
-python main.py --clean
+# Run with custom thumbnail title and 9:16 Reels export
+python main.py --input "https://youtu.be/..." --thumb-title "ရွာသူလေးရဲ့ မယုံနိုင်စရာလျှို့ဝှက်ချက်"
 ```
 
 ---
 
-## 🎙️ Dual Voiceover Engines
-
-| Feature | ⚡ Microsoft Edge TTS | 🧬 F5-TTS Zero-Shot Cloning |
-| :--- | :---: | :---: |
-| **Type** | Cloud Neural Speech Synthesis | Local Flow-Matching (DiT) Diffusion |
-| **Best For** | 🇲🇲 **Myanmar (Burmese)** & English | 🇬🇧 Character Voice Cloning & Multilingual |
-| **Cost** | 🟢 **$0 (100% Free)** | 🟢 **$0 (Open-Source)** |
-| **Hardware Load** | ⚡ **Instant (~1s per line, 0% GPU load)** | 🖥️ GPU Accelerated (~2s on Colab T4) |
-| **Voice Models** | `my-MM-ThihaNeural`, `my-MM-NilarNeural`, `en-US-GuyNeural` | Zero-Shot Cloned from Reference Audio / Actor Vocals |
-| **Windows Support** | Built-in Async Client | 🛡️ Native SoundFile Patch (No DLL crashes) |
-
----
-
-## 📦 Output Files
-
-After processing `movies/my_movie.mp4`, outputs appear in `outputs/my_movie/`:
-
-* `final_recap.mp4` — **FINAL FULLY DUBBED VIDEO** (Action-stitched, 1:1 Dialogue Dubbing, Burned ASS Subtitles, Watermark, Anti-Copyright Protection).
-* `thumbnail.jpg` — High-CTR YouTube Thumbnail image (Golden Yellow, Top-Center, 1080p).
-* `seo_metadata.json` — Viral YouTube Title, Description, Tags, and Hashtags.
-* `final_recap_script.txt` — Full line-by-line translated Burmese dialogue script with timestamps.
-* `qa_report.txt` — Detailed QA sync and language quality score.
-* `voiceover/` — Individual MP3 audio dialogue clips per scene.
-* `state.json` — Comprehensive pipeline state and execution metadata.
-
----
-
-## 🧠 7-Phase Autonomous Architecture
-
-```text
-Input (Video File or URL)
-  │
-  ▼ Phase 1: VideoAgent          (OpenCV/FFprobe — FPS, Resolution, Duration Analysis)
-  ▼ Phase 2: AudioAgent          (Demucs Vocal Separation + Faster-Whisper INT8 VAD STT)
-  ▼ Phase 3: SceneAgent          (PySceneDetect — Visual scene cut detection & chapter clustering)
-  ▼ Phase 4: WriterAgent & SEO   (1:1 Full Spoken Dialogue Translation + Colloquial Burmese + SEO Tags)
-  ▼ Phase 5: VoiceAgent          (Edge-TTS Neural Voice / F5-TTS Zero-Shot Character Voice Cloning)
-  ▼ Phase 6: VideoMergerAgent    (Action Stitching, High-Contrast ASS Subtitles, Subtitle Blur, Watermark)
-  ▼ Phase 7: QAAgent & Cleanup   (Sync validation, Auto-Temp Cleanup to save disk space)
-  │
-  ▼ outputs/my_movie/final_recap.mp4 & thumbnail.jpg
-```
-
----
-
-## 🛡️ Key Features & Resilience
-
-1. **1:1 Full Spoken Dialogue Translation:** Completely abolishes the 1-block-per-chapter summary recap architecture. Every spoken line from Whisper STT is translated into colloquial spoken Burmese (`လေ၊ ပေါ့၊ ဟယ်၊ ဗျာ`).
-2. **High-CTR YouTube Thumbnail Generator:** Auto-extracts the sharpest, brightest keyframe using OpenCV Laplacian variance + HSV brightness, renders vibrant golden-yellow titles at Top-Center with deep black shadows.
-3. **Custom Branding & Watermark Overlay:** Supports transparent PNG watermarks with customizable opacity, position, and text.
-4. **High-Contrast Burned Subtitles:** Burns Myanmar Unicode ASS subtitles with a 70% deep dark box background (`&HB0000000`), 10px padding, and 2px shadow for maximum readability on bright movie scenes. Automatically shifts subtitle timestamps by +3.0s to sync with the thumbnail intro.
-5. **Gemini 2.0 Flash Priority & Multi-Key Failover:** Primary model set to Gemini 2.0 Flash with automatic failover across 6 backup models and key rotation.
-6. **Anti-Copyright Defense Suite:** Multi-layer protection including horizontal mirroring, dynamic shifting film grain (`noise=alls=2:allf=t`), vignette borders, and color grading.
-7. **Auto-Temp Disk Optimizer:** Automatically cleans up intermediate audio/video chunks in `temp/` after the final video is successfully created.
-8. **YouTube Bot Detection Bypass Engine:** Automatically utilizes iOS and Android mobile player client API endpoints with client rotation to bypass YouTube datacenter sign-in / bot challenges without CAPTCHAs.
-9. **Live Download & Pipeline Progress Streaming:** Features real-time log streaming with smooth carriage-return parsing, displaying live download percentage, speed, and ETA directly in the Web UI terminal.
-
----
-
-## ⚠️ Disclaimer
-
-This tool is designed for educational, research, fair-use commentary, and transformative translation purposes. Ensure compliance with local copyright regulations and platform policies when publishing AI-assisted video content.
-
+## 📄 License
+MIT License. Free for educational and commercial content creation.
