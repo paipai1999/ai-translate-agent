@@ -360,6 +360,8 @@ class VideoMergerAgent:
                         narration_text = b.get("narration", "").strip() if isinstance(b, dict) else ""
                         subtitle_timings.append((place_time, c.duration, narration_text))
 
+                state.subtitle_timings = subtitle_timings
+
                     
                 sfx_cfg = config_data.get("sfx", {})
                 

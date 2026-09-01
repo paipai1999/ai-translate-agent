@@ -43,6 +43,7 @@ class DownloaderAgent:
             'cookies.txt',
             os.path.join('assets', 'cookies.txt'),
             '/content/cookies.txt',
+            '/content/drive/MyDrive/MovieRecapOutputs/cookies.txt',
             os.path.join(self.output_dir, 'cookies.txt')
         ]
         active_cookie = None

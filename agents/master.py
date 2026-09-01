@@ -335,8 +335,8 @@ class MasterAgent:
                         or (self.state.seo_metadata.get("title") if isinstance(self.state.seo_metadata, dict) else "")
                         or self.state.movie_name
                     )
-                    sub_timings = []
-                    if self.state.generated_script:
+                    sub_timings = getattr(self.state, "subtitle_timings", None) or []
+                    if not sub_timings and self.state.generated_script:
                         for block in self.state.generated_script:
                             if isinstance(block, dict):
                                 s_start = float(block.get("start_sec") or 0.0)

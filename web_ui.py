@@ -280,9 +280,17 @@ def batch_worker(
     watermark_enabled=None,
     watermark_text=None,
     watermark_opacity=None,
+    reels_enabled=True,
 ):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
+    if reels_enabled is False:
+        os.environ["DISABLE_REELS"] = "true"
+        os.environ.pop("ENABLE_REELS", None)
+    elif reels_enabled is True:
+        os.environ["ENABLE_REELS"] = "true"
+        os.environ.pop("DISABLE_REELS", None)
+
     buffer = io.StringIO()
     thread_stdout.buffers[job_id] = buffer
     with jobs_lock:
@@ -457,6 +465,14 @@ async def upload_file(video: UploadFile = File(...)):
             os.makedirs("assets", exist_ok=True)
             with open(os.path.join("assets", "cookies.txt"), "wb") as f:
                 f.write(content)
+            drive_out = "/content/drive/MyDrive/MovieRecapOutputs"
+            if os.path.exists(drive_out):
+                try:
+                    with open(os.path.join(drive_out, "cookies.txt"), "wb") as df:
+                        df.write(content)
+                    print("[*] Upload: cookies.txt permanently saved to Google Drive!")
+                except Exception:
+                    pass
             print("[*] Upload: cookies.txt installed successfully into root and assets/!")
             return {"success": True, "filename": "cookies.txt", "message": "YouTube cookies installed successfully!"}
 
@@ -560,6 +576,7 @@ async def start_batch_pipeline(req: BatchStartRequest):
             watermark_enabled,
             watermark_text,
             watermark_opacity,
+            req.reels_enabled,
         ),
         daemon=True,
     )
