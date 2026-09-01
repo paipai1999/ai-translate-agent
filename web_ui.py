@@ -1071,9 +1071,11 @@ async def save_keys(req: SaveKeysRequest):
             try:
                 import shutil
                 shutil.copy2("config.json", os.path.join(drive_out, "config.json"))
-                if os.path.exists("database.db"):
-                    shutil.copy2("database.db", os.path.join(drive_out, "database.db"))
-                print("[*] WebUI: Permanently synced config.json and database.db to Google Drive!")
+                for db_name in ["movie_metadata.db", "database.db"]:
+                    for src_path in [os.path.join("outputs", db_name), db_name]:
+                        if os.path.exists(src_path):
+                            shutil.copy2(src_path, os.path.join(drive_out, db_name))
+                print("[*] WebUI: Permanently synced config.json and database to Google Drive!")
             except Exception:
                 pass
 
@@ -1083,7 +1085,13 @@ async def save_keys(req: SaveKeysRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == '__main__':
-    import uvicorn
-    host = os.getenv("HOST", "0.0.0.0" if ("COLAB_GPU" in os.environ or "KAGGLE_KERNEL_RUN_TYPE" in os.environ) else "127.0.0.1")
-    port = int(os.getenv("PORT", 5000))
+    import uvicorn, argparse
+    parser = argparse.ArgumentParser(description="AI Movie Recap Web UI Server")
+    parser.add_argument("--host", type=str, default=None, help="Host to bind to")
+    parser.add_argument("--port", type=int, default=None, help="Port to bind to")
+    args, _ = parser.parse_known_args()
+
+    default_host = "0.0.0.0" if ("COLAB_GPU" in os.environ or "KAGGLE_KERNEL_RUN_TYPE" in os.environ or "COLAB_RELEASE_TAG" in os.environ) else "127.0.0.1"
+    host = args.host or os.getenv("HOST", default_host)
+    port = args.port or int(os.getenv("PORT", 5000))
     uvicorn.run(app, host=host, port=port, log_level='info')
