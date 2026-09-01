@@ -4,17 +4,20 @@ An autonomous, end-to-end AI agentic pipeline designed to automatically translat
 
 ---
 
-## ⚡ Google Colab One-Click Setup (Free Cloud GPU Mode)
+## ⚡ Cloud GPU One-Click Setup (100% Free Cloud Options)
 
-Running on **Google Colab** provides **Free NVIDIA T4 GPU (16GB VRAM)**, **1 Gbps Google Cloud network**, and high-speed execution for Whisper STT, Demucs Vocal Isolation, and NVENC Hardware Acceleration with **Permanent Google Drive Storage**.
-
+### 🥇 Option A: Google Colab (Free T4 GPU + Google Drive Sync)
 👉 **[Open AI_Movie_Translate_Colab.ipynb in Google Colab](https://colab.research.google.com/github/paipai1999/ai-translate-agent/blob/main/AI_Movie_Translate_Colab.ipynb)**
+* **Highlights:** 1-Click Web UI Dashboard, Permanent Google Drive Sync for videos/cookies/db, 60s Auto Keep-Alive Heartbeat, and Fast Socket Health-Check.
 
-### ✨ Colab Highlights:
-1. **⚡ 1-Click Web UI Dashboard Launcher:** Click Play (▶️) once on `🚀 Launch Web UI Dashboard`. Colab automatically provisions dependencies, installs GPU NVENC FFmpeg, starts FastAPI, and launches your private Web UI tunnel.
-2. **☁️ Permanent Google Drive Sync:** Automatically backs up and restores `cookies.txt`, `config.json`, `movie_metadata.db` (job history & token usage), and `outputs/` across Colab disconnects.
-3. **⚡ Colab Auto Keep-Alive Heartbeat:** Built-in JavaScript heartbeat keeps the connection active every 60 seconds, preventing idle disconnects during long movie translations.
-4. **🛡️ Active Socket Health-Check (Zero 502 Errors):** Probes TCP port 5000 before publishing the Cloudflare Tunnel link, guaranteeing instant connection without Bad Gateway errors.
+### 🥈 Option B: Kaggle Notebooks (Free Dual T4 30GB VRAM / 30h Weekly Quota)
+👉 **[View AI_Movie_Translate_Kaggle.ipynb](https://github.com/paipai1999/ai-translate-agent/blob/main/AI_Movie_Translate_Kaggle.ipynb)**
+* **Highlights:** 2x NVIDIA T4 GPUs (30GB VRAM) or P100 GPU, 30 Hours/Week Free GPU Quota, 12-Hour Continuous Sessions, Cloudflare Tunnel Web UI, and 30GB System RAM.
+* **Kaggle Quickstart:**
+  1. Create a new Notebook on [kaggle.com](https://www.kaggle.com).
+  2. Click `File` > `Import Notebook` and upload `AI_Movie_Translate_Kaggle.ipynb` (or paste from GitHub).
+  3. In right sidebar `Notebook Settings`: Set **Accelerator = GPU T4 x2** and turn **Internet = On**.
+  4. Run Cell 1 to launch the Web UI Dashboard!
 
 ---
 
