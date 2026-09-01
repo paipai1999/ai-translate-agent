@@ -798,12 +798,14 @@ async def status_endpoint(job_id: str):
     log_lines = []
     current_phase = job.get('phase', 'Starting...')
     batch_status = None
+    phase_timings = {}
     
     if buffer:
         content = buffer.getvalue()
         lines = [line for line in content.split('\n') if line.strip()]
         log_lines = lines[-35:]
 
+        import re
         for line in reversed(lines):
             if '--- [Phase' in line or '--- [DONE]' in line:
                 current_phase = line.strip().strip('-').strip()
@@ -815,7 +817,6 @@ async def status_endpoint(job_id: str):
                 current_phase = 'Downloading Video...'
                 break
 
-        import re
         for line in reversed(lines):
             m = re.search(r'\[(\d+)/(\d+)\] Processing:\s*(.*)', line)
             if m:
@@ -825,11 +826,23 @@ async def status_endpoint(job_id: str):
             if m2 and not batch_status:
                 batch_status = f"Downloading: {m2.group(1)} of {m2.group(2)}"
                 break
+
+        # Extract live phase completion durations
+        for line in lines:
+            if '[⏱️ TIMING]' in line:
+                tm = re.search(r'\[⏱️ TIMING\] (Phase [^f]+) finished in ([\d\.]+)s', line)
+                if tm:
+                    phase_timings[tm.group(1).strip()] = float(tm.group(2))
+
+    created_at = job.get("created_at")
+    elapsed_sec = round(time.time() - created_at, 1) if created_at else None
                 
     return {
         "status": job["status"],
         "phase": current_phase,
         "batch_status": batch_status,
+        "elapsed_sec": elapsed_sec,
+        "phase_timings": phase_timings,
         "log": log_lines
     }
 
