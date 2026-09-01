@@ -254,6 +254,8 @@ class WriterAgent:
                         "narration": txt,
                         "start_sec": b_start,
                         "end_sec": b_end,
+                        "gender": "male",
+                        "character": "Narrator",
                         "emotion": "excited",
                         "visual_cue": f"Action Scene ({b_start}s - {b_end}s)"
                     })
