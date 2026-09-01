@@ -44,8 +44,17 @@ Running on **Google Colab** provides **Free NVIDIA T4 GPU (16GB VRAM)**, **1 Gbp
 
 ### 👫 6. AI Multi-Voice Character Dubbing & Action Narration Bridge
 * **Multi-Voice Dubbing:** Automatically assigns male characters to `my-MM-ThihaNeural` and female characters to `my-MM-NilarNeural`.
-* **Action Narration Bridge:** Detects non-verbal action scenes (>18s) and uses Gemini 2.0 Flash to synthesize engaging storyline narration so the audience never experiences silence.
+* **Action Narration Bridge:** Detects non-verbal action scenes (>18s) and uses **Gemini 3.5 Flash** to synthesize engaging storyline narration so the audience never experiences silence.
 * **Dynamic Audio Ducking:** Automatically lowers background ambient sound to 12% during speech and raises it back to 35% during pauses.
+
+### ⏱️ 7. Process Records Time & Live Stopwatch Dashboard
+* **Live Elapsed Stopwatch:** Real-time ticking stopwatch (`⏱️ 01:24`) on the Web UI dashboard during video processing.
+* **Phase Timing Badges:** Real-time breakdown of seconds spent on each pipeline stage (Video Analysis, Whisper STT, Gemini Script Translation, Voiceover Generation, and Video Merge).
+* **Historical Process Records:** Every completed output card permanently stores and displays its comprehensive duration table.
+
+### 🚀 8. Dedicated GPU Cloud Acceleration & Hybrid PC Fallback
+* **Google Colab Mode:** Dedicated **NVIDIA T4 GPU (16GB VRAM)** execution utilizing Whisper CUDA FP16 Tensor Cores, Demucs `-d cuda`, and FFmpeg NVENC (`h264_nvenc`) hardware encoder (10x faster).
+* **Local PC Mode:** Intelligent auto-detection of NVIDIA CUDA, Intel QuickSync (`h264_qsv`), and AMD AMF (`h264_amf`), with zero-error fallback to CPU Multi-core.
 
 ---
 
@@ -54,14 +63,14 @@ Running on **Google Colab** provides **Free NVIDIA T4 GPU (16GB VRAM)**, **1 Gbp
 ```text
 ai-translate-agent/
 ├── agents/
-│   ├── master.py              ← Pipeline orchestrator (Phases 1–7) & cancellation management
+│   ├── master.py              ← Pipeline orchestrator (Phases 1–7) & hardware/cancellation management
 │   ├── downloader_agent.py    ← Multi-platform downloader with EJS JS solver & Netscape cookies
 │   ├── video_agent.py         ← Video metadata: FPS, duration, resolution (OpenCV & FFprobe)
-│   ├── audio_agent.py         ← Audio extract + Fast Whisper STT (INT8 + VAD) + Demucs Vocal Isolation
-│   ├── writer_agent.py        ← 1:1 Dialogue Translation + Gender Tagging + Action Narration
-│   ├── seo_agent.py           ← Viral Title, Description, Tags, and Hashtags generator
+│   ├── audio_agent.py         ← Audio extract + Fast Whisper STT (CUDA FP16 / INT8) + Demucs GPU Isolation
+│   ├── writer_agent.py        ← 1:1 Dialogue Translation (Gemini 3.5 Flash) + Gender Tagging + Action Bridge
+│   ├── seo_agent.py           ← Viral Title, Description, Tags, and Hashtags generator (Gemini 3.5 Flash)
 │   ├── voice_agent.py         ← Multi-Voice TTS (Thiha Male / Nilar Female) & Time Stretch
-│   ├── video_merger_agent.py  ← Video Merger, Dynamic Audio Ducking, 9:16 Reels Canvas, ASS/SRT Exporter
+│   ├── video_merger_agent.py  ← Video Merger, Dynamic Audio Ducking, 9:16 Reels Canvas, NVENC/QSV Encoder
 │   ├── thumbnail_agent.py     ← High-CTR Golden Yellow Top-Center Thumbnail Generator
 │   └── qa_agent.py            ← Sync score & language naturalness QA review
 │
@@ -69,19 +78,19 @@ ai-translate-agent/
 │   ├── memory.py              ← Pydantic shared state (MovieState with atomic JSON persistence)
 │   ├── planner.py             ← Overnight Batch Processor with auto API key rotation
 │   ├── prompts.py             ← LLM prompt templates (Dialogue Translation, SEO, QA)
-│   ├── config.py              ← config.json loader with safe defaults
-│   ├── gemini_client.py       ← Gemini API client with Gemini 2.0 Flash priority & key rotation
+│   ├── config.py              ← config.json loader with Gemini 3.5 Flash defaults
+│   ├── gemini_client.py       ← Gemini API client with Gemini 3.5 Flash priority & key rotation
 │   └── sqlite_store.py        ← SQLite WAL-mode local database for movie states and job logs
 │
 ├── templates/
-│   └── index.html             ← Modern Glassmorphic Web UI Dashboard with live progress & controls
+│   └── index.html             ← Modern Glassmorphic Web UI Dashboard with Live Timer & Controls
 │
-├── web_ui.py                  ← FastAPI Web Dashboard (Direct Upload, Live SSE Logs, Force Stop API)
-├── AI_Movie_Translate_Colab.ipynb ← Official Google Colab One-Click Notebook
+├── web_ui.py                  ← FastAPI Web Dashboard (Direct Upload, Live Timing SSE Logs, Force Stop API)
+├── AI_Movie_Translate_Colab.ipynb ← Official Google Colab One-Click Dedicated GPU Notebook
 ├── config.json                ← Active runtime configuration (API keys, branding, models)
 ├── config.example.json        ← Default configuration template
 ├── cookies.txt                ← Netscape cookie file for YouTube, DramaBox, and ReelShort
-├── main.py                    ← CLI entry point
+├── main.py                    ← CLI entry point with --sub-mode and --resolution flags
 ├── requirements.txt           ← Python package dependencies
 ├── assets/                    ← Reference voice samples, cookies, and branding assets
 ├── movies/                    ← Place source video files here
