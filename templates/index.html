@@ -762,11 +762,25 @@
                 </select>
             </div>
             <div style="display:inline-flex; align-items:center; gap:0.5rem;">
-                <span class="strip-title" style="color:var(--muted); font-weight:700;">📜 Subtitle Mode:</span>
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">📝 Subtitle Mode:</span>
+                <select class="lang-select" id="select-hardsub-mode" style="padding:0.35rem 0.75rem; font-size:0.82rem; border-radius:8px;">
+                    <option value="burn" selected>🔥 Burn Subtitles (Hardsub - စာတန်းထိုး ထည့်မည်)</option>
+                    <option value="none">🎙️ Voiceover Only (No Subtitles - စာတန်းထိုး မထည့်ပါ)</option>
+                </select>
+            </div>
+            <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">⚙️ Resolution:</span>
+                <select class="lang-select" id="select-resolution" style="padding:0.35rem 0.75rem; font-size:0.82rem; border-radius:8px;">
+                    <option value="1080p" selected>🌟 1080p Full HD (Crisp / အကြည်လင်ဆုံး)</option>
+                    <option value="720p">⚡ 720p HD (Faster Render / အမြန်ဆုံး)</option>
+                </select>
+            </div>
+            <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">🔍 Subtitle Blur:</span>
                 <select class="lang-select" id="select-subtitle-mode" style="padding:0.35rem 0.75rem; font-size:0.82rem; border-radius:8px;">
-                    <option value="auto" selected>🔍 Auto-Detect Subtitles (Hybrid Native/Vision AI)</option>
-                    <option value="yes">📝 Has Subtitles (Force Blur)</option>
-                    <option value="no">🚫 No Subtitles (Disable Blur)</option>
+                    <option value="auto" selected>🤖 Auto-Detect (Native/Vision AI)</option>
+                    <option value="yes">📝 Force Blur</option>
+                    <option value="no">🚫 Disable Blur</option>
                 </select>
             </div>
             <div style="display:inline-flex; align-items:center; gap:0.5rem;">
@@ -1103,7 +1117,9 @@
         const input = document.getElementById('input-source').value.trim();
         if (!input) { showAlert('Please enter a video URL or local path.'); return; }
         const lang = document.getElementById('select-lang').value;
-        const subtitleMode = document.getElementById('select-subtitle-mode').value;
+        const hardsubMode = document.getElementById('select-hardsub-mode') ? document.getElementById('select-hardsub-mode').value : 'burn';
+        const resolution = document.getElementById('select-resolution') ? document.getElementById('select-resolution').value : '1080p';
+        const subtitleBlur = document.getElementById('select-subtitle-mode').value;
         const ttsEngine = document.getElementById('select-tts-engine').value;
         const customThumbTitle = (document.getElementById('input-thumb-title') && document.getElementById('input-thumb-title').value.trim()) || null;
         const watermarkEnabled = document.getElementById('chk-watermark') ? document.getElementById('chk-watermark').checked : true;
@@ -1126,7 +1142,8 @@
                 body: JSON.stringify({
                     input,
                     language: lang,
-                    subtitle_mode: subtitleMode,
+                    subtitle_mode: hardsubMode,
+                    resolution: resolution,
                     tts_engine: ttsEngine,
                     custom_thumb_title: customThumbTitle,
                     watermark_enabled: watermarkEnabled,
@@ -1158,7 +1175,9 @@
         if (!raw) { showAlert('Please paste at least one URL or path.'); return; }
         const inputs = raw.split('\n').map(s => s.trim()).filter(s => s.length > 0);
         const lang = document.getElementById('select-lang').value;
-        const subtitleMode = document.getElementById('select-subtitle-mode').value;
+        const hardsubMode = document.getElementById('select-hardsub-mode') ? document.getElementById('select-hardsub-mode').value : 'burn';
+        const resolution = document.getElementById('select-resolution') ? document.getElementById('select-resolution').value : '1080p';
+        const subtitleBlur = document.getElementById('select-subtitle-mode').value;
         const ttsEngine = document.getElementById('select-tts-engine').value;
         const customThumbTitle = (document.getElementById('input-thumb-title') && document.getElementById('input-thumb-title').value.trim()) || null;
         const watermarkEnabled = document.getElementById('chk-watermark') ? document.getElementById('chk-watermark').checked : true;
@@ -1178,7 +1197,8 @@
                 body: JSON.stringify({
                     inputs,
                     language: lang,
-                    subtitle_mode: subtitleMode,
+                    subtitle_mode: hardsubMode,
+                    resolution: resolution,
                     tts_engine: ttsEngine,
                     custom_thumb_title: customThumbTitle,
                     watermark_enabled: watermarkEnabled,

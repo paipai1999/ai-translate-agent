@@ -13,7 +13,8 @@ class BatchProcessor:
         movies_folder: str = "movies",
         skip_completed: bool = True,
         language: str = None,
-        subtitle_mode: str = "auto",
+        subtitle_mode: str = "burn",
+        resolution: str = "1080p",
         tts_engine: str = None,
         custom_thumb_title: str = None,
         watermark_enabled: bool = None,
@@ -25,6 +26,7 @@ class BatchProcessor:
         self.skip_completed = skip_completed
         self.language = language
         self.subtitle_mode = subtitle_mode
+        self.resolution = resolution or "1080p"
         self.tts_engine = tts_engine
         self.tts_voice = tts_voice
         self.custom_thumb_title = custom_thumb_title
@@ -112,6 +114,7 @@ class BatchProcessor:
                     movie_path,
                     language=self.language,
                     subtitle_mode=self.subtitle_mode,
+                    resolution=self.resolution,
                     tts_engine=self.tts_engine,
                     tts_voice=self.tts_voice,
                     custom_thumb_title=self.custom_thumb_title,

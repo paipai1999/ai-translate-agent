@@ -68,7 +68,8 @@ class MasterAgent:
         self,
         movie_path: str,
         language: str = None,
-        subtitle_mode: str = "auto",
+        subtitle_mode: str = "burn",
+        resolution: str = "1080p",
         tts_engine: str = None,
         custom_thumb_title: str = None,
         watermark_enabled: bool = None,
@@ -80,9 +81,13 @@ class MasterAgent:
         movie_name = os.path.splitext(os.path.basename(movie_path))[0]
         cfg = config.load_config()
 
+        self.subtitle_mode = str(subtitle_mode or "burn").lower()
+        self.resolution = str(resolution or "1080p").lower()
+
         self.state = MovieState(movie_name=movie_name)
         self.state.movie_path = movie_path
-        self.state.subtitle_mode = subtitle_mode or "auto"
+        self.state.subtitle_mode = self.subtitle_mode
+        self.state.resolution = self.resolution
         if custom_thumb_title:
             self.state.custom_thumb_title = custom_thumb_title.strip()
         if watermark_enabled is not None or watermark_text or watermark_opacity is not None:
@@ -144,6 +149,8 @@ class MasterAgent:
         self.video_merger    = VideoMergerAgent(
             output_dir=output_dir,
             subtitle_blur_override=self.subtitle_blur_override,
+            subtitle_mode=self.subtitle_mode,
+            resolution=self.resolution,
         )
         self.thumbnail_agent = ThumbnailAgent()
         self.qa_agent        = QAAgent(
@@ -352,6 +359,8 @@ class MasterAgent:
                             hook_title=hook_title,
                             subtitle_timings=sub_timings,
                             duration_sec=self.state.duration_sec,
+                            subtitle_mode=self.subtitle_mode,
+                            resolution=self.resolution,
                         )
                         self.state.reels_video_path = reels_path
                     except Exception as e:
