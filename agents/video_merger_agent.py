@@ -502,6 +502,7 @@ class VideoMergerAgent:
                     final_output,
                     codec=enc_info["codec"],
                     audio_codec='aac',
+                    bitrate='4500k',
                     preset=enc_info.get("preset", "faster"),
                     threads=4,
                     ffmpeg_params=["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-pix_fmt", "yuv420p", "-movflags", "+faststart"],
@@ -513,6 +514,7 @@ class VideoMergerAgent:
                     final_output,
                     codec='libx264',
                     audio_codec='aac',
+                    bitrate='4500k',
                     preset='superfast',
                     threads=4,
                     ffmpeg_params=["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-pix_fmt", "yuv420p", "-movflags", "+faststart"],
@@ -1344,6 +1346,7 @@ Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}
 
         codec = enc_info["codec"]
         preset = enc_info.get("preset", "faster")
+        quality_args = ["-b:v", "6M", "-maxrate", "9M", "-bufsize", "12M"] if enc_info["type"] == "gpu" else ["-crf", "20"]
         cmd = [
             ffmpeg_bin, "-y",
             "-i", abs_src,
@@ -1352,6 +1355,7 @@ Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}
             "-map", "0:a?",
             "-c:v", codec,
             "-preset", preset,
+            *quality_args,
             "-pix_fmt", "yuv420p",
             "-c:a", "copy",
             "-movflags", "+faststart",
