@@ -1002,6 +1002,18 @@ async def save_keys(req: SaveKeysRequest):
         cfg.save_config(config_data)
             
         print(f"[*] WebUI: Updated API keys in config.json ({len(cleaned_keys)} keys)")
+        # Permanent Google Drive Sync for Colab
+        drive_out = "/content/drive/MyDrive/MovieRecapOutputs"
+        if os.path.exists(drive_out):
+            try:
+                import shutil
+                shutil.copy2("config.json", os.path.join(drive_out, "config.json"))
+                if os.path.exists("database.db"):
+                    shutil.copy2("database.db", os.path.join(drive_out, "database.db"))
+                print("[*] WebUI: Permanently synced config.json and database.db to Google Drive!")
+            except Exception:
+                pass
+
         return {"success": True, "keys_count": len(cleaned_keys)}
     except Exception as e:
         print(f"[ERROR] Failed to save API keys: {e}")

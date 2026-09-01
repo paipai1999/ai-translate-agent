@@ -156,9 +156,106 @@ class WriterAgent:
                     "visual_cue": f"Dialogue ({seg['start_sec']}s - {seg['end_sec']}s): {seg['text'][:40]}..."
                 })
 
+        # 3. Action Narration Bridge: Bridge silent or long action gaps (> 18s)
+        if gemini_key:
+            all_translated = self._bridge_action_narration(all_translated, state, gemini_key, model_workhorse)
+
         state.generated_script = all_translated
         print(f"[OK] WriterAgent: 100% Full Movie Dialogue Translation complete! Total {len(all_translated)} dialogue lines dubbed.")
         return state
+
+    def _bridge_action_narration(self, blocks: list, state: MovieState, gemini_key: str, model: str) -> list:
+        """
+        Bridges silent or long action gaps (> 18s) with engaging Burmese movie recap narration.
+        Turns quiet combat, chase, or suspense sequences into a lively, continuous story recap.
+        """
+        if not blocks or not gemini_key:
+            return blocks
+
+        config_data = cfg.load_config()
+        action_cfg = config_data.get("action_narration", {})
+        if not action_cfg.get("enabled", True):
+            return blocks
+
+        min_gap = float(action_cfg.get("min_gap_sec", 18.0))
+        blocks = sorted(blocks, key=lambda x: float(x.get("start_sec", 0.0)))
+        
+        bridge_candidates = []
+        first_start = float(blocks[0].get("start_sec", 0.0))
+        if first_start >= min_gap:
+            bridge_candidates.append({
+                "pos_idx": 0,
+                "gap_start": 2.0,
+                "gap_end": first_start - 1.0,
+                "gap_dur": first_start - 3.0,
+                "prev_text": "Movie opening introduction",
+                "next_text": blocks[0].get("narration", "")[:60]
+            })
+
+        for i in range(len(blocks) - 1):
+            curr_end = float(blocks[i].get("end_sec", 0.0))
+            next_start = float(blocks[i+1].get("start_sec", 0.0))
+            gap = next_start - curr_end
+            if gap >= min_gap:
+                bridge_candidates.append({
+                    "pos_idx": i + 1,
+                    "gap_start": curr_end + 1.5,
+                    "gap_end": next_start - 1.5,
+                    "gap_dur": gap,
+                    "prev_text": blocks[i].get("narration", "")[:80],
+                    "next_text": blocks[i+1].get("narration", "")[:80]
+                })
+
+        if not bridge_candidates:
+            return blocks
+
+        print(f"[*] WriterAgent (Action Narration): Detected {len(bridge_candidates)} silent/action sequences (> {min_gap}s). Generating recap narration...")
+
+        new_blocks = list(blocks)
+        added_count = 0
+        for cand in bridge_candidates[:10]:
+            prompt = (
+                f"Movie Title: {state.movie_name}\n"
+                f"In this movie recap, there is an action or suspense sequence lasting {int(cand['gap_dur'])} seconds without dialogue.\n"
+                f"Previous dialogue: '{cand['prev_text']}'\n"
+                f"Upcoming dialogue: '{cand['next_text']}'\n\n"
+                f"Write a short, engaging 1-2 sentence narrator recap in natural colloquial Myanmar (Burmese) "
+                f"describing what happens in the scene or setting up the tension (e.g. 'အဲဒီနောက်...', 'အဲဒီအချိန်မှာ...').\n"
+                f"RULES:\n"
+                f"- Max 20 words.\n"
+                f"- Conversational recap style (use ...တယ်, ...တာပေါ့, ...ဗျာ, ...ကွာ).\n"
+                f"- NO formal written Burmese (no ပါသည်, သည်, ၏, ၍).\n"
+                f"- Return ONLY the Burmese text."
+            )
+            try:
+                res, _ = call_gemini(
+                    "You are an expert Burmese movie recap channel narrator.",
+                    prompt,
+                    gemini_key,
+                    model=model,
+                    temperature=0.4,
+                    max_tokens=150
+                )
+                txt = res.strip().strip('"').strip("'").strip()
+                if txt and len(txt) > 4 and "```" not in txt:
+                    bridge_dur = min(cand["gap_dur"] - 2.0, 5.5)
+                    b_start = round(cand["gap_start"], 2)
+                    b_end = round(b_start + max(bridge_dur, 3.0), 2)
+                    new_blocks.append({
+                        "scene_id": f"action_bridge_{added_count+1}",
+                        "narration": txt,
+                        "start_sec": b_start,
+                        "end_sec": b_end,
+                        "emotion": "excited",
+                        "visual_cue": f"Action Scene ({b_start}s - {b_end}s)"
+                    })
+                    added_count += 1
+            except Exception as e:
+                print(f"[WARN] WriterAgent: Action narration failed for gap at {cand['gap_start']}s: {e}")
+
+        new_blocks.sort(key=lambda x: float(x.get("start_sec", 0.0)))
+        print(f"[OK] WriterAgent (Action Narration): Successfully bridged {added_count} action scenes with lively Burmese commentary!")
+        return new_blocks
 
 
     # ─────────────────────────────────────────────────────

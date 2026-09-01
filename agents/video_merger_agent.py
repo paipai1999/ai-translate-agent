@@ -363,10 +363,11 @@ class VideoMergerAgent:
                     
                 sfx_cfg = config_data.get("sfx", {})
                 
-                # Regardless of no_vocals, the BGM/SFX in these mini-dramas is extremely loud.
-                # Lowering the volume to 15% (0.15) to ensure Burmese TTS is perfectly clear.
-                sfx_vol = 0.15
-                print(f"[*] VideoMerger: Lowering background audio volume to {sfx_vol*100}% to prevent drowning out TTS.")
+                # Dynamic Audio Ducking: lowers BGM/SFX when narrator speaks, swells during action pauses
+                duck_cfg = config_data.get("audio_ducking", {})
+                duck_enabled = duck_cfg.get("enabled", True)
+                duck_vol = float(duck_cfg.get("duck_volume", 0.12))
+                ambient_vol = float(duck_cfg.get("ambient_volume", 0.35))
                 
                 try:
                     from moviepy import CompositeAudioClip
@@ -374,21 +375,37 @@ class VideoMergerAgent:
                     from moviepy.editor import CompositeAudioClip
 
                 try:
-                    # Lower original audio (which is now SFX only if no_vocals exists) volume
                     orig_audio = main_video.audio
                     if orig_audio is not None:
-                        try:
-                            # MoviePy v2
-                            from moviepy.audio.fx.MultiplyVolume import MultiplyVolume
-                            orig_audio = orig_audio.with_effects([MultiplyVolume(sfx_vol)])
-                        except ImportError:
+                        if duck_enabled and positioned_clips:
+                            import numpy as np
+                            speech_intervals = [
+                                (float(getattr(c, "start", 0.0) or 0.0), float(getattr(c, "start", 0.0) or 0.0) + float(getattr(c, "duration", 0.0) or 0.0))
+                                for c in positioned_clips
+                            ]
+                            print(f"[*] VideoMerger (Dynamic Audio Ducking): Ducking BGM to {duck_vol*100:.0f}% during speech, ambient swells to {ambient_vol*100:.0f}% across {len(speech_intervals)} dialogue segments.")
                             try:
-                                # MoviePy v1
-                                import moviepy.audio.fx.all as afx
-                                orig_audio = afx.volumex(orig_audio, sfx_vol)
-                            except Exception:
-                                if hasattr(orig_audio, 'volumex'):
-                                    orig_audio = orig_audio.volumex(sfx_vol)
+                                def duck_transform(get_frame, t):
+                                    frame = get_frame(t)
+                                    if np.isscalar(t):
+                                        is_speech = any(s - 0.25 <= t <= e + 0.25 for s, e in speech_intervals)
+                                        return (duck_vol if is_speech else ambient_vol) * frame
+                                    else:
+                                        vol = np.full(t.shape[0], ambient_vol, dtype=float)
+                                        for s, e in speech_intervals:
+                                            vol[(t >= (s - 0.25)) & (t <= (e + 0.25))] = duck_vol
+                                        if hasattr(frame, 'ndim') and frame.ndim == 2:
+                                            return vol[:, np.newaxis] * frame
+                                        return vol * frame
+
+                                orig_audio = orig_audio.transform(duck_transform)
+                            except Exception as duck_err:
+                                print(f"[WARN] VideoMerger: Dynamic ducking transform fallback: {duck_err}")
+                                from moviepy.audio.fx.MultiplyVolume import MultiplyVolume
+                                orig_audio = orig_audio.with_effects([MultiplyVolume(duck_vol)])
+                        else:
+                            from moviepy.audio.fx.MultiplyVolume import MultiplyVolume
+                            orig_audio = orig_audio.with_effects([MultiplyVolume(duck_vol)])
 
                     # Mix original audio with positioned voiceover clips only if vocals were removed
                     if orig_audio is not None and has_no_vocals:

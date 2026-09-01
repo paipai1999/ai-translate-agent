@@ -79,5 +79,15 @@
     "font_size": 52,
     "safe_zone_margin": 160
   },
+  "action_narration": {
+    "enabled": true,
+    "min_gap_sec": 18.0,
+    "max_bridge_duration_sec": 6.0
+  },
+  "audio_ducking": {
+    "enabled": true,
+    "duck_volume": 0.12,
+    "ambient_volume": 0.35
+  },
   "logging": {"level": "INFO", "save_log_file": true}
 }
