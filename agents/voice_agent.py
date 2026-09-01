@@ -282,18 +282,30 @@ class VoiceAgent:
         for idx, item in enumerate(state.generated_script):
             narration = item.get("narration", "").strip()
             emotion = item.get("emotion", "normal").lower()
-            gender = str(item.get("gender", "Unknown")).strip().lower()
+            gender = str(item.get("gender", "male")).strip().lower()
+            character = str(item.get("character", "Narrator")).strip()
             scene_id = item.get("scene_id", idx + 1)
             if not narration:
                 continue
             
-            is_myanmar = str(self.voice).startswith("my-")
+            is_myanmar = str(self.voice).startswith("my-") or getattr(self, "language", "") == "burmese"
             voice_override = self.voice
             if is_myanmar:
-                if gender == "female":
+                if self.voice == "my-MM-NilarNeural":
                     voice_override = "my-MM-NilarNeural"
+                elif gender == "female":
+                    voice_override = "my-MM-NilarNeural"
+                    print(f"    👩 [Multi-Voice]: Block {idx+1} ({character}) -> Female Voice (my-MM-NilarNeural)")
                 else:
                     voice_override = "my-MM-ThihaNeural"
+            else:
+                if self.voice == "en-US-JennyNeural":
+                    voice_override = "en-US-JennyNeural"
+                elif gender == "female":
+                    voice_override = "en-US-JennyNeural"
+                    print(f"    👩 [Multi-Voice]: Block {idx+1} ({character}) -> Female Voice (en-US-JennyNeural)")
+                else:
+                    voice_override = "en-US-GuyNeural"
             
             selected_rate = self.rate_mm if str(voice_override).startswith("my-") else self.rate_en
             

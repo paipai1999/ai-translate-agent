@@ -19,12 +19,14 @@ class BatchProcessor:
         watermark_enabled: bool = None,
         watermark_text: str = None,
         watermark_opacity: float = None,
+        tts_voice: str = None,
     ):
         self.movies_folder = movies_folder
         self.skip_completed = skip_completed
         self.language = language
         self.subtitle_mode = subtitle_mode
         self.tts_engine = tts_engine
+        self.tts_voice = tts_voice
         self.custom_thumb_title = custom_thumb_title
         self.watermark_enabled = watermark_enabled
         self.watermark_text = watermark_text
@@ -107,6 +109,7 @@ class BatchProcessor:
                     language=self.language,
                     subtitle_mode=self.subtitle_mode,
                     tts_engine=self.tts_engine,
+                    tts_voice=self.tts_voice,
                     custom_thumb_title=self.custom_thumb_title,
                     watermark_enabled=self.watermark_enabled,
                     watermark_text=self.watermark_text,

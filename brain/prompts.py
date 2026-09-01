@@ -174,11 +174,14 @@ CRITICAL TRANSLATION RULES:
 
 5. ⏱️ TIMING & JSON STRUCTURE:
    - For each item, keep "id", "start_sec", and "end_sec" EXACTLY as given in the input.
+   - Accurately infer whether the speaker is female or male from dialogue context (pronouns, voice tone, conversational role).
    - Return a JSON array of objects with:
      - "id": same as input id
      - "narration": natural Burmese translated dialogue with natural pauses (၊)
      - "start_sec": float start time
      - "end_sec": float end time
+     - "gender": "female" if spoken by a woman/girl, or "male" if spoken by a man/boy/narrator
+     - "character": inferred speaker role (e.g. "Female Lead", "Hero", "Villain", "Narrator")
      - "emotion": "angry", "sad", "excited", "scared", "intense", or "normal"
 
 Return ONLY a valid JSON array. No markdown code fences, no extra text."""

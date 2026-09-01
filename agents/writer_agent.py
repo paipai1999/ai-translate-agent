@@ -125,10 +125,14 @@ class WriterAgent:
                     item = trans_map[s_id]
                     narration = str(item.get("narration", "")).strip()
                     emotion = str(item.get("emotion", "normal")).strip()
+                    gender = str(item.get("gender", "male")).strip().lower()
+                    character = str(item.get("character", "Narrator")).strip()
                 else:
                     # Individual line fallback if dropped by Gemini
                     narration = seg["text"]
                     emotion = "normal"
+                    gender = "male"
+                    character = "Narrator"
                     if gemini_key:
                         try:
                             line_res, _ = call_gemini(
@@ -142,6 +146,8 @@ class WriterAgent:
                             line_parsed = self._parse_script(line_res)
                             if line_parsed and isinstance(line_parsed, list) and line_parsed[0].get("narration"):
                                 narration = line_parsed[0]["narration"]
+                                gender = str(line_parsed[0].get("gender", "male")).strip().lower()
+                                character = str(line_parsed[0].get("character", "Narrator")).strip()
                             elif line_res and "{" not in line_res and "[" not in line_res:
                                 narration = line_res.strip().strip('"').strip("'")
                         except Exception:
@@ -152,6 +158,8 @@ class WriterAgent:
                     "narration": narration,
                     "start_sec": seg["start_sec"],
                     "end_sec": seg["end_sec"],
+                    "gender": gender,
+                    "character": character,
                     "emotion": emotion,
                     "visual_cue": f"Dialogue ({seg['start_sec']}s - {seg['end_sec']}s): {seg['text'][:40]}..."
                 })

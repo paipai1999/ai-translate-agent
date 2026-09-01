@@ -74,6 +74,7 @@ class MasterAgent:
         watermark_enabled: bool = None,
         watermark_text: str = None,
         watermark_opacity: float = None,
+        tts_voice: str = None,
     ):
         self.movie_path = movie_path
         movie_name = os.path.splitext(os.path.basename(movie_path))[0]
@@ -110,7 +111,9 @@ class MasterAgent:
         is_burmese     = self.language.lower() in ["burmese", "mm", "myanmar"]
         self.tts_engine = tts_engine or os.getenv("TTS_ENGINE") or cfg.get("voice", {}).get("engine", "edge_tts")
 
-        if is_burmese:
+        if tts_voice:
+            self.tts_voice = tts_voice
+        elif is_burmese:
             self.tts_voice = (
                 cfg["voice"].get("myanmar_voice")
                 or cfg["voice"].get("tts_voice_mm")

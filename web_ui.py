@@ -213,11 +213,34 @@ def pipeline_worker(
                 jobs[job_id]['phase'] = 'Processing Local File...'
             movie_path = _resolve_input_source(input_source)
         
+        # Multi-Voice Mapping
+        tts_voice_override = None
+        clean_lang = language
+        if language == "burmese_thiha":
+            clean_lang = "burmese"
+            tts_voice_override = "my-MM-ThihaNeural"
+        elif language == "burmese_nilar":
+            clean_lang = "burmese"
+            tts_voice_override = "my-MM-NilarNeural"
+        elif language == "burmese":
+            clean_lang = "burmese"
+            tts_voice_override = "my-MM-ThihaNeural"  # Auto multi-voice enabled
+        elif language == "english_guy":
+            clean_lang = "english"
+            tts_voice_override = "en-US-GuyNeural"
+        elif language == "english_jenny":
+            clean_lang = "english"
+            tts_voice_override = "en-US-JennyNeural"
+        elif language == "english":
+            clean_lang = "english"
+            tts_voice_override = "en-US-GuyNeural"    # Auto multi-voice enabled
+
         master = MasterAgent(
             movie_path,
-            language=language,
+            language=clean_lang,
             subtitle_mode=subtitle_mode,
             tts_engine=tts_engine,
+            tts_voice=tts_voice_override,
             custom_thumb_title=custom_thumb_title,
             watermark_enabled=watermark_enabled,
             watermark_text=watermark_text,
@@ -274,12 +297,35 @@ def batch_worker(
     try:
         urls = [i for i in inputs_list if DownloaderAgent.is_url(i)]
         local_paths = [_resolve_input_source(i) for i in inputs_list if not DownloaderAgent.is_url(i)]
+        # Multi-Voice Mapping
+        tts_voice_override = None
+        clean_lang = language
+        if language == "burmese_thiha":
+            clean_lang = "burmese"
+            tts_voice_override = "my-MM-ThihaNeural"
+        elif language == "burmese_nilar":
+            clean_lang = "burmese"
+            tts_voice_override = "my-MM-NilarNeural"
+        elif language == "burmese":
+            clean_lang = "burmese"
+            tts_voice_override = "my-MM-ThihaNeural"
+        elif language == "english_guy":
+            clean_lang = "english"
+            tts_voice_override = "en-US-GuyNeural"
+        elif language == "english_jenny":
+            clean_lang = "english"
+            tts_voice_override = "en-US-JennyNeural"
+        elif language == "english":
+            clean_lang = "english"
+            tts_voice_override = "en-US-GuyNeural"
+
         processor = BatchProcessor(
             movies_folder="movies",
             skip_completed=True,
-            language=language,
+            language=clean_lang,
             subtitle_mode=subtitle_mode,
             tts_engine=tts_engine,
+            tts_voice=tts_voice_override,
             custom_thumb_title=custom_thumb_title,
             watermark_enabled=watermark_enabled,
             watermark_text=watermark_text,
