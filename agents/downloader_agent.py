@@ -66,7 +66,7 @@ class DownloaderAgent:
 
         # Configure yt-dlp options prioritizing 1080p / 720p Full HD resolution
         ydl_opts = {
-            'format': 'bestvideo[height<=1080][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
+            'format': 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best',
             'outtmpl': os.path.join(self.output_dir, '%(title)s.%(ext)s'),
             'restrictfilenames': True,  # Ensure clean filenames without weird symbols
             'noplaylist': True,
@@ -77,7 +77,8 @@ class DownloaderAgent:
             'sleep_interval': 2,
             'socket_timeout': 60,       # Increase socket timeout to 60 seconds
             'http_chunk_size': 10485760,# 10MB chunk size to prevent throttling freeze
-            'extractor_args': {'youtube': {'player_client': ['mweb', 'android', 'web']}}
+            'remote_components': ['ejs:github'],
+            'js_runtimes': {'node': {}},
         }
         if active_cookie:
             ydl_opts['cookiefile'] = active_cookie
