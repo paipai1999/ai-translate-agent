@@ -92,6 +92,10 @@ class BatchProcessor:
 
         # Step 3: Process each movie sequentially
         for idx, movie_path in enumerate(movies, 1):
+            if os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+                print(f"\n🛑 [STOP] Batch processing cancelled by user at item {idx}/{total}.")
+                break
+
             movie_name = os.path.splitext(os.path.basename(movie_path))[0]
             print(f"\n{'='*55}")
             print(f"[{idx}/{total}] Processing: {movie_name}")

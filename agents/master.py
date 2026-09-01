@@ -435,6 +435,9 @@ class MasterAgent:
             sys.stderr = orig_stderr
 
     def _phase(self, label: str, progress: int = 0):
+        if os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+            print(f"\n🛑 [STOP] MasterAgent: Pipeline force-stopped by user at {label}.")
+            raise InterruptedError(f"Pipeline force-stopped by user at {label}.")
         print(f"\n--- [{label}] ---")
         self.state.current_phase = label
         if progress > 0:

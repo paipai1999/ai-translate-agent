@@ -178,6 +178,7 @@ def pipeline_worker(
     reels_enabled=True,
 ):
     current_job_id.set(job_id)
+    os.environ["CURRENT_JOB_CANCELLED"] = "0"
     if reels_enabled is False:
         os.environ["DISABLE_REELS"] = "true"
         os.environ.pop("ENABLE_REELS", None)
@@ -247,26 +248,48 @@ def pipeline_worker(
             watermark_opacity=watermark_opacity,
         )
         master.run_pipeline()
-        with jobs_lock:
-            jobs[job_id]['status'] = 'done'
-        try:
-            from brain.sqlite_store import update_job
-            update_job(job_id, status='done', phase='Done')
-        except Exception:
-            pass
+        
+        if os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+            with jobs_lock:
+                jobs[job_id]['status'] = 'cancelled'
+                jobs[job_id]['phase'] = 'Stopped by user'
+            try:
+                from brain.sqlite_store import update_job
+                update_job(job_id, status='cancelled', phase='Stopped by user')
+            except Exception:
+                pass
+        else:
+            with jobs_lock:
+                jobs[job_id]['status'] = 'done'
+            try:
+                from brain.sqlite_store import update_job
+                update_job(job_id, status='done', phase='Done')
+            except Exception:
+                pass
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        with jobs_lock:
-            jobs[job_id]['status'] = 'error'
-        try:
-            from brain.sqlite_store import update_job
-            update_job(job_id, status='error', phase='Error')
-        except Exception:
-            pass
+        is_cancel = isinstance(e, (InterruptedError, KeyboardInterrupt)) or (os.environ.get("CURRENT_JOB_CANCELLED") == "1")
+        if is_cancel:
+            print(f"\n🛑 [STOP] Job {job_id} was force-stopped by user.")
+            with jobs_lock:
+                jobs[job_id]['status'] = 'cancelled'
+                jobs[job_id]['phase'] = 'Stopped by user'
+            try:
+                from brain.sqlite_store import update_job
+                update_job(job_id, status='cancelled', phase='Stopped by user')
+            except Exception:
+                pass
+        else:
+            import traceback
+            traceback.print_exc()
+            with jobs_lock:
+                jobs[job_id]['status'] = 'error'
+            try:
+                from brain.sqlite_store import update_job
+                update_job(job_id, status='error', phase='Error')
+            except Exception:
+                pass
     finally:
-        # BUG-C3 Fix: Free log buffer immediately on job end (not after 2-hour JOB_RETENTION).
-        # subscriber list and job metadata are still cleaned by _cleanup_old_jobs() later.
+        # Free log buffer immediately on job end
         if hasattr(thread_stdout, 'buffers'):
             thread_stdout.buffers.pop(job_id, None)
 
@@ -284,6 +307,7 @@ def batch_worker(
 ):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
+    os.environ["CURRENT_JOB_CANCELLED"] = "0"
     if reels_enabled is False:
         os.environ["DISABLE_REELS"] = "true"
         os.environ.pop("ENABLE_REELS", None)
@@ -341,25 +365,48 @@ def batch_worker(
         )
         print(f"[*] Batch Mode: Starting batch run for {len(inputs_list)} item(s)...")
         processor.process_all(url_list=urls, local_paths=local_paths)
-        with jobs_lock:
-            jobs[job_id]['status'] = 'done'
-        try:
-            from brain.sqlite_store import update_job
-            update_job(job_id, status='done', phase='Done')
-        except Exception:
-            pass
+        
+        if os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+            with jobs_lock:
+                jobs[job_id]['status'] = 'cancelled'
+                jobs[job_id]['phase'] = 'Stopped by user'
+            try:
+                from brain.sqlite_store import update_job
+                update_job(job_id, status='cancelled', phase='Stopped by user')
+            except Exception:
+                pass
+        else:
+            with jobs_lock:
+                jobs[job_id]['status'] = 'done'
+            try:
+                from brain.sqlite_store import update_job
+                update_job(job_id, status='done', phase='Done')
+            except Exception:
+                pass
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        with jobs_lock:
-            jobs[job_id]['status'] = 'error'
-        try:
-            from brain.sqlite_store import update_job
-            update_job(job_id, status='error', phase='Error')
-        except Exception:
-            pass
+        is_cancel = isinstance(e, (InterruptedError, KeyboardInterrupt)) or (os.environ.get("CURRENT_JOB_CANCELLED") == "1")
+        if is_cancel:
+            print(f"\n🛑 [STOP] Batch job {job_id} was force-stopped by user.")
+            with jobs_lock:
+                jobs[job_id]['status'] = 'cancelled'
+                jobs[job_id]['phase'] = 'Stopped by user'
+            try:
+                from brain.sqlite_store import update_job
+                update_job(job_id, status='cancelled', phase='Stopped by user')
+            except Exception:
+                pass
+        else:
+            import traceback
+            traceback.print_exc()
+            with jobs_lock:
+                jobs[job_id]['status'] = 'error'
+            try:
+                from brain.sqlite_store import update_job
+                update_job(job_id, status='error', phase='Error')
+            except Exception:
+                pass
     finally:
-        # BUG-C3 Fix: Free log buffer immediately on batch job end.
+        # Free log buffer immediately on batch job end
         if hasattr(thread_stdout, 'buffers'):
             thread_stdout.buffers.pop(job_id, None)
 
@@ -582,6 +629,42 @@ async def start_batch_pipeline(req: BatchStartRequest):
     )
     t.start()
     return {"job_id": job_id}
+
+@app.post("/api/stop")
+@app.post("/api/cancel")
+@app.post("/api/cancel/{job_id}")
+async def stop_pipeline(job_id: Optional[str] = None):
+    """Force-stop any currently running single or batch pipeline job."""
+    stopped_count = 0
+    os.environ["CURRENT_JOB_CANCELLED"] = "1"
+    
+    with jobs_lock:
+        target_jids = [job_id] if (job_id and job_id in jobs) else [jid for jid, j in jobs.items() if j.get("status") == "running"]
+        for jid in target_jids:
+            if jid in jobs:
+                jobs[jid]["status"] = "cancelled"
+                jobs[jid]["phase"] = "Stopped by user"
+                stopped_count += 1
+                try:
+                    from brain.sqlite_store import update_job
+                    update_job(jid, status="cancelled", phase="Stopped by user")
+                except Exception:
+                    pass
+                print(f"\n🛑 [STOP] Force-stop signal received! Cancelled job {jid}.")
+
+    # Terminate any spawned ffmpeg / yt-dlp child subprocesses if lingering
+    try:
+        import subprocess, sys
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/F", "/IM", "ffmpeg.exe", "/T"], capture_output=True)
+            subprocess.run(["taskkill", "/F", "/IM", "ffprobe.exe", "/T"], capture_output=True)
+        else:
+            subprocess.run(["pkill", "-f", "ffmpeg"], capture_output=True)
+            subprocess.run(["pkill", "-f", "ffprobe"], capture_output=True)
+    except Exception:
+        pass
+
+    return {"success": True, "stopped_count": stopped_count, "message": "Pipeline force-stopped successfully."}
 
 @app.get("/api/config/branding")
 async def get_branding_config():

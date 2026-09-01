@@ -854,14 +854,20 @@
             <div class="log-box" id="log-box">Waiting for pipeline to start...</div>
         </div>
 
-        <div style="display: flex; align-items: center; flex-wrap: wrap;">
-            <div id="status-pill" class="status-pill running">
-                <span class="pulse-dot" id="status-dot"></span>
-                <span id="status-text">Starting...</span>
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.75rem;">
+            <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                <div id="status-pill" class="status-pill running">
+                    <span class="pulse-dot" id="status-dot"></span>
+                    <span id="status-text">Starting...</span>
+                </div>
+                <div id="batch-progress-pill" class="status-pill" style="display:none; background:rgba(59,130,246,0.2); color:#93c5fd; border:1px solid rgba(59,130,246,0.4);">
+                    <span id="batch-status-text"></span>
+                </div>
             </div>
-            <div id="batch-progress-pill" class="status-pill" style="display:none; background:rgba(59,130,246,0.2); color:#93c5fd; border:1px solid rgba(59,130,246,0.4); margin-left:0.75rem;">
-                <span id="batch-status-text"></span>
-            </div>
+            
+            <button id="btn-force-stop" class="btn-danger" style="background: linear-gradient(135deg, #ef4444, #b91c1c); color: white; border: none; padding: 0.5rem 1.2rem; border-radius: 8px; font-weight: 700; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35); transition: all 0.2s ease;" onclick="forceStopPipeline()" title="Immediately halt and cancel video generation">
+                🛑 Force Stop Pipeline
+            </button>
         </div>
     </div>
 
@@ -1269,6 +1275,12 @@
                             document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
                             document.getElementById('btn-batch').disabled = false;
                             loadOutputs(); loadMovies();
+                        } else if (data.status === 'cancelled') {
+                            setStatus('cancelled', '🛑 Stopped by user');
+                            document.getElementById('log-box-wrap').classList.remove('running');
+                            document.getElementById('btn-start').disabled = false;
+                            document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
+                            document.getElementById('btn-batch').disabled = false;
                         } else {
                             setStatus('error', '❌ Pipeline Error');
                             document.getElementById('log-box-wrap').classList.remove('running');
@@ -1290,6 +1302,46 @@
                 };
             } catch (err) {
                 console.warn('EventSource init error:', err);
+            }
+        }
+    }
+
+    // ── Force Stop Pipeline Function ──
+    async function forceStopPipeline() {
+        if (!confirm("Are you sure you want to force-stop the running video pipeline?")) return;
+        const btn = document.getElementById('btn-force-stop');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Stopping...';
+        }
+        try {
+            const res = await fetch('/api/stop', { method: 'POST' });
+            const data = await res.json();
+            showAlert('🛑 ' + (data.message || 'Pipeline force-stopped successfully.'));
+            setStatus('cancelled', '🛑 Stopped by user');
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            if (pollTimer) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+            document.getElementById('log-box-wrap').classList.remove('running');
+            const startBtn = document.getElementById('btn-start');
+            const startBtnText = document.getElementById('btn-start-text');
+            if (startBtn) {
+                startBtn.disabled = false;
+                if (startBtnText) startBtnText.textContent = '▶ Start Pipeline';
+            }
+            const batchBtn = document.getElementById('btn-batch');
+            if (batchBtn) batchBtn.disabled = false;
+        } catch (e) {
+            showAlert('Failed to stop pipeline: ' + e.message);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '🛑 Force Stop Pipeline';
             }
         }
     }
@@ -1332,6 +1384,14 @@
                 document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
                 document.getElementById('btn-batch').disabled = false;
                 loadOutputs(); loadMovies();
+            } else if (data.status === 'cancelled') {
+                clearInterval(pollTimer);
+                setStatus('cancelled', '🛑 Stopped by user');
+                document.getElementById('log-box-wrap').classList.remove('running');
+
+                document.getElementById('btn-start').disabled = false;
+                document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
+                document.getElementById('btn-batch').disabled = false;
             } else if (data.status === 'error') {
                 clearInterval(pollTimer);
                 setStatus('error', '❌ Pipeline Error');
