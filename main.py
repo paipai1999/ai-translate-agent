@@ -199,6 +199,20 @@ def main():
         help="Disable export of 9:16 Facebook Reels video"
     )
     parser.add_argument(
+        "--sub-mode", "--subtitle-mode",
+        dest="sub_mode",
+        choices=["burn", "none", "auto"],
+        default="burn",
+        help="Subtitle mode: 'burn' (burn hardsub on video) or 'none' (voiceover only + separate SRT)"
+    )
+    parser.add_argument(
+        "--res", "--resolution",
+        dest="resolution",
+        choices=["1080p", "720p"],
+        default="1080p",
+        help="Video resolution preset: '1080p' (Full HD) or '720p' (Fast render HD)"
+    )
+    parser.add_argument(
         "--clean",
         action="store_true",
         help="Interactive cleanup menu to delete old source videos or generated outputs"
@@ -248,10 +262,12 @@ def main():
                 sys.exit(1)
 
         try:
+            sub_mode = "burn" if args.subtitle else (args.sub_mode or "burn")
             master = MasterAgent(
                 movie_path,
                 language=args.language,
-                subtitle_mode="burn" if args.subtitle else "auto",
+                subtitle_mode=sub_mode,
+                resolution=args.resolution,
                 tts_engine=args.engine,
                 custom_thumb_title=args.thumb_title,
                 watermark_enabled=False if args.no_watermark else True,
@@ -269,10 +285,13 @@ def main():
         print("[BATCH] Processing all videos in movies/ folder...")
         conf = cfg.load_config()
         skip = conf.get("batch", {}).get("skip_completed", True) and not args.force
+        sub_mode = "burn" if args.subtitle else (args.sub_mode or "burn")
         BatchProcessor(
             movies_folder=conf.get("batch", {}).get("movies_folder", "movies"),
             skip_completed=skip,
             language=args.language,
+            subtitle_mode=sub_mode,
+            resolution=args.resolution,
             tts_engine=args.engine,
             custom_thumb_title=args.thumb_title,
             watermark_enabled=False if args.no_watermark else True,
@@ -284,10 +303,13 @@ def main():
         print(f"[BATCH] URL Batch Mode: {len(args.urls)} video(s) to download & process...")
         conf = cfg.load_config()
         skip = conf.get("batch", {}).get("skip_completed", True) and not args.force
+        sub_mode = "burn" if args.subtitle else (args.sub_mode or "burn")
         BatchProcessor(
             movies_folder=conf.get("batch", {}).get("movies_folder", "movies"),
             skip_completed=skip,
             language=args.language,
+            subtitle_mode=sub_mode,
+            resolution=args.resolution,
             tts_engine=args.engine,
             custom_thumb_title=args.thumb_title,
             watermark_enabled=False if args.no_watermark else True,
