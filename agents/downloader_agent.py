@@ -18,8 +18,18 @@ class DownloaderAgent:
         )
         return bool(url_pattern.match(input_string.strip()))
 
+    @staticmethod
+    def _clean_url(url: str) -> str:
+        """Strips tracking parameters (?si=..., &feature=...) and formats clean canonical YouTube URL."""
+        url = str(url or "").strip()
+        m = re.search(r'(?:v=|\/|youtu\.be\/)([0-9A-Za-z_-]{11})', url)
+        if m:
+            return f"https://www.youtube.com/watch?v={m.group(1)}"
+        return url
+
     def download_video(self, url: str) -> str:
         """Download video from URL using yt-dlp and return the local file path."""
+        url = self._clean_url(url)
         print(f"[*] DownloaderAgent: URL detected -> {url}")
         print(f"[*] DownloaderAgent: Downloading video into '{self.output_dir}/'...")
         
@@ -67,6 +77,7 @@ class DownloaderAgent:
             'sleep_interval': 2,
             'socket_timeout': 60,       # Increase socket timeout to 60 seconds
             'http_chunk_size': 10485760,# 10MB chunk size to prevent throttling freeze
+            'extractor_args': {'youtube': {'player_client': ['mweb', 'android', 'web']}}
         }
         if active_cookie:
             ydl_opts['cookiefile'] = active_cookie
@@ -89,21 +100,20 @@ class DownloaderAgent:
         ydl_opts['progress_hooks'] = [_dl_progress]
 
         max_attempts = 3
+        last_error = None
         for attempt in range(1, max_attempts + 1):
             try:
-                # Attempt 1: Crisp 1080p/720p using standard multi-client
-                # Attempt 2: If datacenter bot challenge, fallback to Android mobile client
                 if attempt == 2:
-                    print("[*] DownloaderAgent: Attempting with mobile Android client fallback...")
-                    ydl_opts['format'] = 'bestvideo[height<=720]+bestaudio/best'
-                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['android']}}
+                    print("[*] DownloaderAgent: Attempting with mobile Android & iOS client fallback...")
+                    ydl_opts['format'] = 'bestvideo[height<=720]+bestaudio/best[height<=720]/best'
+                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['android', 'ios', 'web_embedded']}}
                 elif attempt == 3:
-                    print("[*] DownloaderAgent: Attempting with legacy fallback...")
+                    print("[*] DownloaderAgent: Attempting with web-embedded multi-client fallback...")
                     ydl_opts['format'] = 'best'
-                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['tv_embedded', 'android']}}
+                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['web_embedded', 'android', 'mweb']}}
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    print(f"[*] DownloaderAgent: Fetching high-resolution video (Attempt {attempt}/{max_attempts})...")
+                    print(f"[*] DownloaderAgent: Fetching video stream (Attempt {attempt}/{max_attempts})...")
                     info_dict = ydl.extract_info(url, download=True)
                     filename = ydl.prepare_filename(info_dict)
                     
@@ -116,6 +126,7 @@ class DownloaderAgent:
                                 break
                 break # Download succeeded
             except Exception as e:
+                last_error = e
                 print(f"[!] DownloaderAgent Attempt {attempt} failed: {e}")
                 # Clean up partial download files
                 fn = locals().get('filename')
@@ -129,6 +140,15 @@ class DownloaderAgent:
                             except Exception:
                                 pass
                 if attempt == max_attempts:
+                    if "Sign in to confirm" in str(e) or "bot" in str(e).lower():
+                        raise RuntimeError(
+                            f"\n❌ [YouTube Anti-Bot Challenge]\n"
+                            f"YouTube has blocked unauthenticated downloads from this cloud server IP address.\n"
+                            f"💡 SOLUTIONS (အလွယ်ဆုံး ဖြေရှင်းနည်း ၂ သွယ်):\n"
+                            f"1. Cookies အသုံးပြုခြင်း: Chrome Extension 'Get cookies.txt LOCALLY' ဖြင့် cookies.txt ထုတ်ယူပြီး Web UI သို့မဟုတ် Google Drive (/content/drive/MyDrive/MovieRecapOutputs/cookies.txt) တွင် တင်ပေးပါ။\n"
+                            f"2. ဖိုင်တိုက်ရိုက်တင်ခြင်း: ဗီဒီယိုကို မိမိစက်ထဲ ဒေါင်းလုဒ်ဆွဲပြီး Web UI ပေါ်ရှိ 'Upload Movie File' မှတစ်ဆင့် တိုက်ရိုက် တင်နိုင်ပါသည် ခင်ဗျာ။\n"
+                            f"Original Error: {e}"
+                        )
                     raise e
                 print(f"[*] Retrying in 5 seconds with fallback client format...")
                 ydl_opts['format'] = 'bestvideo+bestaudio/best' # Fallback to combined or best stream
