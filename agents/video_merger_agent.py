@@ -52,9 +52,17 @@ def detect_hardware_encoder() -> dict:
     return chosen
 
 class VideoMergerAgent:
-    def __init__(self, output_dir: str = "outputs", subtitle_blur_override: bool = None):
+    def __init__(
+        self,
+        output_dir: str = "outputs",
+        subtitle_blur_override: bool = None,
+        subtitle_mode: str = "burn",
+        resolution: str = "1080p",
+    ):
         self.output_dir = output_dir
         self.subtitle_blur_override = subtitle_blur_override
+        self.subtitle_mode = str(subtitle_mode or "burn").lower()
+        self.resolution = str(resolution or "1080p").lower()
 
     def merge_video(self, state, movie_path: str):
         # Lazy import moviepy so the module can still be loaded even if moviepy is missing
@@ -559,7 +567,15 @@ class VideoMergerAgent:
 
             # ── Myanmar Subtitle Overlay Post-pass (FFmpeg drawtext) ─────────
             sub_cfg = config_data.get("subtitle_overlay", {})
-            if sub_cfg.get("enabled", True) and subtitle_timings:
+            burn_subs = True
+            if self.subtitle_mode in ["none", "off", "no"]:
+                burn_subs = False
+            elif self.subtitle_mode in ["burn", "hardsub", "both", "auto"]:
+                burn_subs = True
+            else:
+                burn_subs = sub_cfg.get("enabled", True)
+
+            if burn_subs and subtitle_timings:
                 self._burn_myanmar_subtitles(
                     video_path    = final_output,
                     timings       = subtitle_timings,
@@ -572,6 +588,11 @@ class VideoMergerAgent:
                     margin_bottom = int(sub_cfg.get("margin_bottom", 50)),
                     max_chars     = int(sub_cfg.get("max_chars_per_line", 28)),
                 )
+                # Also save standalone SRT for YouTube captions / VLC
+                self._export_standalone_srt(subtitle_timings, output_dir)
+            elif subtitle_timings:
+                print("[*] VideoMerger: Subtitle Mode is 'Voiceover Only' (Hardsub disabled). Exporting standalone .srt/.ass subtitles...")
+                self._export_standalone_srt(subtitle_timings, output_dir)
 
             # Thumbnail is now stitched as a video intro, skipping cover art embedding.
                     
@@ -866,6 +887,48 @@ class VideoMergerAgent:
             err_tail = (result.stderr or "")[-600:]
             print(f"[WARN] MyanmarSubs: Subtitle burn failed (code={result.returncode}).")
             print(f"[WARN] FFmpeg stderr: {err_tail}")
+
+    def _export_standalone_srt(self, timings: list, output_dir: str):
+        """Exports standalone .srt and .ass subtitle files for YouTube caption upload / VLC player."""
+        if not timings:
+            return
+        srt_path = os.path.join(output_dir, "myanmar_subs.srt")
+        ass_path = os.path.join(output_dir, "myanmar_subs.ass")
+
+        def _sec_to_srt_ts(sec: float) -> str:
+            ms = int((sec % 1) * 1000)
+            s = int(sec)
+            m, s = divmod(s, 60)
+            h, m = divmod(m, 60)
+            return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+
+        lines = []
+        idx = 1
+        for item in timings:
+            try:
+                start_s = float(item[0])
+                dur_s = float(item[1])
+                txt = str(item[2]).strip()
+                if not txt:
+                    continue
+                end_s = start_s + dur_s
+                lines.append(f"{idx}\n{_sec_to_srt_ts(start_s)} --> {_sec_to_srt_ts(end_s)}\n{txt}\n")
+                idx += 1
+            except Exception:
+                pass
+
+        if lines:
+            with open(srt_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+            print(f"[OK] VideoMerger: Standalone SRT subtitles exported -> {srt_path}")
+
+        # Also write clean ASS file
+        try:
+            import sys
+            font_name = "Myanmar Text" if sys.platform == "win32" else "Padauk"
+            self._write_ass(timings, ass_path, font_name=font_name, font_size=40, bold=True, border_style=3, outline_width=3, margin_bottom=50, max_chars=28)
+        except Exception:
+            pass
 
 
 
@@ -1230,14 +1293,17 @@ class VideoMergerAgent:
         hook_title: str = "",
         subtitle_timings: list = None,
         duration_sec: float = 600.0,
+        subtitle_mode: str = None,
+        resolution: str = None,
     ) -> str | None:
         """
-        Exports a dedicated 9:16 (1080x1920) Vertical Video for Facebook Reels, TikTok, and Shorts.
+        Exports a dedicated 9:16 Vertical Video for Facebook Reels, TikTok, and Shorts.
         Layout (The 'Viral Recap Frame'):
           - Top 20%: Catchy golden Burmese Hook Title.
           - Middle 55%: Uncropped, high-quality 16:9 recap video centered over blurred dynamic video background.
           - Bottom 25%: Facebook Safe Zone for Myanmar ASS subtitles, well above bottom UI controls.
         Hardware-accelerated via NVENC on Colab or QSV/libx264 on PC.
+        Supports 1080p (1080x1920) or 720p (720x1280) presets and hardsub on/off toggle.
         """
         import sys, subprocess, shutil
 
@@ -1256,10 +1322,21 @@ class VideoMergerAgent:
             print("[*] ReelsExporter: Disabled in config.json -> reels.enabled = false")
             return None
 
-        w_target = int(reels_cfg.get("width", 1080))
-        h_target = int(reels_cfg.get("height", 1920))
-        blur_sigma = int(reels_cfg.get("blur_sigma", 25))
-        safe_margin = int(reels_cfg.get("safe_zone_margin", 160))
+        sub_mode = str(subtitle_mode or self.subtitle_mode or "burn").lower()
+        res_mode = str(resolution or self.resolution or "1080p").lower()
+
+        if res_mode == "720p":
+            w_target = 720
+            h_target = 1280
+            hook_fontsize = 36
+            sub_fontsize = 30
+            safe_margin = 110
+        else:
+            w_target = int(reels_cfg.get("width", 1080))
+            h_target = int(reels_cfg.get("height", 1920))
+            hook_fontsize = 52
+            sub_fontsize = 44
+            safe_margin = int(reels_cfg.get("safe_zone_margin", 160))
 
         font_name = "Myanmar Text" if sys.platform == "win32" else "Padauk"
         font_found = self._find_myanmar_font()
@@ -1305,14 +1382,15 @@ PlayResY: {h_target}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: ReelsHook,{font_name},52,&H0000D7FF,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,3,8,40,40,90,1
-Style: ReelsSubs,{font_name},44,&H00FFFFFF,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,2,2,50,50,{safe_margin + 120},1
+Style: ReelsHook,{font_name},{hook_fontsize},&H0000D7FF,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,3,8,40,40,90,1
+Style: ReelsSubs,{font_name},{sub_fontsize},&H00FFFFFF,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,2,2,50,50,{safe_margin + 120},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}
 """
-        if subtitle_timings:
+        burn_reels_subs = sub_mode not in ["none", "off", "no"]
+        if burn_reels_subs and subtitle_timings:
             for item in subtitle_timings:
                 try:
                     start_s = float(item[0])

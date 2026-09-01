@@ -169,7 +169,8 @@ def pipeline_worker(
     job_id,
     input_source,
     language="burmese",
-    subtitle_mode="auto",
+    subtitle_mode="burn",
+    resolution="1080p",
     tts_engine=None,
     custom_thumb_title=None,
     watermark_enabled=None,
@@ -240,6 +241,7 @@ def pipeline_worker(
             movie_path,
             language=clean_lang,
             subtitle_mode=subtitle_mode,
+            resolution=resolution,
             tts_engine=tts_engine,
             tts_voice=tts_voice_override,
             custom_thumb_title=custom_thumb_title,
@@ -297,7 +299,8 @@ def batch_worker(
     job_id,
     inputs_list,
     language="burmese",
-    subtitle_mode="auto",
+    subtitle_mode="burn",
+    resolution="1080p",
     tts_engine=None,
     custom_thumb_title=None,
     watermark_enabled=None,
@@ -356,6 +359,7 @@ def batch_worker(
             skip_completed=True,
             language=clean_lang,
             subtitle_mode=subtitle_mode,
+            resolution=resolution,
             tts_engine=tts_engine,
             tts_voice=tts_voice_override,
             custom_thumb_title=custom_thumb_title,
@@ -414,7 +418,8 @@ def batch_worker(
 class StartRequest(BaseModel):
     input: str
     language: Optional[str] = "burmese"
-    subtitle_mode: Optional[str] = "auto"
+    subtitle_mode: Optional[str] = "burn"
+    resolution: Optional[str] = "1080p"
     tts_engine: Optional[str] = None
     custom_thumb_title: Optional[str] = None
     watermark_enabled: Optional[bool] = True
@@ -425,7 +430,8 @@ class StartRequest(BaseModel):
 class BatchStartRequest(BaseModel):
     inputs: List[str]
     language: Optional[str] = "burmese"
-    subtitle_mode: Optional[str] = "auto"
+    subtitle_mode: Optional[str] = "burn"
+    resolution: Optional[str] = "1080p"
     tts_engine: Optional[str] = None
     custom_thumb_title: Optional[str] = None
     watermark_enabled: Optional[bool] = True
@@ -544,7 +550,8 @@ async def upload_file(video: UploadFile = File(...)):
 async def start_pipeline(req: StartRequest):
     input_source = req.input
     language = req.language or 'burmese'
-    subtitle_mode = req.subtitle_mode or 'auto'
+    subtitle_mode = req.subtitle_mode or 'burn'
+    resolution = req.resolution or '1080p'
     tts_engine = req.tts_engine
     custom_thumb_title = req.custom_thumb_title
     watermark_enabled = req.watermark_enabled
@@ -573,6 +580,7 @@ async def start_pipeline(req: StartRequest):
             input_source,
             language,
             subtitle_mode,
+            resolution,
             tts_engine,
             custom_thumb_title,
             watermark_enabled,
@@ -589,7 +597,8 @@ async def start_pipeline(req: StartRequest):
 async def start_batch_pipeline(req: BatchStartRequest):
     inputs = req.inputs
     language = req.language or 'burmese'
-    subtitle_mode = req.subtitle_mode or 'auto'
+    subtitle_mode = req.subtitle_mode or 'burn'
+    resolution = req.resolution or '1080p'
     tts_engine = req.tts_engine
     custom_thumb_title = req.custom_thumb_title
     watermark_enabled = req.watermark_enabled
@@ -618,6 +627,7 @@ async def start_batch_pipeline(req: BatchStartRequest):
             inputs,
             language,
             subtitle_mode,
+            resolution,
             tts_engine,
             custom_thumb_title,
             watermark_enabled,
