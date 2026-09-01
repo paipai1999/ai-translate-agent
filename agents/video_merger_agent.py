@@ -11,15 +11,17 @@ _DETECTED_ENCODER = None
 
 def _get_ffmpeg_bin() -> str:
     import shutil
-    ffmpeg_bin = os.environ.get("IMAGEIO_FFMPEG_EXE") or shutil.which("ffmpeg")
-    if not ffmpeg_bin or not os.path.exists(ffmpeg_bin):
-        try:
-            from imageio_ffmpeg import get_ffmpeg_exe
-            ffmpeg_bin = get_ffmpeg_exe()
-            os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_bin
-        except Exception:
-            ffmpeg_bin = "ffmpeg"
-    return ffmpeg_bin
+    # Prioritize GPU NVENC builds (Colab / Linux / Custom builds)
+    for candidate in ["/usr/local/bin/ffmpeg", os.environ.get("IMAGEIO_FFMPEG_EXE"), shutil.which("ffmpeg")]:
+        if candidate and os.path.exists(candidate):
+            return candidate
+    try:
+        from imageio_ffmpeg import get_ffmpeg_exe
+        ffmpeg_bin = get_ffmpeg_exe()
+        os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg_bin
+        return ffmpeg_bin
+    except Exception:
+        return "ffmpeg"
 
 def detect_hardware_encoder() -> dict:
     """Detects available hardware video encoders (NVIDIA NVENC, Intel QSV, AMD AMF) or CPU libx264."""

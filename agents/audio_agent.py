@@ -72,10 +72,15 @@ class AudioAgent:
             print("[!] AudioAgent: 'demucs' not found in PATH or environment. Skipping vocal separation.")
             return audio_path
             
-        print(f"[*] AudioAgent: Separating vocals from {audio_path} using Demucs...")
         try:
             import torch
-            device_flag = ["-d", "cuda"] if torch.cuda.is_available() else ["-d", "cpu"]
+            if torch.cuda.is_available():
+                gpu_name = torch.cuda.get_device_name(0)
+                print(f"[*] AudioAgent (Demucs): 🚀 Separating vocals via NVIDIA GPU ({gpu_name}) [CUDA Active]...")
+                device_flag = ["-d", "cuda"]
+            else:
+                print("[*] AudioAgent (Demucs): 💻 Separating vocals via CPU Multi-Core...")
+                device_flag = ["-d", "cpu"]
             cmd = [*demucs_cmd, "--two-stems=vocals", "-n", "htdemucs", *device_flag, audio_path, "-o", output_dir]
             subprocess.run(cmd, check=True, capture_output=True)
             
@@ -183,11 +188,19 @@ movie_name  = sys.argv[4]
 
 try:
     import torch
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    compute_type = "float16" if device == "cuda" else "int8"
+    if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        device = "cuda"
+        compute_type = "float16"
+        print(f"[*] AudioAgent (Faster-Whisper): 🚀 Active Hardware -> NVIDIA GPU ({{gpu_name}}) [CUDA float16 Tensor Cores]")
+    else:
+        device = "cpu"
+        compute_type = "int8"
+        print("[*] AudioAgent (Faster-Whisper): 💻 Active Hardware -> CPU Multi-Core [INT8 Quantized Mode]")
 except Exception:
     device = "cpu"
     compute_type = "int8"
+    print("[*] AudioAgent (Faster-Whisper): 💻 Active Hardware -> CPU Fallback Mode")
 
 num_threads = min(8, os.cpu_count() or 4)
 try:
@@ -195,7 +208,6 @@ try:
 except Exception:
     model = WhisperModel(model_size, device="cpu", compute_type="int8", cpu_threads=num_threads)
 
-# Use beam_size=1 and vad_filter=True for 4x faster CPU transcription
 segments, info = model.transcribe(
     audio_path,
     beam_size=1,

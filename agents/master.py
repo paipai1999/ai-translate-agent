@@ -184,10 +184,21 @@ class MasterAgent:
         sys.stderr = pipe_logger
 
         try:
+            import torch
+            from agents.video_merger_agent import detect_hardware_encoder
+            enc = detect_hardware_encoder()
+            if torch.cuda.is_available():
+                gpu_name = torch.cuda.get_device_name(0)
+                vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                hw_str = f"🚀 Dedicated GPU: {gpu_name} ({vram_gb:.1f} GB VRAM) [Encoder: {enc['label']}]"
+            else:
+                hw_str = f"💻 CPU Multi-Core [Encoder: {enc['label']}]"
+
             print(f"\n{'='*60}")
             print(f"[MOVIE RECAP AI] End-to-End Autonomous Pipeline")
             print(f"[INPUT] {self.movie_path}")
-            print(f"[CONFIG] Lang: {self.language.upper()} | Voice: {self.tts_voice} | Engine: {self.tts_engine.upper()}")
+            print(f"[HARDWARE] {hw_str}")
+            print(f"[CONFIG] Lang: {self.language.upper()} | Subtitles: {self.subtitle_mode.upper()} | Res: {self.resolution} | Voice: {self.tts_voice} | Engine: {self.tts_engine.upper()}")
             print(f"[LOG FILE] {log_path}")
             print(f"{'='*60}")
 
