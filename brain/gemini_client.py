@@ -12,18 +12,26 @@ def _mask_key(key: str) -> str:
     return key[:6] + '...' + key[-4:]
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Valid Google AI Studio Gemini Models (2026 Production Tier):
+# Valid Google AI Studio Gemini Models (2026 Production Tier from AI Studio):
 #
-# 1. gemini-3.5-flash         : Primary — Best Burmese translation quality + speed
-# 2. gemini-3.5-flash-lite    : Workhorse — Ultra fast + high quota
-# 3. gemini-3.6-flash         : Fallback — High capacity
-# 4. gemini-flash-lite-latest : High-speed fallback
+# 1. gemini-3.5-flash         : Primary — Best Burmese translation quality
+# 2. gemini-3.5-flash-lite    : Workhorse — Ultra fast + 15 RPM limit
+# 3. gemini-3.1-flash-lite    : High-speed Lite fallback (15 RPM)
+# 4. gemini-3.7-flash         : Advanced reasoning & translation (5 RPM)
+# 5. gemini-3.6-flash         : High-speed Flash fallback (5 RPM)
+# 6. gemini-3-flash           : Standard Flash fallback (5 RPM)
+# 7. gemini-2.5-flash         : Robust fallback (5 RPM)
+# 8. gemini-2.5-flash-lite    : 10 RPM Lite fallback
 # ─────────────────────────────────────────────────────────────────────────────
 _FALLBACK_MODELS = [
     "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
+    "gemini-3.1-flash-lite",
+    "gemini-3.7-flash",
     "gemini-3.6-flash",
-    "gemini-flash-lite-latest",
+    "gemini-3-flash",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
 ]
 
 # How many seconds to wait when ALL keys are rate-limited before retrying.
