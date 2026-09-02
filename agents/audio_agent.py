@@ -179,14 +179,18 @@ class AudioAgent:
         helper_script = f"""
 import os, sys, json
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-from faster_whisper import WhisperModel
 
 audio_path  = sys.argv[1]
 model_size  = sys.argv[2]
 output_path = sys.argv[3]
 movie_name  = sys.argv[4]
 
+results = []
+detected_lang = "en"
+
+# Try 1: Faster-Whisper (CUDA / INT8)
 try:
+    from faster_whisper import WhisperModel
     import torch
     if torch.cuda.is_available():
         gpu_name = torch.cuda.get_device_name(0)
@@ -197,32 +201,35 @@ try:
         device = "cpu"
         compute_type = "int8"
         print("[*] AudioAgent (Faster-Whisper): 💻 Active Hardware -> CPU Multi-Core [INT8 Quantized Mode]")
-except Exception:
-    device = "cpu"
-    compute_type = "int8"
-    print("[*] AudioAgent (Faster-Whisper): 💻 Active Hardware -> CPU Fallback Mode")
 
-num_threads = min(8, os.cpu_count() or 4)
-try:
+    num_threads = min(8, os.cpu_count() or 4)
     model = WhisperModel(model_size, device=device, compute_type=compute_type, cpu_threads=num_threads)
-except Exception:
-    model = WhisperModel(model_size, device="cpu", compute_type="int8", cpu_threads=num_threads)
+    segments, info = model.transcribe(
+        audio_path,
+        beam_size=1,
+        vad_filter=True,
+        vad_parameters=dict(min_silence_duration_ms=500),
+        initial_prompt=f"This is a dialogue transcript for the movie {{movie_name}}."
+    )
+    detected_lang = info.language
+    for seg in segments:
+        results.append({{"start": round(seg.start, 2), "end": round(seg.end, 2), "text": seg.text.strip()}})
 
-segments, info = model.transcribe(
-    audio_path,
-    beam_size=1,
-    vad_filter=True,
-    vad_parameters=dict(min_silence_duration_ms=500),
-    initial_prompt=f"This is a dialogue transcript for the movie {{movie_name}}."
-)
-
-results = []
-for seg in segments:
-    results.append({{"start": round(seg.start, 2), "end": round(seg.end, 2), "text": seg.text.strip()}})
+except Exception as fw_err:
+    print(f"[*] AudioAgent: Falling back to standard Whisper engine (Reason: {{fw_err}})...")
+    import whisper
+    import torch
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"[*] AudioAgent (Whisper): Running on device: {{device}}")
+    model = whisper.load_model(model_size, device=device)
+    res = model.transcribe(audio_path, initial_prompt=f"This is a dialogue transcript for the movie {{movie_name}}.")
+    detected_lang = res.get("language", "en")
+    for seg in res.get("segments", []):
+        results.append({{"start": round(float(seg["start"]), 2), "end": round(float(seg["end"]), 2), "text": seg["text"].strip()}})
 
 with open(output_path, "w", encoding="utf-8") as f:
-    json.dump({{"language": info.language, "segments": results}}, f, ensure_ascii=False)
-print(f"[Whisper] Transcribed {{len(results)}} segments in language: {{info.language}}")
+    json.dump({{"language": detected_lang, "segments": results}}, f, ensure_ascii=False)
+print(f"[Whisper] Transcribed {{len(results)}} segments in language: {{detected_lang}}")
 """
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as tmp:
             tmp.write(helper_script)
