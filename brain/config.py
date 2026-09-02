@@ -17,15 +17,19 @@ DEFAULT_CONFIG = {
         "model": "gemini-3.5-flash",       # Primary model: gemini-3.5-flash (fast, reliable 2026 production model)
         "daily_limit_per_key": 50,
         "model_limits": {
-            "gemini-3.5-flash": 50,
-            "gemini-3.5-flash-lite": 50,
-            "gemini-3.6-flash": 40,
-            "gemini-flash-lite-latest": 50
+            "gemini-3.5-flash-lite": 15,
+            "gemini-3.1-flash-lite": 15,
+            "gemini-2.5-flash-lite": 10,
+            "gemini-3.5-flash": 5,
+            "gemini-3.7-flash": 5,
+            "gemini-3.6-flash": 5,
+            "gemini-3-flash": 5,
+            "gemini-2.5-flash": 5
         },
         "models": {
             "heavy": "gemini-3.5-flash",
-            "workhorse": "gemini-3.5-flash",
-            "polish": "gemini-3.5-flash-lite"
+            "workhorse": "gemini-3.5-flash-lite",
+            "polish": "gemini-3.1-flash-lite"
         }
     },
     "voice": {
