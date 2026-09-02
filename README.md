@@ -23,8 +23,8 @@ An autonomous, end-to-end AI agentic pipeline designed to automatically translat
 
 ## 🌟 Key Features (v2.2)
 
-### 🍪 1. Multi-Platform Auto Downloader (Anti-Bot Bypass)
-* **YouTube:** Integrated remote EJS challenge solver + Netscape `cookies.txt` support to bypass all bot challenges (`Sign in to confirm you're not a bot`).
+### 🍪 1. Multi-Platform Auto Downloader (Mobile API & Anti-Bot Bypass)
+* **YouTube:** Negotiates pure mobile streaming APIs (`android`, `mweb`, `android_vr`, `ios`) with automatic cookie stripping on bot challenges to 100% bypass datacenter IP blocks (`Sign in to confirm you're not a bot`).
 * **DramaBox (`dramaboxdb.com`):** Direct web & HLS streaming download with VIP authentication.
 * **ReelShort (`reelshort.com`):** Direct short drama download with session cookies.
 * **Local Upload:** Direct Drag & Drop upload of MP4, MKV, WebM files in the Web UI.
@@ -50,13 +50,21 @@ An autonomous, end-to-end AI agentic pipeline designed to automatically translat
 * **Action Narration Bridge:** Detects non-verbal action scenes (>18s) and uses **Gemini 3.5 Flash** to synthesize engaging storyline narration so the audience never experiences silence.
 * **Dynamic Audio Ducking:** Automatically lowers background ambient sound to 12% during speech and raises it back to 35% during pauses.
 
-### ⏱️ 7. Process Records Time & Live Stopwatch Dashboard
+### 🧠 7. Google AI Studio 2026 PRO Tier & Model Auto-Rotation Chain
+* **Tier Synchronization:** Pre-configured with Google AI Studio 2026 PRO quotas:
+  - **Workhorse:** `gemini-3.5-flash-lite` (15 RPM) & `gemini-3.1-flash-lite` (15 RPM)
+  - **Primary & SEO:** `gemini-3.5-flash` (5 RPM) & `gemini-3.7-flash` (5 RPM)
+  - **High-Capacity Fallbacks:** `gemini-3.6-flash`, `gemini-3-flash`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`
+* **Zero-Error Parsing:** Safe `_extract_text_from_gemini_response` multi-part and thought-block extractor preventing `KeyError: 'parts'`.
+
+### ⏱️ 8. Process Records Time & Live Stopwatch Dashboard
 * **Live Elapsed Stopwatch:** Real-time ticking stopwatch (`⏱️ 01:24`) on the Web UI dashboard during video processing.
 * **Phase Timing Badges:** Real-time breakdown of seconds spent on each pipeline stage (Video Analysis, Whisper STT, Gemini Script Translation, Voiceover Generation, and Video Merge).
 * **Historical Process Records:** Every completed output card permanently stores and displays its comprehensive duration table.
 
-### 🚀 8. Dedicated GPU Cloud Acceleration & Hybrid PC Fallback
-* **Google Colab Mode:** Dedicated **NVIDIA T4 GPU (16GB VRAM)** execution utilizing Whisper CUDA FP16 Tensor Cores, Demucs `-d cuda`, and FFmpeg NVENC (`h264_nvenc`) hardware encoder (10x faster).
+### 🚀 9. Dedicated GPU Cloud Acceleration & Hybrid PC Fallback
+* **Google Colab Mode:** Dedicated **NVIDIA T4 GPU (16GB VRAM)** execution utilizing Whisper CUDA FP16 Tensor Cores, Demucs `-d cuda`, and FFmpeg NVENC (`h264_nvenc`) hardware encoder.
+* **Kaggle Mode:** Dedicated **Dual NVIDIA T4 GPUs (30GB VRAM)** or **P100 GPU (16GB VRAM)** with 12-hour continuous sessions and Cloudflare Secure Tunnel.
 * **Local PC Mode:** Intelligent auto-detection of NVIDIA CUDA, Intel QuickSync (`h264_qsv`), and AMD AMF (`h264_amf`), with zero-error fallback to CPU Multi-core.
 
 ---
@@ -82,14 +90,15 @@ ai-translate-agent/
 │   ├── planner.py             ← Overnight Batch Processor with auto API key rotation
 │   ├── prompts.py             ← LLM prompt templates (Dialogue Translation, SEO, QA)
 │   ├── config.py              ← config.json loader with Gemini 3.5 Flash defaults
-│   ├── gemini_client.py       ← Gemini API client with Gemini 3.5 Flash priority & key rotation
+│   ├── gemini_client.py       ← Gemini API client with safe multi-part parsing & 8-model fallback rotation
 │   └── sqlite_store.py        ← SQLite WAL-mode local database for movie states and job logs
 │
 ├── templates/
 │   └── index.html             ← Modern Glassmorphic Web UI Dashboard with Live Timer & Controls
 │
 ├── web_ui.py                  ← FastAPI Web Dashboard (Direct Upload, Live Timing SSE Logs, Force Stop API)
-├── AI_Movie_Translate_Colab.ipynb ← Official Google Colab One-Click Dedicated GPU Notebook
+├── AI_Movie_Translate_Colab.ipynb  ← Official Google Colab One-Click Dedicated GPU Notebook
+├── AI_Movie_Translate_Kaggle.ipynb ← Official Kaggle One-Click Dual T4 Dedicated GPU Notebook
 ├── config.json                ← Active runtime configuration (API keys, branding, models)
 ├── config.example.json        ← Default configuration template
 ├── cookies.txt                ← Netscape cookie file for YouTube, DramaBox, and ReelShort
