@@ -31,6 +31,33 @@ _FALLBACK_MODELS = [
 _RPM_WAIT_SEC = 65
 
 
+def _extract_text_from_gemini_response(res_data: dict) -> str:
+    """Safely extracts text from Gemini REST response, handling multi-part, thoughts, and finishReason."""
+    candidates = res_data.get("candidates", [])
+    if not candidates:
+        prompt_feedback = res_data.get("promptFeedback", {})
+        block_reason = prompt_feedback.get("blockReason", "NO_CANDIDATES")
+        raise Exception(f"Gemini API blocked response: {block_reason}")
+
+    cand = candidates[0]
+    content = cand.get("content") or {}
+    parts = content.get("parts") or []
+    
+    text_chunks = []
+    for p in parts:
+        if isinstance(p, dict) and p.get("text"):
+            text_chunks.append(p["text"])
+        elif isinstance(p, str):
+            text_chunks.append(p)
+
+    final_text = "".join(text_chunks).strip()
+    if not final_text:
+        finish_reason = cand.get("finishReason", "EMPTY_RESPONSE")
+        raise Exception(f"Gemini returned empty text response (finishReason={finish_reason})")
+
+    return final_text
+
+
 def call_gemini(
     system_prompt: str,
     user_prompt: str,
@@ -93,11 +120,7 @@ def call_gemini(
                     with urllib.request.urlopen(req, timeout=120.0) as response:
                         res_data = json.loads(response.read().decode("utf-8"))
                         _record_api_usage(key, m, "success")
-                        candidates = res_data.get("candidates", [])
-                        if not candidates or "content" not in candidates[0]:
-                            finish_reason = candidates[0].get("finishReason", "UNKNOWN") if candidates else "NO_CANDIDATES"
-                            raise Exception(f"Gemini blocked response: finishReason={finish_reason}")
-                        text = candidates[0]["content"]["parts"][0]["text"]
+                        text = _extract_text_from_gemini_response(res_data)
                         return text, m
 
                 except urllib.error.HTTPError as e:
@@ -224,11 +247,7 @@ def call_gemini_vision(
                     with urllib.request.urlopen(req, timeout=120.0) as response:
                         res_data = json.loads(response.read().decode("utf-8"))
                         _record_api_usage(key, m, "success")
-                        candidates = res_data.get("candidates", [])
-                        if not candidates or "content" not in candidates[0]:
-                            finish_reason = candidates[0].get("finishReason", "UNKNOWN") if candidates else "NO_CANDIDATES"
-                            raise Exception(f"Gemini blocked response: finishReason={finish_reason}")
-                        text = candidates[0]["content"]["parts"][0]["text"]
+                        text = _extract_text_from_gemini_response(res_data)
                         return text, m
 
                 except urllib.error.HTTPError as e:
@@ -414,10 +433,7 @@ def ask_gemini_with_video(file_name: str, system_prompt: str, user_text: str, ke
             try:
                 with urllib.request.urlopen(req, timeout=600.0) as response:
                     res_data = json.loads(response.read().decode("utf-8"))
-                    candidates = res_data.get("candidates", [])
-                    if not candidates or "content" not in candidates[0]:
-                        raise Exception(f"Gemini blocked response")
-                    return candidates[0]["content"]["parts"][0]["text"]
+                    return _extract_text_from_gemini_response(res_data)
             except urllib.error.HTTPError as e:
                 last_err = e
                 if e.code in [503, 500, 429]:
