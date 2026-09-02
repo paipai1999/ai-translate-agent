@@ -88,6 +88,7 @@ class MasterAgent:
         self.state.movie_path = movie_path
         self.state.subtitle_mode = self.subtitle_mode
         self.state.resolution = self.resolution
+        self.custom_thumb_title = custom_thumb_title
         if custom_thumb_title:
             self.state.custom_thumb_title = custom_thumb_title.strip()
         if watermark_enabled is not None or watermark_text or watermark_opacity is not None:
