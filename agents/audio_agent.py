@@ -61,12 +61,14 @@ class AudioAgent:
             demucs_cmd = ["demucs"]
         else:
             # Fallback to python module execution (for virtualenv without global PATH)
-            try:
-                r = subprocess.run([sys.executable, "-m", "demucs", "--help"], capture_output=True, timeout=15)
-                if r.returncode == 0:
-                    demucs_cmd = [sys.executable, "-m", "demucs"]
-            except Exception:
-                demucs_cmd = None
+            for mod in ["demucs.separate", "demucs"]:
+                try:
+                    r = subprocess.run([sys.executable, "-m", mod, "--help"], capture_output=True, timeout=15)
+                    if r.returncode == 0:
+                        demucs_cmd = [sys.executable, "-m", mod]
+                        break
+                except Exception:
+                    continue
 
         if not demucs_cmd:
             print("[!] AudioAgent: 'demucs' not found in PATH or environment. Skipping vocal separation.")
