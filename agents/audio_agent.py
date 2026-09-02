@@ -180,6 +180,14 @@ class AudioAgent:
 import os, sys, json
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
+try:
+    from imageio_ffmpeg import get_ffmpeg_exe
+    _ff_dir = os.path.dirname(get_ffmpeg_exe())
+    if _ff_dir not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = _ff_dir + os.pathsep + os.environ.get("PATH", "")
+except Exception:
+    pass
+
 audio_path  = sys.argv[1]
 model_size  = sys.argv[2]
 output_path = sys.argv[3]
@@ -216,13 +224,14 @@ try:
         results.append({{"start": round(seg.start, 2), "end": round(seg.end, 2), "text": seg.text.strip()}})
 
 except Exception as fw_err:
-    print(f"[*] AudioAgent: Falling back to standard Whisper engine (Reason: {{fw_err}})...")
+    print(f"[*] AudioAgent: Falling back to standard Whisper engine...")
     import whisper
     import torch
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"[*] AudioAgent (Whisper): Running on device: {{device}}")
     model = whisper.load_model(model_size, device=device)
-    res = model.transcribe(audio_path, initial_prompt=f"This is a dialogue transcript for the movie {{movie_name}}.")
+    use_fp16 = bool(torch.cuda.is_available())
+    res = model.transcribe(audio_path, fp16=use_fp16, initial_prompt=f"This is a dialogue transcript for the movie {{movie_name}}.")
     detected_lang = res.get("language", "en")
     for seg in res.get("segments", []):
         results.append({{"start": round(float(seg["start"]), 2), "end": round(float(seg["end"]), 2), "text": seg["text"].strip()}})
