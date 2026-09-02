@@ -245,7 +245,21 @@ class WriterAgent:
                     max_tokens=150
                 )
                 txt = res.strip().strip('"').strip("'").strip()
-                if txt and len(txt) > 4 and "```" not in txt:
+                if txt.startswith("{") or txt.startswith("["):
+                    try:
+                        data = json.loads(txt)
+                        if isinstance(data, dict):
+                            for k in ["narration", "recap", "text", "summary", "recaps"]:
+                                if k in data:
+                                    val = data[k]
+                                    txt = val[0] if isinstance(val, list) and val else str(val)
+                                    break
+                        elif isinstance(data, list) and data:
+                            txt = str(data[0])
+                    except Exception:
+                        pass
+                txt = txt.strip().strip('"').strip("'").strip()
+                if txt and len(txt) > 4:
                     bridge_dur = min(cand["gap_dur"] - 2.0, 5.5)
                     b_start = round(cand["gap_start"], 2)
                     b_end = round(b_start + max(bridge_dur, 3.0), 2)
