@@ -77,6 +77,7 @@ class DownloaderAgent:
             'sleep_interval': 2,
             'socket_timeout': 60,       # Increase socket timeout to 60 seconds
             'http_chunk_size': 10485760,# 10MB chunk size to prevent throttling freeze
+            'extractor_args': {'youtube': {'player_client': ['ios', 'android', 'mweb']}},
             'remote_components': ['ejs:github'],
             'js_runtimes': {'node': {}},
         }
@@ -105,13 +106,15 @@ class DownloaderAgent:
         for attempt in range(1, max_attempts + 1):
             try:
                 if attempt == 2:
-                    print("[*] DownloaderAgent: Attempting with mobile Android & iOS client fallback...")
-                    ydl_opts['format'] = 'bestvideo[height<=720]+bestaudio/best[height<=720]/best'
-                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['android', 'ios', 'web_embedded']}}
+                    print("[*] DownloaderAgent: Retrying with Pure Mobile Android & iOS client (Cookies bypassed)...")
+                    ydl_opts.pop('cookiefile', None)
+                    ydl_opts['format'] = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best'
+                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['android', 'ios', 'tv']}}
                 elif attempt == 3:
-                    print("[*] DownloaderAgent: Attempting with web-embedded multi-client fallback...")
+                    print("[*] DownloaderAgent: Retrying with TV Embedded & Mobile Web fallback...")
+                    ydl_opts.pop('cookiefile', None)
                     ydl_opts['format'] = 'best'
-                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['web_embedded', 'android', 'mweb']}}
+                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['tv_embedded', 'mweb', 'android']}}
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     print(f"[*] DownloaderAgent: Fetching video stream (Attempt {attempt}/{max_attempts})...")
