@@ -8,6 +8,7 @@
       "workhorse": "gemini-3.5-flash-lite",
       "polish": "gemini-3.1-flash-lite"
     },
+    "daily_limit_per_key": 50,
     "model_limits": {
       "gemini-3.5-flash-lite": 15,
       "gemini-3.1-flash-lite": 15,
@@ -55,6 +56,12 @@
   "copyright_protection": {"enabled": true, "mirror_video": false, "resize_factor": 1.02},
   "subtitle_blur": {"enabled": true, "region_height_pct": 0.18, "blur_strength": 18},
   "color_grading": {"enabled": true, "brightness": 0.03, "contrast": 1.02, "saturation": 1.08},
+  "bgm": {
+    "enabled": false,
+    "folder": "assets/bgm",
+    "volume": 0.22,
+    "style": ""
+  },
   "watermark": {
     "enabled": true,
     "text": "PAI AI Movie Translate",
@@ -64,6 +71,7 @@
   },
   "subtitle_overlay": {
     "enabled": true,
+    "style_preset": "box_black",
     "font_name": "Myanmar Text",
     "font_size": 40,
     "bold": true,

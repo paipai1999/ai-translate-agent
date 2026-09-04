@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 from brain.memory import MovieState
 import brain.config as cfg
 
@@ -638,6 +639,8 @@ class VideoMergerAgent:
                 burn_subs = True
             # Save a clean (un-subtitled) video copy for Facebook Reels 9:16 Canvas
             # so Reels can display clean 16:9 middle frame with dedicated bottom subtitles!
+            temp_dir = os.path.abspath("temp")
+            os.makedirs(temp_dir, exist_ok=True)
             clean_video_path = os.path.join(temp_dir, f"{os.path.splitext(os.path.basename(final_output))[0]}_clean.mp4")
             try:
                 shutil.copy2(final_output, clean_video_path)
@@ -1422,6 +1425,8 @@ class VideoMergerAgent:
         duration_sec: float = 600.0,
         subtitle_mode: str = None,
         resolution: str = None,
+        preset: str = None,
+        state: MovieState = None,
     ) -> str | None:
         """
         Exports a dedicated 9:16 Vertical Video for Facebook Reels, TikTok, and Shorts.
@@ -1504,7 +1509,8 @@ class VideoMergerAgent:
         wm_brand_text = wm_cfg.get("text", "PAI AI Movie Recap")
 
         # Resolve subtitle preset for Reels
-        sub_preset = getattr(state, "subtitle_style_preset", None) or sub_cfg.get("style_preset", "box_black")
+        sub_cfg = config_data.get("subtitle_overlay", {})
+        sub_preset = preset or getattr(state, "subtitle_style_preset", None) or sub_cfg.get("style_preset", "box_black")
         from brain.config import SUBTITLE_PRESETS
         p_data = SUBTITLE_PRESETS.get(str(sub_preset).lower(), {})
         reels_sub_border = int(p_data.get("border_style", 3))

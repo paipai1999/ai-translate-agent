@@ -391,6 +391,8 @@ class MasterAgent:
                             duration_sec=self.state.duration_sec,
                             subtitle_mode=self.subtitle_mode,
                             resolution=self.resolution,
+                            preset=self.subtitle_style,
+                            state=self.state,
                         )
                         self.state.reels_video_path = reels_path
                     except Exception as e:
