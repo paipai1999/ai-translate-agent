@@ -1898,8 +1898,11 @@
     async function loadKeyStatus() {
         const badge = document.getElementById('api-total-badge');
         const grid = document.getElementById('keys-grid');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
         try {
-            const res = await fetch('/api/keys/status');
+            const res = await fetch('/api/keys/status', { signal: controller.signal });
+            clearTimeout(timeoutId);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
 
@@ -1970,6 +1973,7 @@
                 grid.appendChild(card);
             });
         } catch (e) {
+            clearTimeout(timeoutId);
             console.error('Key status error:', e);
             if (badge) badge.textContent = '⚡ Status check unavailable';
             if (grid) {
