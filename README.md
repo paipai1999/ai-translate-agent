@@ -37,13 +37,22 @@ An autonomous, end-to-end AI agentic pipeline designed to automatically translat
 * **🔥 Burn Subtitles (Hardsub - Default):** Burns styled Myanmar ASS subtitles (Padauk / Myanmar Text) directly into the video frame.
 * **🎙️ Voiceover Only (Clean Frame):** Generates clean video with dubbed voice only (no text on video), and automatically exports standalone **`myanmar_subs.srt`** and **`myanmar_subs.ass`** subtitle files for YouTube CC / VLC player.
 
-### ⚙️ 4. Resolution Quality Presets
+### 🎨 4. Subtitle Style Presets (Interactive Visual Studio)
+Choose from 5 professionally designed subtitle styles with real-time live preview in the Web UI:
+* **🎬 Cinema Box (Netflix Style - `box_black`):** White text over dark translucent box (maximum readability & contrast for movie recaps).
+* **⚡ TikTok / Reels Yellow (`yellow_pop`):** High-energy gold/yellow text with bold black border and drop shadow (ideal for viral shorts).
+* **⚪ Classic White Stroke (`white_stroke`):** Crisp white text with black outline (clean YouTube classic aesthetic).
+* **💎 Cyber Cyan Neon (`cyan_cyber`):** Glowing cyan font with deep blue outline (perfect for Sci-Fi, Cyberpunk & Tech movies).
+* **🩸 Thriller Crimson Box (`crimson_box`):** White text over dark crimson red box (high suspense for Horror, Mystery & Thrillers).
+
+### ⚙️ 5. Resolution Quality Presets
 * **🌟 1080p Full HD (Default / Highest Quality):** 1920x1080 (16:9 Landscape) & 1080x1920 (9:16 Vertical).
 * **⚡ 720p HD (Faster Render / Smaller File):** 1280x720 (16:9 Landscape) & 720x1280 (9:16 Vertical) for 2x faster encoding.
 
-### 📱 5. 9:16 Facebook Reels & TikTok Dual Canvas Exporter
-* Exports a dedicated **1080x1920 Full HD 9:16 Vertical Video** alongside the standard 16:9 YouTube video.
-* Features a high-speed silky blurred background, golden hook title at top, centered video frame, and safe-zone Myanmar subtitles.
+### 📱 6. Multi-Format Video Output (16:9 Landscape, 9:16 Vertical Reels, or Both)
+* **🌟 Both (16:9 + 9:16 - Default):** Generates both YouTube 16:9 and Facebook/TikTok 9:16 vertical videos in a single run.
+* **🖥️ 16:9 Landscape Only:** Focuses exclusively on standard YouTube widescreen output.
+* **📱 9:16 Vertical Only:** Produces high-speed Facebook Reels, TikTok & YouTube Shorts with dynamic bokeh video background, top hook title, and safe-zone Myanmar subtitles.
 
 ### 👫 6. AI Multi-Voice Character Dubbing & Action Narration Bridge
 * **Multi-Voice Dubbing:** Automatically assigns male characters to `my-MM-ThihaNeural` and female characters to `my-MM-NilarNeural`.
@@ -143,10 +152,11 @@ python web_ui.py
 *Open your browser at: `http://localhost:5000`*
 
 * **Direct Video Download & Upload:** Paste any YouTube, DramaBox, or ReelShort URL, or click **📁 Upload** to select a file from your computer.
+* **Video Format Selector:** Choose between `🌟 Both (16:9 + 9:16)`, `🖥️ 16:9 Landscape`, and `📱 9:16 Vertical Reels`.
+* **Subtitle Style Presets:** Choose from 5 presets (`box_black`, `yellow_pop`, `white_stroke`, `cyan_cyber`, `crimson_box`) with live preview canvas.
 * **Subtitle Mode Selector:** Choose between `🔥 Burn Subtitles (Hardsub)` and `🎙️ Voiceover Only (Clean Frame)`.
 * **Resolution Quality Selector:** Choose between `🌟 1080p Full HD` and `⚡ 720p HD`.
-* **9:16 Facebook Reels & TikTok:** Toggle automatic vertical video generation.
-* **Overnight Batch Queue:** Paste multiple links to process sequentially overnight with automatic API key failover.
+* **Overnight Batch Queue:** Process multiple files/links sequentially overnight with automatic API key failover.
 * **1-Click Force Stop:** Click `🛑 Force Stop Pipeline` at any time to immediately cancel execution.
 
 ### 💻 Method 2: Command Line (CLI)
@@ -154,8 +164,11 @@ python web_ui.py
 # Run single movie recap with default settings
 python main.py --input "movies/my_movie.mp4"
 
-# Run with custom thumbnail title and 9:16 Reels export
-python main.py --input "https://youtu.be/..." --thumb-title "ရွာသူလေးရဲ့ မယုံနိုင်စရာလျှို့ဝှက်ချက်"
+# Run with TikTok/Reels yellow subtitles and 9:16 vertical format
+python main.py --input "movies/my_movie.mp4" --format 9:16 --sub-style yellow_pop
+
+# Run batch processing with Netflix cinema box subtitles
+python main.py --batch --sub-style box_black --format both
 ```
 
 ---

@@ -66,6 +66,9 @@ def ensure_db(output_dir: str = "outputs") -> str:
             )
             """
         )
+        # Indexes for fast lookup
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON jobs(created_at);")
         conn.commit()
     finally:
         conn.close()
