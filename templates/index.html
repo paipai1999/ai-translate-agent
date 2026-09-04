@@ -946,7 +946,7 @@
         <div class="section-header">
             <h2>🔑 Gemini API Keys</h2>
             <div style="display:flex; align-items:center; gap:0.75rem;">
-                <button class="btn-nav" onclick="toggleKeyEditor()">✏️ Edit / Add Keys</button>
+                <button class="btn-nav" id="btn-toggle-key-editor" onclick="toggleKeyEditor()">✏️ Edit / Add Keys</button>
                 <span class="quota-badge" id="api-total-badge">Loading quota...</span>
             </div>
         </div>
@@ -954,12 +954,15 @@
         <!-- Key Edit Box (collapsible) -->
         <div id="key-editor-box" style="display:none; background:rgba(0,0,0,0.4); border:1px solid var(--accent); border-radius:12px; padding:1.25rem; margin-bottom:1.25rem;">
             <div style="font-size:0.88rem; font-weight:700; color:#c4b5fd; margin-bottom:0.5rem;">
-                ✏️ Edit Gemini API Keys (Paste one key per line):
+                ✏️ Edit Gemini API Keys (Paste one key per line or comma-separated):
             </div>
-            <textarea id="key-editor-textarea" style="width:100%; height:120px; background:rgba(0,0,0,0.5); border:1px solid var(--card-border); border-radius:8px; padding:0.75rem; color:var(--text); font-family:monospace; font-size:0.85rem; outline:none; margin-bottom:0.75rem;" placeholder="Paste API Keys here, one per line..."></textarea>
-            <div style="display:flex; justify-content:flex-end; gap:0.6rem;">
-                <button class="btn-nav" onclick="toggleKeyEditor()">Cancel</button>
-                <button class="btn-primary" style="padding:0.45rem 1.2rem; font-size:0.85rem;" onclick="saveKeysFromUI()">💾 Save API Keys</button>
+            <textarea id="key-editor-textarea" style="width:100%; height:130px; background:rgba(0,0,0,0.5); border:1px solid var(--card-border); border-radius:8px; padding:0.75rem; color:var(--text); font-family:monospace; font-size:0.85rem; outline:none; margin-bottom:0.75rem; resize:vertical;" placeholder="Paste API Keys here, one per line..."></textarea>
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                <span style="font-size:0.78rem; color:var(--muted);">💡 Keys are stored securely in config.json</span>
+                <div style="display:flex; gap:0.6rem;">
+                    <button class="btn-nav" type="button" onclick="toggleKeyEditor()">Cancel</button>
+                    <button class="btn-primary" id="btn-save-keys" type="button" style="padding:0.45rem 1.2rem; font-size:0.85rem;" onclick="saveKeysFromUI()">💾 Save API Keys</button>
+                </div>
             </div>
         </div>
 
@@ -1786,29 +1789,72 @@
     }
 
     // ── API Key Management ──
-    async function toggleKeyEditor() {
-        const box = document.getElementById('key-editor-box');
-        if (box.style.display === 'none' || !box.style.display) {
-            try {
-                const res = await fetch('/api/keys/list');
-                const data = await res.json();
-                document.getElementById('key-editor-textarea').value = (data.keys || []).join('\n');
-            } catch (e) {
-                console.error('Failed to load raw keys:', e);
+    let _isLoadingKeys = false;
+    async function loadRawKeysIntoEditor() {
+        if (_isLoadingKeys) return;
+        _isLoadingKeys = true;
+        const textarea = document.getElementById('key-editor-textarea');
+        if (textarea && !textarea.value.trim()) {
+            textarea.placeholder = 'Fetching existing keys from server...';
+        }
+        try {
+            const res = await fetch('/api/keys/list');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            const keys = data.keys || [];
+            if (textarea) {
+                if (keys.length > 0) {
+                    textarea.value = keys.join('\n');
+                } else {
+                    textarea.placeholder = 'Paste Gemini API Keys here, one per line...';
+                }
             }
+        } catch (e) {
+            console.error('Failed to load raw keys:', e);
+            if (textarea && !textarea.value.trim()) {
+                textarea.placeholder = 'Paste Gemini API Keys here, one per line...';
+            }
+        } finally {
+            _isLoadingKeys = false;
+        }
+    }
+
+    function toggleKeyEditor() {
+        const box = document.getElementById('key-editor-box');
+        const isClosed = (box.style.display === 'none' || !box.style.display);
+        if (isClosed) {
             box.style.display = 'block';
+            loadRawKeysIntoEditor();
+            const textarea = document.getElementById('key-editor-textarea');
+            if (textarea) textarea.focus();
         } else {
             box.style.display = 'none';
         }
     }
 
     async function saveKeysFromUI() {
-        const rawText = document.getElementById('key-editor-textarea').value;
-        const keysArr = rawText.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+        const saveBtn = document.getElementById('btn-save-keys');
+        const textarea = document.getElementById('key-editor-textarea');
+        const rawText = (textarea ? textarea.value : '');
+        
+        const rawItems = rawText.split('\n');
+        let keysArr = [];
+        for (const item of rawItems) {
+            const parts = item.split(',').map(s => s.trim()).filter(s => s.length > 0);
+            keysArr.push(...parts);
+        }
+        keysArr = [...new Set(keysArr)];
+
         if (!keysArr.length) {
             if (!confirm('Warning: All API keys will be removed. Proceed?')) return;
         }
+
+        const origBtnText = saveBtn ? saveBtn.innerHTML : '💾 Save API Keys';
         try {
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '⏳ Saving...';
+            }
             const res = await fetch('/api/keys/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1817,22 +1863,32 @@
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
             if (data.error) throw new Error(data.error);
+
             showAlert(`✅ Saved ${data.keys_count} API Key(s) to config.json!`);
             document.getElementById('key-editor-box').style.display = 'none';
             loadKeyStatus();
         } catch (e) {
             showAlert('Failed to save API keys: ' + e.message);
+        } finally {
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.innerHTML = origBtnText;
+            }
         }
     }
 
     // ── API Keys ──
     async function loadKeyStatus() {
+        const badge = document.getElementById('api-total-badge');
+        const grid = document.getElementById('keys-grid');
         try {
             const res = await fetch('/api/keys/status');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
 
-            document.getElementById('api-total-badge').textContent =
-                `⚡ ${data.total_remaining_requests} API Requests Left Today`;
+            if (badge) {
+                badge.textContent = `⚡ ${data.total_remaining_requests} API Requests Left Today`;
+            }
 
             if (data.hardware_encoder) {
                 const encBadge = document.getElementById('encoder-badge');
@@ -1847,12 +1903,13 @@
 
             // Also show current model
             if (data.keys && data.keys.length > 0 && data.keys[0].model) {
-                document.getElementById('model-display').textContent = data.keys[0].model;
+                const mDisp = document.getElementById('model-display');
+                if (mDisp) mDisp.textContent = data.keys[0].model;
             }
 
-            const grid = document.getElementById('keys-grid');
+            if (!grid) return;
             if (!data.keys || data.keys.length === 0) {
-                grid.innerHTML = '<div class="empty-state">No API keys configured.</div>';
+                grid.innerHTML = '<div class="empty-state">No API keys configured. Click "✏️ Edit / Add Keys" above to add your keys.</div>';
                 return;
             }
             grid.innerHTML = '';
@@ -1897,16 +1954,22 @@
             });
         } catch (e) {
             console.error('Key status error:', e);
+            if (badge) badge.textContent = '⚡ Status check unavailable';
+            if (grid) {
+                grid.innerHTML = '<div class="empty-state" style="color:var(--warn); padding:1rem;">⚠️ Unable to reach key status server. Your keys may still work. Click "✏️ Edit / Add Keys" to manage them.</div>';
+            }
         }
     }
 
     // ── Movies ──
     async function loadMovies() {
+        const grid = document.getElementById('movies-grid');
         try {
             const res = await fetch('/api/movies');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const movies = await res.json();
-            const grid = document.getElementById('movies-grid');
-            if (!movies.length) {
+            if (!grid) return;
+            if (!movies || !movies.length) {
                 grid.innerHTML = '<div class="empty-state">No videos in movies/ folder yet.</div>';
                 return;
             }
@@ -1926,7 +1989,10 @@
                 `;
                 grid.appendChild(card);
             });
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error('Movies load error:', e);
+            if (grid) grid.innerHTML = '<div class="empty-state" style="color:var(--muted);">No videos loaded. Click 🔄 Refresh to retry.</div>';
+        }
     }
 
     function useMovie(fn) {
@@ -1937,10 +2003,12 @@
 
     // ── Outputs ──
     async function loadOutputs() {
+        const grid = document.getElementById('outputs-grid');
         try {
             const res = await fetch('/api/outputs');
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
-            const grid = document.getElementById('outputs-grid');
+            if (!grid) return;
             const metadata = Array.isArray(data.metadata) ? data.metadata : [];
             const outputs = data.outputs || {};
             const metadataMap = Object.fromEntries(metadata.map(item => [item.project_dir, item]));
@@ -2042,7 +2110,10 @@
                 card.innerHTML = bodyHtml;
                 grid.appendChild(card);
             }
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error('Outputs load error:', e);
+            if (grid) grid.innerHTML = '<div class="empty-state" style="color:var(--muted);">No outputs loaded. Click 🔄 Refresh to retry.</div>';
+        }
     }
 
     // ── Config ──

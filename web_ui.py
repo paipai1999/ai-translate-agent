@@ -1039,81 +1039,97 @@ async def get_key_status():
     import urllib.error
     from concurrent.futures import ThreadPoolExecutor
     
-    config_data = cfg.load_config()
-    gemini_cfg = config_data.get("gemini", {})
-    configured_keys = gemini_cfg.get("api_keys") or os.getenv("GEMINI_API_KEY") or []
-    if isinstance(configured_keys, str):
-        configured_keys = [k.strip() for k in configured_keys.split(",") if k.strip()]
+    try:
+        config_data = cfg.load_config()
+        gemini_cfg = config_data.get("gemini", {})
+        configured_keys = gemini_cfg.get("api_keys") or os.getenv("GEMINI_API_KEY") or []
+        if isinstance(configured_keys, str):
+            configured_keys = [k.strip() for k in configured_keys.split(",") if k.strip()]
+        elif not isinstance(configured_keys, list):
+            configured_keys = []
+            
+        from brain.tracker import load_usage_db, get_google_utc_date
+        db = load_usage_db()
+        recorded_keys = db.get("keys", {})
+        current_utc = get_google_utc_date()
         
-    from brain.tracker import load_usage_db, get_google_utc_date
-    db = load_usage_db()
-    recorded_keys = db.get("keys", {})
-    current_utc = get_google_utc_date()
-    
-    def ping_google_key(key):
-        key_str = str(key).strip()
-        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key_str}"
-        try:
-            req = urllib.request.Request(url, method="GET")
-            with urllib.request.urlopen(req, timeout=4.0) as resp:
-                if resp.status == 200:
-                    return "ONLINE", 200
-        except urllib.error.HTTPError as e:
-            if e.code == 429:
-                return "RATE LIMITED (429)", 429
-            elif e.code in [400, 401, 403]:
-                return "INVALID KEY", e.code
-            return f"HTTP {e.code}", e.code
-        except Exception:
-            return "UNREACHABLE", 0
-        return "UNKNOWN", 0
+        def ping_google_key(key):
+            key_str = str(key).strip()
+            if not key_str:
+                return "EMPTY", 0
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key_str}"
+            try:
+                req = urllib.request.Request(url, method="GET")
+                with urllib.request.urlopen(req, timeout=2.5) as resp:
+                    if resp.status == 200:
+                        return "ONLINE", 200
+            except urllib.error.HTTPError as e:
+                if e.code == 429:
+                    return "RATE LIMITED (429)", 429
+                elif e.code in [400, 401, 403]:
+                    return "INVALID KEY", e.code
+                return f"HTTP {e.code}", e.code
+            except Exception:
+                return "UNREACHABLE", 0
+            return "UNKNOWN", 0
 
-    key_statuses = []
-    total_remaining = 0
-    
-    with ThreadPoolExecutor(max_workers=5) as executor:
-        ping_results = list(executor.map(ping_google_key, configured_keys))
+        key_statuses = []
+        total_remaining = 0
+        
+        workers = min(10, max(1, len(configured_keys)))
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            ping_results = list(executor.map(ping_google_key, configured_keys))
 
-    for idx, key in enumerate(configured_keys):
-        if not key or not str(key).strip(): continue
-        key_str = str(key).strip()
-        masked = key_str[:6] + "..." + key_str[-4:] if len(key_str) > 10 else key_str
-        
-        live_state, http_code = ping_results[idx]
-        kdata = recorded_keys.get(masked, {})
-        
-        model_limits = gemini_cfg.get("model_limits", {})
-        models_data = kdata.get("models", {})
-        
-        model_stats = []
-        for m_name, m_limit in model_limits.items():
-            used = models_data.get(m_name, {}).get("used_today", 0)
-            if kdata.get("utc_date") != current_utc:
-                used = 0
-            remaining = max(0, int(m_limit) - used)
-            total_remaining += remaining
-            model_stats.append({
-                "name": m_name,
-                "used_today": used,
-                "limit": int(m_limit),
-                "remaining": remaining
+        for idx, key in enumerate(configured_keys):
+            if not key or not str(key).strip(): continue
+            key_str = str(key).strip()
+            masked = key_str[:6] + "..." + key_str[-4:] if len(key_str) > 10 else key_str
+            
+            live_state, http_code = ping_results[idx]
+            kdata = recorded_keys.get(masked, {})
+            
+            model_limits = gemini_cfg.get("model_limits", {})
+            models_data = kdata.get("models", {})
+            
+            model_stats = []
+            for m_name, m_limit in model_limits.items():
+                used = models_data.get(m_name, {}).get("used_today", 0)
+                if kdata.get("utc_date") != current_utc:
+                    used = 0
+                remaining = max(0, int(m_limit) - used)
+                total_remaining += remaining
+                model_stats.append({
+                    "name": m_name,
+                    "used_today": used,
+                    "limit": int(m_limit),
+                    "remaining": remaining
+                })
+                
+            key_statuses.append({
+                "key": masked,
+                "live_status": live_state,
+                "http_code": http_code,
+                "models": model_stats
             })
             
-        key_statuses.append({
-            "key": masked,
-            "live_status": live_state,
-            "http_code": http_code,
-            "models": model_stats
-        })
-        
-    hardware = detect_hardware_encoder()
-    return {
-        "total_keys": len(key_statuses),
-        "total_remaining_requests": total_remaining,
-        "daily_limit_per_key": int(gemini_cfg.get("daily_limit_per_key", 20)),
-        "hardware_encoder": hardware,
-        "keys": key_statuses
-    }
+        hardware = detect_hardware_encoder()
+        return {
+            "total_keys": len(key_statuses),
+            "total_remaining_requests": total_remaining,
+            "daily_limit_per_key": int(gemini_cfg.get("daily_limit_per_key", 20)),
+            "hardware_encoder": hardware,
+            "keys": key_statuses
+        }
+    except Exception as e:
+        print(f"[ERROR] /api/keys/status failed: {e}")
+        return {
+            "total_keys": 0,
+            "total_remaining_requests": 0,
+            "daily_limit_per_key": 20,
+            "hardware_encoder": {"codec": "libx264", "label": "CPU Multi-Core", "type": "cpu"},
+            "keys": [],
+            "error": str(e)
+        }
 
 @app.delete("/api/delete/{folder_type}/{item_name:path}")
 async def delete_item(folder_type: str, item_name: str):
@@ -1197,24 +1213,54 @@ async def rename_movie(req: RenameRequest):
 @app.get("/api/keys/list")
 async def list_raw_keys():
     import brain.config as cfg
-    config_data = cfg.load_config()
-    gemini_cfg = config_data.get("gemini", {})
-    keys = gemini_cfg.get("api_keys", [])
-    masked_keys = [k[:8] + '...' + k[-4:] if len(k) > 12 else '***' for k in keys]
-    return {'keys': masked_keys, 'count': len(masked_keys)}
+    try:
+        config_data = cfg.load_config()
+        gemini_cfg = config_data.get("gemini", {})
+        keys = gemini_cfg.get("api_keys", [])
+        if isinstance(keys, str):
+            keys = [k.strip() for k in keys.split(",") if k.strip()]
+        elif not isinstance(keys, list):
+            keys = []
+        if not keys and os.getenv("GEMINI_API_KEY"):
+            keys = [k.strip() for k in os.getenv("GEMINI_API_KEY", "").split(",") if k.strip()]
+        return {'keys': keys, 'count': len(keys)}
+    except Exception as e:
+        print(f"[ERROR] /api/keys/list failed: {e}")
+        return {'keys': [], 'count': 0, 'error': str(e)}
 
 @app.post("/api/keys/save")
 async def save_keys(req: SaveKeysRequest):
     import brain.config as cfg
     try:
+        config_data = cfg.load_config()
+        existing_keys = config_data.get("gemini", {}).get("api_keys", [])
+        if isinstance(existing_keys, str):
+            existing_keys = [k.strip() for k in existing_keys.split(",") if k.strip()]
+        elif not isinstance(existing_keys, list):
+            existing_keys = []
+
         new_keys = req.keys
         cleaned_keys = []
-        for k in new_keys:
-            k = str(k).strip()
-            if k and k not in cleaned_keys:
-                cleaned_keys.append(k)
+        for line in new_keys:
+            tokens = [t.strip() for t in str(line).replace(',', '\n').split('\n') if t.strip()]
+            for k in tokens:
+                # If key contains '...', user might have preserved a masked key from the status view.
+                # Resolve to the full existing key so real key is never lost!
+                if '...' in k:
+                    parts = k.split('...')
+                    prefix, suffix = parts[0].strip(), parts[-1].strip()
+                    matched = None
+                    for ek in existing_keys:
+                        if ek.startswith(prefix) and ek.endswith(suffix):
+                            matched = ek
+                            break
+                    if matched:
+                        k = matched
+                    else:
+                        continue
+                if k and k not in cleaned_keys:
+                    cleaned_keys.append(k)
                 
-        config_data = cfg.load_config()
         config_data.setdefault("gemini", {})["api_keys"] = cleaned_keys
         cfg.save_config(config_data)
             
@@ -1233,7 +1279,7 @@ async def save_keys(req: SaveKeysRequest):
             except Exception:
                 pass
 
-        return {"success": True, "keys_count": len(cleaned_keys)}
+        return {"success": True, "keys_count": len(cleaned_keys), "keys": cleaned_keys}
     except Exception as e:
         print(f"[ERROR] Failed to save API keys: {e}")
         raise HTTPException(status_code=500, detail=str(e))
