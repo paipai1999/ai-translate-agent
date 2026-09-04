@@ -521,6 +521,7 @@ class VideoMergerAgent:
                     # CRITICAL: Shift subtitle timings by 3 seconds so Myanmar ASS subtitles stay perfectly synced!
                     if subtitle_timings:
                         subtitle_timings = [(start + 3.0, dur, txt) for (start, dur, txt) in subtitle_timings]
+                        state.subtitle_timings = subtitle_timings
                 except Exception as e:
                     print(f"[WARN] VideoMerger: Failed to stitch thumbnail intro: {e}")
 
@@ -1391,7 +1392,10 @@ Style: ReelsSubs,{font_name},{sub_fontsize},&H00FFFFFF,&H00000000,&H00000000,&H8
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}
 """
-        burn_reels_subs = sub_mode not in ["none", "off", "no"]
+        # Determine if Reels needs separate subtitle overlay or if source already has them
+        source_already_subbed = "final_recap.mp4" in os.path.basename(source_video_path).lower() and sub_mode in ["burn", "hardsub", "both", "auto"]
+        burn_reels_subs = (sub_mode not in ["none", "off", "no"]) and (not source_already_subbed)
+
         if burn_reels_subs and subtitle_timings:
             for item in subtitle_timings:
                 try:
