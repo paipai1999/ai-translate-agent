@@ -2191,13 +2191,13 @@
             });
             const data = await res.json();
             if (res.ok) {
-                alert(`Renamed successfully to ${data.name}`);
+                showToast(`✅ Renamed successfully to ${data.name}`, 'success');
                 loadMovies();
             } else {
-                alert(`Rename failed: ${data.error}`);
+                showToast(`❌ Rename failed: ${data.detail || data.error}`, 'error');
             }
         } catch (e) {
-            alert(`Rename request failed: ${e.message}`);
+            showToast(`❌ Rename request failed: ${e.message}`, 'error');
         }
     }
 
