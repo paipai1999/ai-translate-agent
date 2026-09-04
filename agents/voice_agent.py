@@ -177,7 +177,15 @@ class VoiceAgent:
         # Check if F5-TTS engine is requested
         use_f5 = self.engine == "f5_tts"
         if use_f5:
-            if not self.f5_engine or not self.f5_engine.is_available():
+            # F5-TTS flow-matching model is trained strictly for English & Chinese.
+            # For Burmese narration, Microsoft Neural Edge-TTS (Thiha / Nilar) is the dedicated high-quality engine.
+            sample_text = "".join([str(item.get("narration", "")) for item in (state.generated_script or [])[:5]])
+            has_burmese = any('\u1000' <= char <= '\u109F' or '\uAA60' <= char <= '\uAA7F' for char in sample_text) or getattr(state, "language", "").lower() == "burmese"
+            if has_burmese:
+                print("[*] VoiceAgent: Burmese narration detected. F5-TTS model is trained for English/Chinese.")
+                print("[*] VoiceAgent: Automatically routing to Microsoft Neural Edge-TTS (my-MM-ThihaNeural / my-MM-NilarNeural) for natural, fluent Myanmar voiceover.")
+                use_f5 = False
+            elif not self.f5_engine or not self.f5_engine.is_available():
                 print("[WARN] VoiceAgent: F5-TTS is requested but not installed. Falling back to Edge TTS.")
                 print("[TIP] To use F5-TTS Voice Cloning, run: pip install f5-tts soundfile")
                 use_f5 = False
