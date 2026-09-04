@@ -178,6 +178,7 @@ def pipeline_worker(
     watermark_opacity=None,
     reels_enabled=True,
     video_format="both",
+    subtitle_style="box_black",
 ):
     current_job_id.set(job_id)
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
@@ -242,6 +243,7 @@ def pipeline_worker(
             movie_path,
             language=clean_lang,
             subtitle_mode=subtitle_mode,
+            subtitle_style=subtitle_style,
             resolution=resolution,
             tts_engine=tts_engine,
             tts_voice=tts_voice_override,
@@ -313,6 +315,7 @@ def batch_worker(
     watermark_opacity=None,
     reels_enabled=True,
     video_format="both",
+    subtitle_style="box_black",
 ):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
@@ -365,6 +368,7 @@ def batch_worker(
             skip_completed=True,
             language=clean_lang,
             subtitle_mode=subtitle_mode,
+            subtitle_style=subtitle_style,
             resolution=resolution,
             tts_engine=tts_engine,
             tts_voice=tts_voice_override,
@@ -437,6 +441,7 @@ class StartRequest(BaseModel):
     watermark_opacity: Optional[float] = None
     reels_enabled: Optional[bool] = True
     video_format: Optional[str] = "both"
+    subtitle_style: Optional[str] = "box_black"
 
 class BatchStartRequest(BaseModel):
     inputs: List[str]
@@ -450,6 +455,10 @@ class BatchStartRequest(BaseModel):
     watermark_opacity: Optional[float] = None
     reels_enabled: Optional[bool] = True
     video_format: Optional[str] = "both"
+    subtitle_style: Optional[str] = "box_black"
+
+class SubtitleConfigRequest(BaseModel):
+    preset: str = "box_black"
 
 class BrandingConfigRequest(BaseModel):
     watermark_enabled: bool = True
@@ -563,6 +572,7 @@ async def start_pipeline(req: StartRequest):
     input_source = req.input
     language = req.language or 'burmese'
     subtitle_mode = req.subtitle_mode or 'burn'
+    subtitle_style = req.subtitle_style or 'box_black'
     resolution = req.resolution or '1080p'
     tts_engine = req.tts_engine
     custom_thumb_title = req.custom_thumb_title
@@ -603,6 +613,7 @@ async def start_pipeline(req: StartRequest):
             watermark_opacity,
             req.reels_enabled,
             video_format,
+            subtitle_style,
         ),
         daemon=True,
     )
@@ -614,6 +625,7 @@ async def start_batch_pipeline(req: BatchStartRequest):
     inputs = req.inputs
     language = req.language or 'burmese'
     subtitle_mode = req.subtitle_mode or 'burn'
+    subtitle_style = req.subtitle_style or 'box_black'
     resolution = req.resolution or '1080p'
     tts_engine = req.tts_engine
     custom_thumb_title = req.custom_thumb_title
@@ -652,6 +664,7 @@ async def start_batch_pipeline(req: BatchStartRequest):
             watermark_opacity,
             req.reels_enabled,
             video_format,
+            subtitle_style,
         ),
         daemon=True,
     )
@@ -711,6 +724,31 @@ async def save_branding_config(req: BrandingConfigRequest):
     c["watermark"]["font_size"] = req.watermark_font_size
     cfg.save_config(c)
     return {"status": "ok", "watermark": c["watermark"]}
+
+@app.get("/api/config/subtitles")
+async def get_subtitle_config():
+    """Returns available subtitle style presets and current active setting."""
+    from brain.config import SUBTITLE_PRESETS
+    c = cfg.load_config()
+    sub_cfg = c.get("subtitle_overlay", {})
+    return {
+        "presets": list(SUBTITLE_PRESETS.values()),
+        "current_preset": sub_cfg.get("style_preset", "box_black"),
+        "config": sub_cfg,
+    }
+
+@app.post("/api/config/subtitles")
+async def save_subtitle_config(req: SubtitleConfigRequest):
+    """Saves chosen subtitle style preset into config.json."""
+    from brain.config import SUBTITLE_PRESETS
+    if req.preset not in SUBTITLE_PRESETS:
+        raise HTTPException(status_code=400, detail="Unknown preset ID")
+    c = cfg.load_config()
+    if "subtitle_overlay" not in c:
+        c["subtitle_overlay"] = {}
+    c["subtitle_overlay"]["style_preset"] = req.preset
+    cfg.save_config(c)
+    return {"status": "ok", "preset": req.preset}
 
 @app.get("/api/stream/{job_id}")
 async def stream_job_logs(job_id: str, request: Request):

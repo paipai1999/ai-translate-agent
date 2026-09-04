@@ -22,11 +22,13 @@ class BatchProcessor:
         watermark_opacity: float = None,
         tts_voice: str = None,
         video_format: str = None,
+        subtitle_style: str = None,
     ):
         self.movies_folder = movies_folder
         self.skip_completed = skip_completed
         self.language = language
         self.subtitle_mode = subtitle_mode
+        self.subtitle_style = subtitle_style
         self.resolution = resolution or "1080p"
         self.tts_engine = tts_engine
         self.tts_voice = tts_voice
@@ -124,6 +126,7 @@ class BatchProcessor:
                     watermark_text=self.watermark_text,
                     watermark_opacity=self.watermark_opacity,
                     video_format=self.video_format,
+                    subtitle_style=self.subtitle_style,
                 )
                 master.run_pipeline()
                 self.results.append({"movie": movie_name, "status": "SUCCESS"})

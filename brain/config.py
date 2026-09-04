@@ -90,6 +90,7 @@ DEFAULT_CONFIG = {
     },
     "subtitle_overlay": {
         "enabled": True,
+        "style_preset": "box_black",       # "box_black" | "yellow_pop" | "white_stroke" | "cyan_cyber" | "crimson_box"
         "font_name": "Myanmar Text",
         "font_size": 40,
         "bold": True,
@@ -102,6 +103,90 @@ DEFAULT_CONFIG = {
         "level": "INFO",                   # DEBUG | INFO | WARNING
         "save_log_file": True
     }
+}
+
+# Subtitle Style Presets for ASS rendering (colors in &HAABBGGRR format)
+SUBTITLE_PRESETS = {
+    "box_black": {
+        "id": "box_black",
+        "name": "Cinema Box (Netflix Style)",
+        "desc": "အမည်းရောင် Background Box ပါသော ရုပ်ရှင်ရုံသုံး စာတန်း (Contrast အကောင်းဆုံး)",
+        "font_size": 40,
+        "bold": True,
+        "border_style": 3,
+        "outline_width": 10,
+        "shadow": 2,
+        "primary_color": "&H00FFFFFF",   # Pure White
+        "outline_color": "&H00000000",   # Black
+        "back_color": "&HB0000000",      # 70% Dark Box
+        "margin_bottom": 50,
+        "badge_color": "#ffffff",
+        "badge_bg": "rgba(0,0,0,0.8)",
+    },
+    "yellow_pop": {
+        "id": "yellow_pop",
+        "name": "TikTok / Reels Pop (Yellow & Black)",
+        "desc": "ရွှေဝါရောင်စာလုံးနှင့် အမည်းရောင်အနားသတ် ထူထူ (Reels / TikTok လူကြိုက်များ)",
+        "font_size": 42,
+        "bold": True,
+        "border_style": 1,
+        "outline_width": 4,
+        "shadow": 3,
+        "primary_color": "&H0000D7FF",   # Vibrant Gold / Yellow
+        "outline_color": "&H00000000",   # Black Outline
+        "back_color": "&H80000000",
+        "margin_bottom": 50,
+        "badge_color": "#ffd700",
+        "badge_bg": "rgba(255,215,0,0.15)",
+    },
+    "white_stroke": {
+        "id": "white_stroke",
+        "name": "Classic Movie White (Drop Shadow)",
+        "desc": "အဖြူရောင်သန့်သန့်နှင့် အမည်းရောင် အနားသတ်ရိပ် (Standard Movie Subtitle)",
+        "font_size": 40,
+        "bold": True,
+        "border_style": 1,
+        "outline_width": 3.5,
+        "shadow": 2.5,
+        "primary_color": "&H00FFFFFF",   # Pure White
+        "outline_color": "&H00000000",   # Black Outline
+        "back_color": "&H90000000",
+        "margin_bottom": 50,
+        "badge_color": "#ffffff",
+        "badge_bg": "rgba(255,255,255,0.15)",
+    },
+    "cyan_cyber": {
+        "id": "cyan_cyber",
+        "name": "Cyber Cyan (Sci-Fi & Modern)",
+        "desc": "စိမ်းပြာရောင် ခေတ်မီဆန်းသစ်သော စာတန်းပုံစံ (Anime / Sci-Fi Recap)",
+        "font_size": 40,
+        "bold": True,
+        "border_style": 1,
+        "outline_width": 3.5,
+        "shadow": 2.5,
+        "primary_color": "&H00FFFF00",   # Bright Cyan
+        "outline_color": "&H00000000",   # Black Outline
+        "back_color": "&H80000000",
+        "margin_bottom": 50,
+        "badge_color": "#00ffff",
+        "badge_bg": "rgba(0,255,255,0.15)",
+    },
+    "crimson_box": {
+        "id": "crimson_box",
+        "name": "Thriller Crimson (Dark Red Box)",
+        "desc": "အနီရင့်ရောင် Background Box ပါသော စိတ်လှုပ်ရှားဖွယ် စာတန်း (Horror / Action Recap)",
+        "font_size": 40,
+        "bold": True,
+        "border_style": 3,
+        "outline_width": 10,
+        "shadow": 2,
+        "primary_color": "&H00FFFFFF",   # Pure White
+        "outline_color": "&H00000000",
+        "back_color": "&HA0151570",      # Dark Crimson Box
+        "margin_bottom": 50,
+        "badge_color": "#ff4d4d",
+        "badge_bg": "rgba(255,77,77,0.2)",
+    },
 }
 
 CONFIG_FILE = "config.json"

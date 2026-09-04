@@ -384,6 +384,13 @@ def main():
         help="Subtitle mode: 'burn' (burn hardsub on video) or 'none' (voiceover only + separate SRT)"
     )
     parser.add_argument(
+        "--sub-style", "--subtitle-style", "--preset",
+        dest="subtitle_style",
+        choices=["box_black", "yellow_pop", "white_stroke", "cyan_cyber", "crimson_box"],
+        default=None,
+        help="Subtitle style preset: 'box_black' (Cinema Box), 'yellow_pop' (TikTok Yellow), 'white_stroke' (Classic White), 'cyan_cyber' (Cyber Cyan), 'crimson_box' (Thriller Red Box)"
+    )
+    parser.add_argument(
         "--res", "--resolution",
         dest="resolution",
         choices=["1080p", "720p"],
@@ -447,6 +454,7 @@ def main():
                 movie_path,
                 language=args.language,
                 subtitle_mode=sub_mode,
+                subtitle_style=args.subtitle_style,
                 resolution=args.resolution,
                 tts_engine=args.engine,
                 custom_thumb_title=args.thumb_title,
@@ -472,6 +480,7 @@ def main():
             skip_completed=skip,
             language=args.language,
             subtitle_mode=sub_mode,
+            subtitle_style=args.subtitle_style,
             resolution=args.resolution,
             tts_engine=args.engine,
             custom_thumb_title=args.thumb_title,
@@ -491,6 +500,7 @@ def main():
             skip_completed=skip,
             language=args.language,
             subtitle_mode=sub_mode,
+            subtitle_style=args.subtitle_style,
             resolution=args.resolution,
             tts_engine=args.engine,
             custom_thumb_title=args.thumb_title,

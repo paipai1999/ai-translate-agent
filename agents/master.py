@@ -77,12 +77,14 @@ class MasterAgent:
         watermark_opacity: float = None,
         tts_voice: str = None,
         video_format: str = None,
+        subtitle_style: str = None,
     ):
         self.movie_path = movie_path
         movie_name = os.path.splitext(os.path.basename(movie_path))[0]
         cfg = config.load_config()
 
         self.subtitle_mode = str(subtitle_mode or "burn").lower()
+        self.subtitle_style = str(subtitle_style or os.getenv("SUBTITLE_STYLE") or cfg.get("subtitle_overlay", {}).get("style_preset", "box_black")).lower()
         self.resolution = str(resolution or "1080p").lower()
 
         fmt_candidate = str(video_format or os.getenv("VIDEO_FORMAT") or cfg.get("pipeline", {}).get("video_format", "both")).lower()
@@ -96,6 +98,7 @@ class MasterAgent:
         self.state = MovieState(movie_name=movie_name)
         self.state.movie_path = movie_path
         self.state.subtitle_mode = self.subtitle_mode
+        self.state.subtitle_style_preset = self.subtitle_style
         self.state.resolution = self.resolution
         self.state.video_format = self.video_format
         self.custom_thumb_title = custom_thumb_title
