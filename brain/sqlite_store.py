@@ -231,6 +231,24 @@ def update_job(job_id: str, status: Optional[str] = None, phase: Optional[str] =
         conn.close()
 
 
+def clean_stale_running_jobs(output_dir: str = "outputs") -> int:
+    """Marks any lingering 'running' jobs from prior interrupted server runs as 'interrupted'."""
+    db_path = get_db_path(output_dir)
+    if not os.path.exists(db_path):
+        return 0
+    now_iso = datetime.now(timezone.utc).isoformat()
+    conn = sqlite3.connect(db_path, timeout=30, check_same_thread=False)
+    try:
+        cur = conn.execute(
+            "UPDATE jobs SET status = 'interrupted', phase = 'Server interrupted / restarted', updated_at = ? WHERE status = 'running'",
+            (now_iso,)
+        )
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
 def get_active_job(output_dir: str = "outputs") -> Optional[dict]:
     """Returns the most recent currently running job, if any."""
     db_path = get_db_path(output_dir)

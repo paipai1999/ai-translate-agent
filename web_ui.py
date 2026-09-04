@@ -31,6 +31,14 @@ try:
 except Exception as e:
     print(f"[WARN] check_dependencies failed: {e}")
 
+try:
+    from brain.sqlite_store import clean_stale_running_jobs
+    stale_count = clean_stale_running_jobs()
+    if stale_count > 0:
+        print(f"[*] WebUI: Reset {stale_count} stale running job(s) from previous session.")
+except Exception as e:
+    print(f"[WARN] clean_stale_running_jobs notice: {e}")
+
 app = FastAPI(title="AI Movie Recap API", version="2.2.0")
 templates = Jinja2Templates(directory="templates")
 
@@ -58,15 +66,8 @@ def _cleanup_old_jobs():
                 thread_stdout.subscribers.pop(jid, None)
 
 def _has_running_job():
-    # Check SQLite database first for persistence across restarts
-    try:
-        from brain.sqlite_store import get_active_job
-        if get_active_job() is not None:
-            return True
-    except Exception:
-        pass
-    # Check in-memory jobs dictionary
-    return any(job.get('status') == 'running' for job in jobs.values())
+    with jobs_lock:
+        return any(job.get('status') == 'running' for job in jobs.values())
 
 def _resolve_input_source(input_source: str) -> str:
     """Resolve a dashboard filename to movies/ while still allowing valid local paths."""
@@ -492,19 +493,6 @@ async def system_info():
 
 @app.get("/api/jobs/active")
 async def get_active_job():
-    try:
-        from brain.sqlite_store import get_active_job as _db_active
-        db_job = _db_active()
-        if db_job:
-            return {
-                "job_id": db_job["job_id"],
-                "status": "running",
-                "phase": db_job.get("phase", "Running..."),
-                "created_at": db_job.get("created_at")
-            }
-    except Exception:
-        pass
-
     with jobs_lock:
         for jid, jdata in list(jobs.items()):
             if jdata.get("status") == "running":
