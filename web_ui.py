@@ -39,7 +39,18 @@ try:
 except Exception as e:
     print(f"[WARN] clean_stale_running_jobs notice: {e}")
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="AI Movie Recap API", version="2.2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 templates = Jinja2Templates(directory="templates")
 
 VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.m4v')
@@ -1033,7 +1044,7 @@ async def handle_config(request: Request):
         return public_config
 
 @app.get("/api/keys/status")
-async def get_key_status():
+def get_key_status():
     import brain.config as cfg
     import urllib.request
     import urllib.error
@@ -1211,7 +1222,7 @@ async def rename_movie(req: RenameRequest):
 
 @app.get("/api/keys")
 @app.get("/api/keys/list")
-async def list_raw_keys():
+def list_raw_keys():
     import brain.config as cfg
     try:
         config_data = cfg.load_config()
@@ -1229,7 +1240,7 @@ async def list_raw_keys():
         return {'keys': [], 'count': 0, 'error': str(e)}
 
 @app.post("/api/keys/save")
-async def save_keys(req: SaveKeysRequest):
+def save_keys(req: SaveKeysRequest):
     import brain.config as cfg
     try:
         config_data = cfg.load_config()
