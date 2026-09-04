@@ -24,10 +24,20 @@ class SceneAgent:
                 scene_list = detect(movie_path, ContentDetector(threshold=self.scene_threshold, min_scene_len=self.min_scene_len), show_progress=False)
             except Exception as e2:
                 print(f"[ERROR] SceneAgent: PySceneDetect failed: {e2}")
-                return state
+                scene_list = []
             
         if not scene_list:
-            print("[WARN] SceneAgent: No scenes detected.")
+            print("[WARN] SceneAgent: No scenes detected. Creating single fallback chapter.")
+            dur = state.duration_sec if (state and state.duration_sec < 9000) else 120.0
+            state.timeline = [
+                SceneData(
+                    scene_id=1,
+                    start_time="00:00:00",
+                    end_time=self._format_time(dur),
+                    start_sec=0.0,
+                    end_sec=dur
+                )
+            ]
             return state
             
         print(f"[*] SceneAgent: Detected {len(scene_list)} raw visual scenes.")
