@@ -443,20 +443,29 @@ class VideoMergerAgent:
                 print("[WARN] VideoMerger: No voiceover audio files found. Exporting original video.")
                 final_clip = main_video
 
-            # --- WATERMARK OVERLAY ---
+            # --- WATERMARK / BRAND OVERLAY ---
             wm_cfg = config_data.get("watermark", {})
             wm_override = getattr(state, "watermark_override", {}) or {}
             wm_enabled = wm_override.get("enabled", wm_cfg.get("enabled", False))
             if wm_enabled:
                 wm_text = wm_override.get("text") or wm_cfg.get("text", "PAI AI Movie Translate")
-                wm_opacity = float(wm_override.get("opacity") if wm_override.get("opacity") is not None else wm_cfg.get("opacity", 0.4))
-                wm_font_size = int(wm_override.get("font_size") or wm_cfg.get("font_size", 40))
-                wm_margin = int(wm_override.get("margin") or wm_cfg.get("margin", 30))
+                wm_opacity = float(wm_override.get("opacity") if wm_override.get("opacity") is not None else wm_cfg.get("opacity", 0.85))
+                wm_font_size = int(wm_override.get("font_size") or wm_cfg.get("font_size", 28))
+                wm_margin = int(wm_override.get("margin") or wm_cfg.get("margin", 25))
+                wm_pos = str(wm_override.get("position") or wm_cfg.get("position", "bottom_left")).lower()
+                wm_style = str(wm_override.get("style") or wm_cfg.get("style", "badge")).lower()
+                wm_logo_path = wm_override.get("logo_path") or wm_cfg.get("logo_path", "")
                 
                 try:
-                    wm_png = self._create_watermark_image(wm_text, wm_font_size, wm_opacity)
+                    wm_png = self._create_watermark_image(
+                        text=wm_text,
+                        font_size=wm_font_size,
+                        opacity=wm_opacity,
+                        style=wm_style,
+                        logo_path=wm_logo_path
+                    )
                     if os.path.exists(wm_png):
-                        print(f"[*] VideoMerger: Applying Watermark '{wm_text}' (Opacity: {wm_opacity})")
+                        print(f"[*] VideoMerger: Applying Channel Brand Overlay '{wm_text}' (Position: {wm_pos}, Style: {wm_style})")
                         try:
                             from moviepy import ImageClip, CompositeVideoClip
                         except ImportError:
@@ -468,8 +477,24 @@ class VideoMergerAgent:
                         else:
                             wm_clip = wm_clip.set_duration(final_clip.duration)
                             
-                        x_pos = max(0, final_clip.size[0] - wm_clip.size[0] - wm_margin)
-                        y_pos = wm_margin
+                        vid_w, vid_h = final_clip.size
+                        wm_w, wm_h = wm_clip.size
+                        
+                        if wm_pos == "bottom_left":
+                            x_pos = wm_margin
+                            y_pos = max(0, vid_h - wm_h - wm_margin)
+                        elif wm_pos == "bottom_right":
+                            x_pos = max(0, vid_w - wm_w - wm_margin)
+                            y_pos = max(0, vid_h - wm_h - wm_margin)
+                        elif wm_pos == "top_left":
+                            x_pos = wm_margin
+                            y_pos = wm_margin
+                        elif wm_pos == "top_center":
+                            x_pos = max(0, (vid_w - wm_w) // 2)
+                            y_pos = wm_margin
+                        else: # top_right (default)
+                            x_pos = max(0, vid_w - wm_w - wm_margin)
+                            y_pos = wm_margin
                         
                         if hasattr(wm_clip, "with_position"):
                             wm_clip = wm_clip.with_position((x_pos, y_pos))
@@ -628,10 +653,19 @@ class VideoMergerAgent:
     # WATERMARK GENERATION (Adaptive Contrast)
     # ─────────────────────────────────────────────────────
 
-    def _create_watermark_image(self, text: str, font_size: int, opacity: float) -> str:
+    def _create_watermark_image(
+        self,
+        text: str,
+        font_size: int = 28,
+        opacity: float = 0.85,
+        style: str = "badge",
+        logo_path: str = ""
+    ) -> str:
         """
-        Creates a transparent PNG with the watermark text and a subtle drop shadow using Pillow.
-        Returns the path to the saved PNG.
+        Creates a transparent PNG with custom channel branding badge or watermark.
+        Styles:
+          - 'badge': Sleek dark rounded badge pill with gold/white text for masking underlying watermarks.
+          - 'transparent': Simple semi-transparent text with drop shadow.
         """
         from PIL import Image, ImageDraw, ImageFont
         import os
@@ -640,15 +674,28 @@ class VideoMergerAgent:
         os.makedirs(temp_dir, exist_ok=True)
         out_path = os.path.join(temp_dir, "watermark.png")
         
+        # If logo image file is provided and exists, use it directly
+        if logo_path and os.path.exists(logo_path):
+            try:
+                logo_img = Image.open(logo_path).convert("RGBA")
+                if opacity < 1.0:
+                    alpha = logo_img.split()[3].point(lambda p: int(p * opacity))
+                    logo_img.putalpha(alpha)
+                logo_img.save(out_path, "PNG")
+                return out_path
+            except Exception as le:
+                print(f"[WARN] VideoMerger: Failed to load logo image {logo_path}: {le}")
+
+        font_found = self._find_myanmar_font()
         try:
-            font = ImageFont.truetype("arialbd.ttf", font_size) # Arial Bold
+            font = ImageFont.truetype(font_found or "arialbd.ttf", font_size)
         except IOError:
             try:
                 font = ImageFont.truetype("arial.ttf", font_size)
             except IOError:
                 font = ImageFont.load_default()
 
-        # Dummy draw to get text size
+        # Measure text
         dummy_img = Image.new('RGBA', (1, 1))
         draw = ImageDraw.Draw(dummy_img)
         try:
@@ -657,26 +704,32 @@ class VideoMergerAgent:
             text_height = bbox[3] - bbox[1]
         except AttributeError:
             text_width, text_height = draw.textsize(text, font=font)
-        
-        padding = 10
-        img_width = text_width + (padding * 2)
-        img_height = text_height + (padding * 2)
-        
-        img = Image.new('RGBA', (img_width, img_height), (255, 255, 255, 0))
+
+        pad_x = 18
+        pad_y = 8
+        img_width = text_width + (pad_x * 2)
+        img_height = text_height + (pad_y * 2)
+
+        img = Image.new('RGBA', (img_width, img_height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
-        
-        shadow_offset = (2, 2)
-        shadow_color = (0, 0, 0, 200) # Soft Black Shadow
-        text_color = (255, 255, 255, 255) # Pure White Text
-        
-        draw.text((padding + shadow_offset[0], padding + shadow_offset[1]), text, font=font, fill=shadow_color)
-        draw.text((padding, padding), text, font=font, fill=text_color)
-        
-        if opacity < 1.0:
-            alpha = img.split()[3]
-            alpha = alpha.point(lambda p: p * opacity)
-            img.putalpha(alpha)
-            
+
+        if style == "badge":
+            # Draw sleek rounded dark pill with border to completely cover source watermark
+            radius = min(img_height // 2, 10)
+            bg_color = (18, 18, 18, int(230 * opacity))
+            border_color = (255, 215, 0, int(200 * opacity)) # Gold accent border
+            draw.rounded_rectangle([(0, 0), (img_width - 1, img_height - 1)], radius=radius, fill=bg_color, outline=border_color, width=1)
+            # Gold / Pure White text
+            text_color = (255, 255, 255, int(255 * opacity))
+            draw.text((pad_x, pad_y - 2), text, font=font, fill=text_color)
+        else:
+            # Transparent shadow style
+            shadow_offset = (2, 2)
+            shadow_color = (0, 0, 0, int(200 * opacity))
+            text_color = (255, 255, 255, int(255 * opacity))
+            draw.text((pad_x + shadow_offset[0], pad_y + shadow_offset[1]), text, font=font, fill=shadow_color)
+            draw.text((pad_x, pad_y), text, font=font, fill=text_color)
+
         img.save(out_path, "PNG")
         return out_path
 
