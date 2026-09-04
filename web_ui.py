@@ -947,7 +947,10 @@ async def list_outputs():
 @app.get("/api/logs/{movie_name:path}")
 async def get_movie_logs(movie_name: str):
     safe_name = os.path.normpath(movie_name).strip(" /\\.")
-    log_path = os.path.join("outputs", safe_name, "pipeline.log")
+    outputs_dir = os.path.abspath("outputs")
+    log_path = os.path.normpath(os.path.join(outputs_dir, safe_name, "pipeline.log"))
+    if os.path.commonpath([outputs_dir, log_path]) != outputs_dir:
+        raise HTTPException(status_code=400, detail="Invalid log path")
     if not os.path.exists(log_path):
         raise HTTPException(status_code=404, detail="Log file not found for this movie")
     
