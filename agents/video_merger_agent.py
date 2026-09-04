@@ -575,8 +575,14 @@ class VideoMergerAgent:
                 burn_subs = False
             elif self.subtitle_mode in ["burn", "hardsub", "both", "auto"]:
                 burn_subs = True
-            else:
-                burn_subs = sub_cfg.get("enabled", True)
+            # Save a clean (un-subtitled) video copy for Facebook Reels 9:16 Canvas
+            # so Reels can display clean 16:9 middle frame with dedicated bottom subtitles!
+            clean_video_path = os.path.join(temp_dir, f"{os.path.splitext(os.path.basename(final_output))[0]}_clean.mp4")
+            try:
+                shutil.copy2(final_output, clean_video_path)
+                state.clean_video_path = clean_video_path
+            except Exception as ce:
+                print(f"[WARN] VideoMerger: Could not cache clean video copy: {ce}")
 
             if burn_subs and subtitle_timings:
                 self._burn_myanmar_subtitles(
@@ -1385,16 +1391,14 @@ PlayResY: {h_target}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: ReelsHook,{font_name},{hook_fontsize},&H0000D7FF,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,3,8,40,40,90,1
-Style: ReelsSubs,{font_name},{sub_fontsize},&H00FFFFFF,&H00000000,&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,4,2,2,50,50,{safe_margin + 120},1
+Style: ReelsHook,{font_name},{hook_fontsize},&H0000D7FF,&H00000000,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,3,8,40,40,90,1
+Style: ReelsSubs,{font_name},{sub_fontsize},&H00FFFFFF,&H00000000,&H00000000,&HB0000000,-1,0,0,0,100,100,0,0,3,10,2,2,40,40,{safe_margin + 120},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}
 """
-        # Determine if Reels needs separate subtitle overlay or if source already has them
-        source_already_subbed = "final_recap.mp4" in os.path.basename(source_video_path).lower() and sub_mode in ["burn", "hardsub", "both", "auto"]
-        burn_reels_subs = (sub_mode not in ["none", "off", "no"]) and (not source_already_subbed)
+        burn_reels_subs = sub_mode not in ["none", "off", "no"]
 
         if burn_reels_subs and subtitle_timings:
             for item in subtitle_timings:
