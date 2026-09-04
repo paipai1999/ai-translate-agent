@@ -491,7 +491,7 @@ async def index(request: Request):
     return templates.TemplateResponse(request=request, name="index.html")
 
 @app.get("/api/system/info")
-async def system_info():
+def system_info():
     enc = detect_hardware_encoder()
     with jobs_lock:
         active = _has_running_job()
@@ -503,7 +503,7 @@ async def system_info():
     }
 
 @app.get("/api/jobs/active")
-async def get_active_job():
+def get_active_job():
     with jobs_lock:
         for jid, jdata in list(jobs.items()):
             if jdata.get("status") == "running":
@@ -903,7 +903,7 @@ async def status_endpoint(job_id: str):
     }
 
 @app.get("/api/outputs")
-async def list_outputs():
+def list_outputs():
     metadata = list_movie_states("outputs")
     outputs_dir = "outputs"
     if not os.path.exists(outputs_dir):
@@ -944,7 +944,7 @@ async def list_outputs():
     return {"metadata": metadata, "outputs": result}
 
 @app.get("/api/logs/{movie_name:path}")
-async def get_movie_logs(movie_name: str):
+def get_movie_logs(movie_name: str):
     safe_name = os.path.normpath(movie_name).strip(" /\\.")
     outputs_dir = os.path.abspath("outputs")
     log_path = os.path.normpath(os.path.join(outputs_dir, safe_name, "pipeline.log"))
@@ -958,7 +958,7 @@ async def get_movie_logs(movie_name: str):
     return PlainTextResponse(content)
 
 @app.get("/api/outputs/file")
-async def serve_output(path: str = Query("")):
+def serve_output(path: str = Query("")):
     rel_path = path
     if not rel_path:
         raise HTTPException(status_code=400, detail="No file path specified")
@@ -984,7 +984,7 @@ async def serve_output(path: str = Query("")):
     return FileResponse(full_path)
 
 @app.get("/api/movies")
-async def list_movies():
+def list_movies():
     movies_dir = "movies"
     if not os.path.exists(movies_dir):
         return []
@@ -1070,8 +1070,12 @@ def get_key_status():
                 return "EMPTY", 0
             url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key_str}"
             try:
-                req = urllib.request.Request(url, method="GET")
-                with urllib.request.urlopen(req, timeout=2.5) as resp:
+                req = urllib.request.Request(
+                    url,
+                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Recap/2.2"},
+                    method="GET"
+                )
+                with urllib.request.urlopen(req, timeout=3.5) as resp:
                     if resp.status == 200:
                         return "ONLINE", 200
             except urllib.error.HTTPError as e:
