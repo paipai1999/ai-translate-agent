@@ -51,6 +51,7 @@ class MovieState(BaseModel):
     watermark_override: Optional[Dict[str, Any]] = None
     video_format: Optional[str] = "both"  # "both" (16:9 + 9:16) | "16:9" | "9:16"
     reels_video_path: Optional[str] = None  # Path to generated 9:16 Facebook Reels video
+    clean_video_path: Optional[str] = None  # Path to un-subtitled video copy (used for 9:16 Reels canvas source)
     subtitle_timings: List[Any] = Field(default_factory=list)  # Exact (place_time, duration, text) timings synced with audio
     uploaded_video_name: Optional[str] = None  # Stores the GenAI file name (e.g. files/abc)
     qa_results: Optional[Dict[str, Any]] = None  # Phase 7: QA Agent review results

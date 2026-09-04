@@ -503,21 +503,33 @@ class MasterAgent:
         save_movie_state(self.state, output_dir=self.output_dir)
 
     def _cleanup_temp_files(self):
-        """Safely clean up intermediate temp files to free disk space."""
+        """Safely clean up intermediate temp files to free disk space (recursive)."""
         try:
             temp_dir = os.path.abspath("temp")
             if os.path.exists(temp_dir):
                 cleaned_count = 0
-                for item in os.listdir(temp_dir):
-                    if item.endswith((".wav", ".mp3", ".tmp", ".part", ".ass")) or item.startswith("temp_"):
-                        item_path = os.path.join(temp_dir, item)
-                        try:
-                            if os.path.isfile(item_path):
+                cleaned_bytes = 0
+                # Walk all subdirectories recursively (fixes disk-leak bug where
+                # Demucs vocals.wav / extracted audio in temp/<project>/audio/ were never removed)
+                for root, dirs, files in os.walk(temp_dir, topdown=False):
+                    for item in files:
+                        if item.endswith((".wav", ".mp3", ".tmp", ".part", ".ass")) or item.startswith("temp_"):
+                            item_path = os.path.join(root, item)
+                            try:
+                                size = os.path.getsize(item_path)
                                 os.remove(item_path)
                                 cleaned_count += 1
-                        except Exception:
-                            pass
+                                cleaned_bytes += size
+                            except Exception:
+                                pass
+                    # Remove empty subdirectories after cleaning
+                    try:
+                        if root != temp_dir and not os.listdir(root):
+                            os.rmdir(root)
+                    except Exception:
+                        pass
                 if cleaned_count > 0:
-                    print(f"[*] Disk Optimizer: Cleaned up {cleaned_count} intermediate files from temp/.")
+                    mb = cleaned_bytes / (1024 * 1024)
+                    print(f"[*] Disk Optimizer: Cleaned up {cleaned_count} temp files ({mb:.1f} MB freed).")
         except Exception as e:
             print(f"[!] Disk Optimizer notice: {e}")
