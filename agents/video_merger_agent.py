@@ -1538,12 +1538,12 @@ Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}
         bg_w = w_target // 4
         bg_h = h_target // 4
 
-        # Clean movie foreground with delogo (removes bottom-left watermarks smoothly)
+        # Scale movie foreground to canvas width cleanly across any input resolution
         filter_complex = (
             f"[0:v]scale={bg_w}:{bg_h}:force_original_aspect_ratio=increase,"
             f"crop={bg_w}:{bg_h},boxblur=12:3,"
             f"scale={w_target}:{h_target}[bg];"
-            f"[0:v]delogo=x=10:y=318:w=160:h=44:show=0,scale={w_target}:-2[fg];"
+            f"[0:v]scale={w_target}:-2[fg];"
             f"[bg][fg]overlay=0:({h_target}-h)/2,"
             f"ass={ass_basename}[out]"
         )
