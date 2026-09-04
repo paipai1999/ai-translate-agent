@@ -675,6 +675,7 @@
     <div class="bg-stars"></div>
     <div class="bg-gradient"></div>
     <div class="bg-grid"></div>
+    <div id="toast-container" style="position:fixed; top:24px; right:24px; z-index:999999; display:flex; flex-direction:column; gap:10px; max-width:420px; pointer-events:none;"></div>
 
 <!-- ══ TOP NAV ══ -->
 <nav>
@@ -1849,26 +1850,42 @@
             if (!confirm('Warning: All API keys will be removed. Proceed?')) return;
         }
 
-        const origBtnText = saveBtn ? saveBtn.innerHTML : '💾 Save API Keys';
+        const origBtnText = '💾 Save API Keys';
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '⏳ Saving...';
+        }
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 12000);
+
         try {
-            if (saveBtn) {
-                saveBtn.disabled = true;
-                saveBtn.innerHTML = '⏳ Saving...';
-            }
             const res = await fetch('/api/keys/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ keys: keysArr })
+                body: JSON.stringify({ keys: keysArr }),
+                signal: controller.signal
             });
+            clearTimeout(timeoutId);
+
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || data.error || `HTTP ${res.status}`);
             if (data.error) throw new Error(data.error);
 
-            showAlert(`✅ Saved ${data.keys_count} API Key(s) to config.json!`);
-            document.getElementById('key-editor-box').style.display = 'none';
+            // 1. Immediately close editor box
+            const box = document.getElementById('key-editor-box');
+            if (box) box.style.display = 'none';
+
+            // 2. Non-blocking Toast notification
+            showToast(`✅ Saved ${data.keys_count} Gemini API Key(s) to config.json!`, 'success');
+
+            // 3. Refresh live status
             loadKeyStatus();
         } catch (e) {
-            showAlert('Failed to save API keys: ' + e.message);
+            clearTimeout(timeoutId);
+            console.error('Save keys error:', e);
+            const isTimeout = (e.name === 'AbortError');
+            showToast('❌ ' + (isTimeout ? 'Server save timed out. Please retry.' : e.message), 'error');
         } finally {
             if (saveBtn) {
                 saveBtn.disabled = false;
@@ -2223,7 +2240,37 @@
         } catch (e) { showAlert('Error: ' + e.message); }
     }
 
-    function showAlert(msg) { alert(msg); }
+    function showToast(msg, type = 'info') {
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            container.style.cssText = 'position:fixed; top:24px; right:24px; z-index:999999; display:flex; flex-direction:column; gap:10px; max-width:420px; pointer-events:none;';
+            document.body.appendChild(container);
+        }
+        const toast = document.createElement('div');
+        const bg = (type === 'success' || msg.includes('✅')) ? 'linear-gradient(135deg, rgba(16,185,129,0.95), rgba(5,150,105,0.95))'
+                 : (type === 'error' || msg.includes('❌') || msg.includes('Error') || msg.includes('Failed')) ? 'linear-gradient(135deg, rgba(239,68,68,0.95), rgba(220,38,38,0.95))'
+                 : 'linear-gradient(135deg, rgba(124,58,237,0.95), rgba(109,40,217,0.95))';
+        toast.style.cssText = `background:${bg}; color:#ffffff; padding:12px 20px; border-radius:10px; font-size:0.88rem; font-weight:600; box-shadow:0 10px 30px rgba(0,0,0,0.5); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.2); transform:translateY(-15px); opacity:0; transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1); pointer-events:auto;`;
+        toast.textContent = msg;
+        container.appendChild(toast);
+
+        requestAnimationFrame(() => {
+            toast.style.transform = 'translateY(0)';
+            toast.style.opacity = '1';
+        });
+
+        setTimeout(() => {
+            toast.style.transform = 'translateY(-15px)';
+            toast.style.opacity = '0';
+            setTimeout(() => toast.remove(), 300);
+        }, 4000);
+    }
+
+    function showAlert(msg) {
+        showToast(msg);
+    }
 
     // ── Init ──
     document.querySelectorAll('.hero-card, .section-card, .progress-card').forEach((el, idx) => {
