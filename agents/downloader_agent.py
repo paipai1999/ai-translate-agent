@@ -31,8 +31,8 @@ class DownloaderAgent:
     def download_video(self, url: str) -> str:
         """Download video from URL using yt-dlp and return the local file path."""
         url = self._clean_url(url)
-        print(f"[*] DownloaderAgent: URL detected -> {url}")
-        print(f"[*] DownloaderAgent: Downloading video into '{self.output_dir}/'...")
+        print(f"[*] DownloaderAgent: URL detected -> {url}", flush=True)
+        print(f"[*] DownloaderAgent: Downloading video into '{self.output_dir}/'...", flush=True)
         
         try:
             import yt_dlp
@@ -53,6 +53,8 @@ class DownloaderAgent:
         cookie_candidates = [
             'cookies.txt',
             os.path.join('assets', 'cookies.txt'),
+            '/kaggle/working/cookies.txt',
+            '/kaggle/working/ai-translate-agent/cookies.txt',
             '/content/cookies.txt',
             '/content/drive/MyDrive/MovieRecapOutputs/cookies.txt',
             os.path.join(self.output_dir, 'cookies.txt')
@@ -62,7 +64,7 @@ class DownloaderAgent:
             if os.path.exists(c_file) and os.path.getsize(c_file) > 10:
                 active_cookie = c_file
                 has_cookies = True
-                print(f"[*] DownloaderAgent: Using cookies authentication from -> {c_file}")
+                print(f"[*] DownloaderAgent: Using cookies authentication from -> {c_file}", flush=True)
                 break
 
         # Configure yt-dlp options prioritizing 1080p / 720p Full HD resolution
@@ -96,9 +98,9 @@ class DownloaderAgent:
                     pct = d.get('_percent_str', '').strip()
                     speed = d.get('_speed_str', '').strip()
                     eta = d.get('_eta_str', '').strip()
-                    print(f"[*] Downloading: {pct} at {speed} (ETA: {eta})")
+                    print(f"[*] Downloading: {pct} at {speed} (ETA: {eta})", flush=True)
             elif d.get('status') == 'finished':
-                print("[*] Download completed. Processing video streams...")
+                print("[*] Download completed. Processing video streams...", flush=True)
 
         ydl_opts['progress_hooks'] = [_dl_progress]
 
@@ -107,18 +109,18 @@ class DownloaderAgent:
         for attempt in range(1, max_attempts + 1):
             try:
                 if attempt == 2:
-                    print("[*] DownloaderAgent: Retrying with Pure Mobile Android & mWeb client (Cookies bypassed)...")
+                    print("[*] DownloaderAgent: Retrying with Pure Mobile Android & mWeb client (Cookies bypassed)...", flush=True)
                     ydl_opts.pop('cookiefile', None)
                     ydl_opts['format'] = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best/18/22'
                     ydl_opts['extractor_args'] = {'youtube': {'player_client': ['android', 'mweb', 'android_vr']}}
                 elif attempt == 3:
-                    print("[*] DownloaderAgent: Retrying with TV Embedded & Mobile fallback...")
+                    print("[*] DownloaderAgent: Retrying with TV Embedded & Mobile fallback...", flush=True)
                     ydl_opts.pop('cookiefile', None)
                     ydl_opts['format'] = 'best/18/22'
                     ydl_opts['extractor_args'] = {'youtube': {'player_client': ['tv_embedded', 'mweb', 'android']}}
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    print(f"[*] DownloaderAgent: Fetching video stream (Attempt {attempt}/{max_attempts})...")
+                    print(f"[*] DownloaderAgent: Fetching video stream (Attempt {attempt}/{max_attempts})...", flush=True)
                     info_dict = ydl.extract_info(url, download=True)
                     filename = ydl.prepare_filename(info_dict)
                     

@@ -1625,9 +1625,12 @@
     // ── Fallback Polling status ──
     async function checkStatus() {
         if (!currentJobId) return;
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 6000);
         try {
+            const res = await fetch(`/api/status/${currentJobId}`, { signal: controller.signal });
+            clearTimeout(timeoutId);
             pollErrors = 0;
-            const res = await fetch(`/api/status/${currentJobId}`);
             const data = await res.json();
 
             if (data.log && data.log.length > 0) {
@@ -1702,6 +1705,7 @@
                 document.getElementById('btn-batch').disabled = false;
             }
         } catch (e) {
+            clearTimeout(timeoutId);
             console.error('Polling error:', e);
             pollErrors++;
             if (pollErrors >= 5) {
