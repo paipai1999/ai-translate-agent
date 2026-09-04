@@ -21,6 +21,7 @@ class BatchProcessor:
         watermark_text: str = None,
         watermark_opacity: float = None,
         tts_voice: str = None,
+        video_format: str = None,
     ):
         self.movies_folder = movies_folder
         self.skip_completed = skip_completed
@@ -29,6 +30,7 @@ class BatchProcessor:
         self.resolution = resolution or "1080p"
         self.tts_engine = tts_engine
         self.tts_voice = tts_voice
+        self.video_format = video_format
         self.custom_thumb_title = custom_thumb_title
         self.watermark_enabled = watermark_enabled
         self.watermark_text = watermark_text
@@ -121,6 +123,7 @@ class BatchProcessor:
                     watermark_enabled=self.watermark_enabled,
                     watermark_text=self.watermark_text,
                     watermark_opacity=self.watermark_opacity,
+                    video_format=self.video_format,
                 )
                 master.run_pipeline()
                 self.results.append({"movie": movie_name, "status": "SUCCESS"})

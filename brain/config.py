@@ -5,6 +5,7 @@ import os
 DEFAULT_CONFIG = {
     "pipeline": {
         "language": "burmese",            # burmese (မြန်မာ - Thiha Voice) | english (အင်္ဂလိပ် - Guy Voice)
+        "video_format": "both",            # "both" (16:9 + 9:16) | "16:9" (YouTube Landscape) | "9:16" (Facebook Reels / TikTok)
         "whisper_model": "small",         # small | base | medium | large (small is a good balance between speed and accuracy)
         "scene_threshold": 30.0,           # PySceneDetect sensitivity (lower = more scenes)
         "max_characters": 6,               # Max character names to detect

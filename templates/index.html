@@ -833,17 +833,22 @@
                 </div>
             </div>
 
-            <!-- Facebook Reels Canvas Section -->
+            <!-- Video Size & Aspect Ratio Selector Section -->
             <div style="background:rgba(255,255,255,0.03); padding:0.75rem 1rem; border-radius:10px; border:1px solid rgba(255,255,255,0.08); margin-top:0.6rem;">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <label style="font-size:0.85rem; font-weight:700; color:var(--text); cursor:pointer; display:flex; align-items:center; gap:0.4rem;">
-                        <input type="checkbox" id="chk-reels" checked>
-                        📱 Facebook Reels & TikTok (9:16 Canvas Exporter)
-                    </label>
-                    <span style="font-size:0.75rem; color:var(--success); font-weight:600;">✨ Dual Export (16:9 + 9:16)</span>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+                    <span style="font-size:0.85rem; font-weight:700; color:var(--text); display:flex; align-items:center; gap:0.4rem;">
+                        📐 Video Size / Aspect Ratio (ဗီဒီယို အရွယ်အစား):
+                    </span>
+                    <span id="video-format-badge" style="font-size:0.72rem; padding:2px 8px; border-radius:4px; background:rgba(0,255,136,0.15); color:#00ff88; font-weight:600;">✨ Dual Export (16:9 + 9:16)</span>
                 </div>
-                <div style="font-size:0.73rem; color:var(--muted); margin-top:4px;">
-                    📌 16:9 YouTube ဗီဒီယိုအပြင် Facebook Reels / Shorts အတွက် Blurred Background + အပေါ်တွင် ခေါင်းစဉ်ကြီး + Safe Zone စာတန်းထိုးပါသော 9:16 ဒေါင်လိုက် ဗီဒီယိုကိုပါ တစ်ပြိုင်နက် ထုတ်ပေးမည်။
+                <select id="select-video-format" onchange="updateVideoFormatBadge(this.value)"
+                        style="width:100%; box-sizing:border-box; padding:0.5rem 0.75rem; font-size:0.85rem; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.15); border-radius:6px; color:#fff; font-weight:600;">
+                    <option value="both" selected>🎬 Both (16:9 Landscape + 9:16 Vertical Reels) — နှစ်မျိုးစလုံး (Recommended)</option>
+                    <option value="16:9">📺 16:9 Only (Standard Landscape — YouTube / Facebook Video)</option>
+                    <option value="9:16">📱 9:16 Only (Vertical Canvas — Facebook Reels / TikTok / Shorts)</option>
+                </select>
+                <div id="video-format-desc" style="font-size:0.73rem; color:var(--muted); margin-top:4px;">
+                    📌 16:9 YouTube မူရင်းဗီဒီယိုနှင့် Facebook Reels / Shorts အတွက် 9:16 ဒေါင်လိုက် Canvas ဗီဒီယို (၂) မျိုးစလုံးကို တစ်ပြိုင်နက် ထုတ်ပေးမည်။
                 </div>
             </div>
         </div>
@@ -1049,6 +1054,29 @@
         }
     }
 
+    // ── Video Format Helper ──
+    function updateVideoFormatBadge(val) {
+        const badge = document.getElementById('video-format-badge');
+        const desc = document.getElementById('video-format-desc');
+        if (!badge || !desc) return;
+        if (val === '16:9') {
+            badge.textContent = '📺 16:9 YouTube Landscape';
+            badge.style.background = 'rgba(56,189,248,0.2)';
+            badge.style.color = '#38bdf8';
+            desc.textContent = '📌 16:9 အလျားလိုက် Standard YouTube / Facebook Video သီးသန့် ထုတ်ပေးမည် (Reels ထုတ်လုပ်ချိန် သက်သာစေသည်)။';
+        } else if (val === '9:16') {
+            badge.textContent = '📱 9:16 Reels / TikTok';
+            badge.style.background = 'rgba(236,72,153,0.2)';
+            badge.style.color = '#ec4899';
+            desc.textContent = '📌 Facebook Reels, TikTok နှင့် Shorts အတွက် ဒေါင်လိုက် 1080x1920 Canvas + Blurred Background + Header Badge ပါသော 9:16 ဗီဒီယို သီးသန့် ထုတ်ပေးမည်။';
+        } else {
+            badge.textContent = '✨ Dual Export (16:9 + 9:16)';
+            badge.style.background = 'rgba(0,255,136,0.15)';
+            badge.style.color = '#00ff88';
+            desc.textContent = '📌 16:9 YouTube မူရင်းဗီဒီယိုနှင့် Facebook Reels / Shorts အတွက် 9:16 ဒေါင်လိုက် Canvas ဗီဒီယို (၂) မျိုးစလုံးကို တစ်ပြိုင်နက် ထုတ်ပေးမည်။';
+        }
+    }
+
     // ── Branding Helpers ──
     function updateThumbBadge(val) {
         const badge = document.getElementById('thumb-mode-badge');
@@ -1136,7 +1164,8 @@
         const watermarkEnabled = document.getElementById('chk-watermark') ? document.getElementById('chk-watermark').checked : true;
         const watermarkText = (document.getElementById('input-watermark-text') && document.getElementById('input-watermark-text').value.trim()) || "PAI AI Movie Translate";
         const watermarkOpacity = document.getElementById('select-watermark-opacity') ? parseFloat(document.getElementById('select-watermark-opacity').value) : 0.4;
-        const reelsEnabled = document.getElementById('chk-reels') ? document.getElementById('chk-reels').checked : true;
+        const videoFormat = document.getElementById('select-video-format') ? document.getElementById('select-video-format').value : 'both';
+        const reelsEnabled = (videoFormat === 'both' || videoFormat === '9:16');
 
         const btn = document.getElementById('btn-start');
         const btnText = document.getElementById('btn-start-text');
@@ -1160,7 +1189,8 @@
                     watermark_enabled: watermarkEnabled,
                     watermark_text: watermarkText,
                     watermark_opacity: watermarkOpacity,
-                    reels_enabled: reelsEnabled
+                    reels_enabled: reelsEnabled,
+                    video_format: videoFormat
                 })
             });
             const data = await res.json();
@@ -1194,7 +1224,8 @@
         const watermarkEnabled = document.getElementById('chk-watermark') ? document.getElementById('chk-watermark').checked : true;
         const watermarkText = (document.getElementById('input-watermark-text') && document.getElementById('input-watermark-text').value.trim()) || "PAI AI Movie Translate";
         const watermarkOpacity = document.getElementById('select-watermark-opacity') ? parseFloat(document.getElementById('select-watermark-opacity').value) : 0.4;
-        const reelsEnabled = document.getElementById('chk-reels') ? document.getElementById('chk-reels').checked : true;
+        const videoFormat = document.getElementById('select-video-format') ? document.getElementById('select-video-format').value : 'both';
+        const reelsEnabled = (videoFormat === 'both' || videoFormat === '9:16');
 
         const btn = document.getElementById('btn-batch');
         btn.disabled = true;
@@ -1215,7 +1246,8 @@
                     watermark_enabled: watermarkEnabled,
                     watermark_text: watermarkText,
                     watermark_opacity: watermarkOpacity,
-                    reels_enabled: reelsEnabled
+                    reels_enabled: reelsEnabled,
+                    video_format: videoFormat
                 })
             });
             const data = await res.json();

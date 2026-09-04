@@ -177,13 +177,14 @@ def pipeline_worker(
     watermark_text=None,
     watermark_opacity=None,
     reels_enabled=True,
+    video_format="both",
 ):
     current_job_id.set(job_id)
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
-    if reels_enabled is False:
+    if video_format == "16:9" or reels_enabled is False:
         os.environ["DISABLE_REELS"] = "true"
         os.environ.pop("ENABLE_REELS", None)
-    elif reels_enabled is True:
+    elif video_format in ["9:16", "both"] or reels_enabled is True:
         os.environ["ENABLE_REELS"] = "true"
         os.environ.pop("DISABLE_REELS", None)
 
@@ -248,6 +249,7 @@ def pipeline_worker(
             watermark_enabled=watermark_enabled,
             watermark_text=watermark_text,
             watermark_opacity=watermark_opacity,
+            video_format=video_format,
         )
         master.run_pipeline()
         
@@ -307,14 +309,15 @@ def batch_worker(
     watermark_text=None,
     watermark_opacity=None,
     reels_enabled=True,
+    video_format="both",
 ):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
-    if reels_enabled is False:
+    if video_format == "16:9" or reels_enabled is False:
         os.environ["DISABLE_REELS"] = "true"
         os.environ.pop("ENABLE_REELS", None)
-    elif reels_enabled is True:
+    elif video_format in ["9:16", "both"] or reels_enabled is True:
         os.environ["ENABLE_REELS"] = "true"
         os.environ.pop("DISABLE_REELS", None)
 
@@ -366,6 +369,7 @@ def batch_worker(
             watermark_enabled=watermark_enabled,
             watermark_text=watermark_text,
             watermark_opacity=watermark_opacity,
+            video_format=video_format,
         )
         print(f"[*] Batch Mode: Starting batch run for {len(inputs_list)} item(s)...")
         processor.process_all(url_list=urls, local_paths=local_paths)
@@ -426,6 +430,7 @@ class StartRequest(BaseModel):
     watermark_text: Optional[str] = None
     watermark_opacity: Optional[float] = None
     reels_enabled: Optional[bool] = True
+    video_format: Optional[str] = "both"
 
 class BatchStartRequest(BaseModel):
     inputs: List[str]
@@ -438,6 +443,7 @@ class BatchStartRequest(BaseModel):
     watermark_text: Optional[str] = None
     watermark_opacity: Optional[float] = None
     reels_enabled: Optional[bool] = True
+    video_format: Optional[str] = "both"
 
 class BrandingConfigRequest(BaseModel):
     watermark_enabled: bool = True
@@ -557,6 +563,9 @@ async def start_pipeline(req: StartRequest):
     watermark_enabled = req.watermark_enabled
     watermark_text = req.watermark_text
     watermark_opacity = req.watermark_opacity
+    
+    # Resolve video_format (supports backwards-compatible reels_enabled toggle)
+    video_format = req.video_format or ("both" if req.reels_enabled else "16:9")
 
     if not input_source:
         raise HTTPException(status_code=400, detail="No input provided")
@@ -587,6 +596,7 @@ async def start_pipeline(req: StartRequest):
             watermark_text,
             watermark_opacity,
             req.reels_enabled,
+            video_format,
         ),
         daemon=True,
     )
@@ -604,6 +614,7 @@ async def start_batch_pipeline(req: BatchStartRequest):
     watermark_enabled = req.watermark_enabled
     watermark_text = req.watermark_text
     watermark_opacity = req.watermark_opacity
+    video_format = req.video_format or ("both" if req.reels_enabled else "16:9")
 
     if not inputs or not all(isinstance(item, str) and item.strip() for item in inputs):
         raise HTTPException(status_code=400, detail="No inputs provided for batch mode")
@@ -634,6 +645,7 @@ async def start_batch_pipeline(req: BatchStartRequest):
             watermark_text,
             watermark_opacity,
             req.reels_enabled,
+            video_format,
         ),
         daemon=True,
     )
