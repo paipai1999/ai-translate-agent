@@ -364,9 +364,12 @@ class MasterAgent:
                                 if txt:
                                     sub_timings.append((s_start, max(s_end - s_start, 0.8), txt))
                     
+                    clean_vid = getattr(self.state, "clean_video_path", None)
+                    src_to_use = clean_vid if (clean_vid and os.path.exists(clean_vid)) else final_video_path
+
                     try:
                         reels_path = self.video_merger.generate_reels_video(
-                            source_video_path=final_video_path,
+                            source_video_path=src_to_use,
                             output_dir=os.path.join(self.output_dir, self.state.project_dir),
                             hook_title=hook_title,
                             subtitle_timings=sub_timings,
