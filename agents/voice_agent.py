@@ -59,8 +59,16 @@ class VoiceAgent:
             
             async def get_voices():
                 return await edge_tts.list_voices()
-                
-            voices_list = asyncio.run(get_voices())
+            
+            # FIX-W1: Kaggle/Colab already has a running event loop
+            try:
+                voices_list = asyncio.run(get_voices())
+            except RuntimeError:
+                try:
+                    import nest_asyncio; nest_asyncio.apply()
+                    voices_list = asyncio.get_event_loop().run_until_complete(get_voices())
+                except Exception:
+                    voices_list = []
             for item in voices_list:
                 if isinstance(item, dict):
                     available_voices.append(str(item.get("ShortName") or item.get("Name") or "").strip())
@@ -329,7 +337,33 @@ class VoiceAgent:
             tasks.append(self._speak_with_retry(clean_narration, out_file, scene_id, emotion, rate=selected_rate, target_dur=target_dur, voice_override=voice_override))
             output_files.append(out_file)
 
-        results = asyncio.run(_run_all(tasks))
+        # FIX-W1: In Kaggle/Colab Jupyter, asyncio.run() raises RuntimeError("This event loop
+        # is already running") because Jupyter runs its own persistent event loop.
+        # Use nest_asyncio.apply() if available, otherwise create a new thread with its own loop.
+        try:
+            results = asyncio.run(_run_all(tasks))
+        except RuntimeError as _loop_err:
+            if "event loop is already running" in str(_loop_err).lower():
+                try:
+                    import nest_asyncio
+                    nest_asyncio.apply()
+                    results = asyncio.get_event_loop().run_until_complete(_run_all(tasks))
+                    print("[*] VoiceAgent: Used nest_asyncio for Jupyter/Colab compatibility.")
+                except ImportError:
+                    # nest_asyncio not installed → run in a separate thread with its own loop
+                    import concurrent.futures as _cf
+                    def _run_in_new_loop():
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            return loop.run_until_complete(_run_all(tasks))
+                        finally:
+                            loop.close()
+                    with _cf.ThreadPoolExecutor(max_workers=1) as _exe:
+                        results = _exe.submit(_run_in_new_loop).result()
+                    print("[*] VoiceAgent: Used ThreadPoolExecutor for Jupyter/Colab compatibility.")
+            else:
+                raise
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 print(f"[WARN] VoiceAgent: Block {i} TTS failed: {result}")
@@ -497,23 +531,61 @@ class VoiceAgent:
         return text
 
     def _chunk_text(self, text: str, chunk_size: int) -> list[str]:
-        """Break a long clause into short, speakable chunks."""
+        """Break a long clause into short, speakable chunks.
+
+        FIX-BUG5: Splits at word boundary (space) or Burmese punctuation (၊ ။)
+        nearest to the chunk_size limit. If no space exists, splits at clean
+        Burmese syllable boundaries so syllables are never cut mid-character.
+        """
         text = text.strip()
         if not text:
             return []
         if len(text) <= chunk_size:
             return [text]
 
+        # Burmese combining marks, medials, tone marks, virama that CANNOT start a chunk
+        BURMESE_NON_INITIALS = set(
+            [chr(c) for c in range(0x102B, 0x103F)] +
+            ['\uAA7B', '\uAA7C', '\uAA7D']
+        )
+
         chunks = []
         start = 0
         while start < len(text):
-            end = min(len(text), start + chunk_size)
-            piece = text[start:end].strip()
+            if len(text) - start <= chunk_size:
+                piece = text[start:].strip()
+                if piece:
+                    chunks.append(piece)
+                break
+
+            end = start + chunk_size
+
+            # Priority 1: Search backwards for space or punctuation
+            cut = -1
+            for i in range(end, start + 5, -1):
+                if text[i - 1] in (' ', '\u104A', '\u104B', ',', '.', '!', '?', ';', ':'):
+                    cut = i
+                    break
+
+            # Priority 2: Search backwards for a clean Burmese syllable boundary
+            # The character starting the next chunk must NOT be a combining mark,
+            # and the character ending the current chunk must not be a prefix vowel or virama.
+            if cut == -1:
+                for i in range(end, start + 5, -1):
+                    if text[i] not in BURMESE_NON_INITIALS and text[i - 1] not in ('\u1031', '\u1039'):
+                        cut = i
+                        break
+
+            if cut == -1:
+                cut = end
+
+            piece = text[start:cut].strip()
             if piece:
-                if end < len(text) and piece[-1] not in "။!?":
-                    piece += "၊"
+                if piece[-1] not in ('၊', '။', '!', '?', '.', ',', ' '):
+                    piece += '၊'
                 chunks.append(piece)
-            start = end
+            start = cut
+
         return chunks
 
     def _has_meaningful_text(self, text: str) -> bool:

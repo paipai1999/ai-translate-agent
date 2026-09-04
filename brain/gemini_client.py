@@ -73,8 +73,13 @@ def call_gemini(
     model: str = "gemini-3.5-flash",
     temperature: float = 0.7,
     max_tokens: int = 4096,
+    response_mime_type: str = "application/json",  # FIX-BUG3: allow "text/plain" for non-JSON callers
 ) -> tuple:
     """Shared Gemini API client with automatic model fallback and API key rotation.
+
+    Args:
+        response_mime_type: "application/json" (default) or "text/plain" for plain-text prompts.
+            Use "text/plain" when the prompt asks Gemini to return raw text (not JSON).
 
     Returns:
         (text, used_model) tuple on success.
@@ -96,7 +101,10 @@ def call_gemini(
     for attempt in range(3):
         for m in models_to_try:
             limit = int(model_limits.get(m, 20))
+            model_404 = False  # FIX-W2: track per-model 404 to skip whole model
             for key in api_keys:
+                if model_404:
+                    break  # FIX-W2: 404 = model unavailable globally → skip to next model
                 key = str(key).strip()
                 if not key:
                     continue
@@ -108,14 +116,20 @@ def call_gemini(
                     f"https://generativelanguage.googleapis.com"
                     f"/v1beta/models/{m}:generateContent?key={key}"
                 )
+                gen_config = {
+                    "temperature": temperature,
+                    "maxOutputTokens": max_tokens,
+                }
+                # FIX-BUG3: Only set responseMimeType when caller explicitly wants JSON.
+                # Setting it to "application/json" on plain-text prompts forces Gemini to
+                # wrap its response in JSON even when the prompt says "Return ONLY the text".
+                if response_mime_type:
+                    gen_config["responseMimeType"] = response_mime_type
+
                 payload = {
                     "system_instruction": {"parts": [{"text": system_prompt}]},
                     "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-                    "generationConfig": {
-                        "temperature": temperature,
-                        "maxOutputTokens": max_tokens,
-                        "responseMimeType": "application/json",
-                    },
+                    "generationConfig": gen_config,
                 }
 
                 try:
@@ -147,12 +161,14 @@ def call_gemini(
                         time.sleep(1)   # tiny pause — don't hammer
                         continue        # next key, same model
                     elif e.code == 404:
+                        # FIX-W2: 404 = model doesn't exist for any key → skip whole model
                         print(
-                            f"[!] Gemini API model '{m}' not available for key '{_mask_key(key)}' (404). "
-                            f"Trying next key on the same model..."
+                            f"[!] Gemini API model '{m}' not found (404). "
+                            f"Skipping model and trying next fallback model..."
                         )
                         _record_api_usage(key, m, "error_404")
-                        continue        # next key, same model
+                        model_404 = True
+                        break           # FIX-W2: exit key loop → outer for-m loop moves to next model
                     else:
                         print(
                             f"[!] Gemini API model '{m}' returned HTTP {e.code} on key '{_mask_key(key)}'. "
@@ -217,7 +233,10 @@ def call_gemini_vision(
     for attempt in range(3):
         for m in models_to_try:
             limit = int(model_limits.get(m, 20))
+            model_404 = False  # FIX-W2: track per-model 404
             for key in api_keys:
+                if model_404:
+                    break  # FIX-W2: model not found for any key → skip whole model
                 key = str(key).strip()
                 if not key:
                     continue
@@ -229,12 +248,18 @@ def call_gemini_vision(
                     f"https://generativelanguage.googleapis.com"
                     f"/v1beta/models/{m}:generateContent?key={key}"
                 )
+                img_mime = (
+                    "image/jpeg" if image_path.lower().endswith(('.jpg', '.jpeg'))
+                    else "image/png" if image_path.lower().endswith('.png')
+                    else "image/webp" if image_path.lower().endswith('.webp')
+                    else "image/jpeg"
+                )
                 payload = {
                     "system_instruction": {"parts": [{"text": system_prompt}]},
                     "contents": [{
                         "role": "user",
                         "parts": [
-                            {"inline_data": {"mime_type": "image/jpeg" if image_path.lower().endswith(('.jpg', '.jpeg')) else "image/png" if image_path.lower().endswith('.png') else "image/webp" if image_path.lower().endswith('.webp') else "image/jpeg", "data": img_b64}},
+                            {"inline_data": {"mime_type": img_mime, "data": img_b64}},
                             {"text": user_text},
                         ],
                     }],
@@ -275,9 +300,11 @@ def call_gemini_vision(
                         time.sleep(1)
                         continue
                     elif err_code == 404:
-                        print(f"[WARN] Vision Model '{m}' 404 Not Found on key '{_mask_key(key)}'. Trying next key on the same model...")
+                        # FIX-W2: 404 = model not available for any key → skip whole model
+                        print(f"[WARN] Vision Model '{m}' not found (404). Skipping to next model...")
                         _record_api_usage(key, m, "error_404")
-                        continue
+                        model_404 = True
+                        break           # FIX-W2: break key loop → go to next model
                     else:
                         print(f"[WARN] Vision Model '{m}' returned HTTP {err_code}: {err_body[:200]} -- trying next key...")
                         _record_api_usage(key, m, f"error_{err_code}")

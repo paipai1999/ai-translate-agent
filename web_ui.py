@@ -285,11 +285,14 @@ def pipeline_worker(
         else:
             import traceback
             traceback.print_exc()
+            err_msg = str(e) or type(e).__name__
             with jobs_lock:
                 jobs[job_id]['status'] = 'error'
+                jobs[job_id]['error'] = err_msg
+                jobs[job_id]['phase'] = f"Error: {err_msg[:60]}"
             try:
                 from brain.sqlite_store import update_job
-                update_job(job_id, status='error', phase='Error')
+                update_job(job_id, status='error', phase=f"Error: {err_msg[:60]}")
             except Exception:
                 pass
     finally:
@@ -406,11 +409,14 @@ def batch_worker(
         else:
             import traceback
             traceback.print_exc()
+            err_msg = str(e) or type(e).__name__
             with jobs_lock:
                 jobs[job_id]['status'] = 'error'
+                jobs[job_id]['error'] = err_msg
+                jobs[job_id]['phase'] = f"Error: {err_msg[:60]}"
             try:
                 from brain.sqlite_store import update_job
-                update_job(job_id, status='error', phase='Error')
+                update_job(job_id, status='error', phase=f"Error: {err_msg[:60]}")
             except Exception:
                 pass
     finally:
@@ -779,7 +785,7 @@ async def stream_job_logs(job_id: str, request: Request):
                 if job_status in ('done', 'error'):
                     yield {
                         "event": "done",
-                        "data": json.dumps({"status": job_status})
+                        "data": json.dumps({"status": job_status, "error": current_job.get("error")})
                     }
                     break
 
@@ -855,7 +861,8 @@ async def status_endpoint(job_id: str):
         "batch_status": batch_status,
         "elapsed_sec": elapsed_sec,
         "phase_timings": phase_timings,
-        "log": log_lines
+        "log": log_lines,
+        "error": job.get("error"),
     }
 
 @app.get("/api/outputs")

@@ -1345,7 +1345,8 @@
                             document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
                             document.getElementById('btn-batch').disabled = false;
                         } else {
-                            setStatus('error', '❌ Pipeline Error');
+                            const errText = data.error ? `❌ Error: ${data.error}` : '❌ Pipeline Error';
+                            setStatus('error', errText);
                             document.getElementById('log-box-wrap').classList.remove('running');
                             document.getElementById('btn-start').disabled = false;
                             document.getElementById('btn-start-text').textContent = '▶ Start Pipeline';
@@ -1480,7 +1481,8 @@
                 document.getElementById('btn-batch').disabled = false;
             } else if (data.status === 'error') {
                 clearInterval(pollTimer);
-                setStatus('error', '❌ Pipeline Error');
+                const errText = data.error ? `❌ Error: ${data.error}` : '❌ Pipeline Error';
+                setStatus('error', errText);
                 document.getElementById('log-box-wrap').classList.remove('running');
 
                 document.getElementById('btn-start').disabled = false;
