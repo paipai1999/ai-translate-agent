@@ -26,7 +26,7 @@ class WriterAgent:
     def generate_script(self, state: MovieState) -> MovieState:
         """
         Full Movie Dialogue Translation & Dubbing Engine.
-        Translates EVERY spoken dialogue line from Whisper STT into natural, colloquial Burmese.
+        Translates EVERY spoken dialogue line from Whisper STT into natural, colloquial speech in the target language.
         Completely abolishes the 1-block-per-chapter summary recap architecture.
         """
         print(f"[*] WriterAgent: Generating FULL MOVIE DIALOGUE TRANSLATION (Lang: {self.language})...")
@@ -86,7 +86,9 @@ class WriterAgent:
             batch_prompt = (
                 f"Target Language: {self.language.upper()}\n"
                 f"Movie Title: {state.movie_name}\n"
-                f"Translate the following movie dialogues into natural colloquial Myanmar (Burmese) for professional dubbing:\n"
+                # FIX-BUG4: Use dynamic language instead of hardcoded target language
+                # This allows English dubbing mode (language='english') to work correctly
+                f"Translate the following movie dialogues into natural colloquial {self.language.title()} for professional dubbing:\n"
                 f"{json.dumps(batch, ensure_ascii=False, indent=2)}\n\n"
                 f"Output a JSON array where each object has: id, narration, start_sec, end_sec, emotion."
             )
@@ -118,7 +120,7 @@ class WriterAgent:
                     except (ValueError, TypeError):
                         pass
 
-            # Ensure EVERY item in the batch is preserved with Burmese translation
+            # Ensure EVERY item in the batch is preserved with target language translation
             for seg in batch:
                 s_id = seg["id"]
                 if s_id in trans_map and trans_map[s_id].get("narration"):
@@ -137,7 +139,7 @@ class WriterAgent:
                         try:
                             line_res, _ = call_gemini(
                                 FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT,
-                                f"Translate this single dialogue to colloquial Burmese: '{seg['text']}'",
+                                f"Translate this single dialogue to colloquial {self.language.title()}: '{seg['text']}'",
                                 gemini_key,
                                 model_workhorse,
                                 temperature=0.3,
@@ -174,7 +176,7 @@ class WriterAgent:
 
     def _bridge_action_narration(self, blocks: list, state: MovieState, gemini_key: str, model: str) -> list:
         """
-        Bridges silent or long action gaps (> 18s) with engaging Burmese movie recap narration.
+        Bridges silent or long action gaps (> 18s) with engaging movie recap narration in the target language.
         Turns quiet combat, chase, or suspense sequences into a lively, continuous story recap.
         """
         if not blocks or not gemini_key:
@@ -227,22 +229,24 @@ class WriterAgent:
                 f"In this movie recap, there is an action or suspense sequence lasting {int(cand['gap_dur'])} seconds without dialogue.\n"
                 f"Previous dialogue: '{cand['prev_text']}'\n"
                 f"Upcoming dialogue: '{cand['next_text']}'\n\n"
-                f"Write a short, engaging 1-2 sentence narrator recap in natural colloquial Myanmar (Burmese) "
-                f"describing what happens in the scene or setting up the tension (e.g. 'အဲဒီနောက်...', 'အဲဒီအချိန်မှာ...').\n"
+                # FIX-BUG4: Dynamic language for bridge narration
+                f"Write a short, engaging 1-2 sentence narrator recap in natural colloquial {self.language.title()} "
+                f"describing what happens in the scene or setting up the tension.\n"
                 f"RULES:\n"
                 f"- Max 20 words.\n"
-                f"- Conversational recap style (use ...တယ်, ...တာပေါ့, ...ဗျာ, ...ကွာ).\n"
-                f"- NO formal written Burmese (no ပါသည်, သည်, ၏, ၍).\n"
-                f"- Return ONLY the Burmese text."
+                f"- Conversational recap style.\n"
+                f"- NO formal written language.\n"
+                f"- Return ONLY the narration text, no JSON, no quotes, no explanation."
             )
             try:
                 res, _ = call_gemini(
-                    "You are an expert Burmese movie recap channel narrator.",
+                    "You are an expert movie recap channel narrator.",
                     prompt,
                     gemini_key,
                     model=model,
                     temperature=0.4,
-                    max_tokens=150
+                    max_tokens=150,
+                    response_mime_type="text/plain",  # FIX-BUG3: plain text, not JSON
                 )
                 txt = res.strip().strip('"').strip("'").strip()
                 if txt.startswith("{") or txt.startswith("["):
@@ -278,7 +282,7 @@ class WriterAgent:
                 print(f"[WARN] WriterAgent: Action narration failed for gap at {cand['gap_start']}s: {e}")
 
         new_blocks.sort(key=lambda x: float(x.get("start_sec", 0.0)))
-        print(f"[OK] WriterAgent (Action Narration): Successfully bridged {added_count} action scenes with lively Burmese commentary!")
+        print(f"[OK] WriterAgent (Action Narration): Successfully bridged {added_count} action scenes with lively commentary!")
         return new_blocks
 
 

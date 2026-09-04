@@ -2,17 +2,13 @@ import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-# DST-aware Pacific Time via zoneinfo + tzdata (works on Windows too).
+# DST-aware Pacific Time via zoneinfo (works on Windows too).
 _PT_ZONE = None
 try:
     from zoneinfo import ZoneInfo
     _PT_ZONE = ZoneInfo("America/Los_Angeles")
 except Exception:
-    try:
-        from zoneinfo import ZoneInfo
-        _PT_ZONE = ZoneInfo("America/Los_Angeles")
-    except Exception:
-        pass
+    pass  # Falls back to UTC-8 fixed offset in get_google_utc_date()
 
 def get_google_utc_date() -> str:
     """Returns current date in Pacific Time (PT) — DST-aware where possible.
