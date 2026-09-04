@@ -195,11 +195,16 @@ class VideoMergerAgent:
                 if mirror_enabled:
                     print("[*] -> Applying horizontal mirror/flip effect for max anti-copyright protection...")
                     try:
-                        from moviepy import vfx
-                        if hasattr(vfx, "MirrorX"):
-                            effects.append(vfx.MirrorX())
-                        elif hasattr(vfx, "mirror_x"):
-                            main_video = main_video.fx(vfx.mirror_x)
+                        try:
+                            from moviepy.video.fx.MirrorX import MirrorX
+                            effects.append(MirrorX())
+                        except Exception:
+                            try:
+                                from moviepy.video.fx.mirror_x import mirror_x
+                                effects.append(mirror_x())
+                            except Exception:
+                                import moviepy.video.fx.all as vfx
+                                main_video = main_video.fx(vfx.mirror_x)
                     except Exception as e:
                         print(f"[WARN] Failed to apply mirror effect: {e}")
 
@@ -207,23 +212,36 @@ class VideoMergerAgent:
                 if resize_factor != 1.0:
                     print(f"[*] -> Applying subtle scale/resize ({resize_factor}x) to modify pixel boundaries...")
                     try:
-                        from moviepy import vfx
-                        if hasattr(vfx, "Resize"):
-                            effects.append(vfx.Resize(resize_factor))
-                        elif hasattr(vfx, "resize"):
-                            main_video = main_video.fx(vfx.resize, resize_factor)
+                        try:
+                            from moviepy.video.fx.Resize import Resize
+                            effects.append(Resize(resize_factor))
+                        except Exception:
+                            try:
+                                from moviepy.video.fx.resize import resize
+                                effects.append(resize(resize_factor))
+                            except Exception:
+                                import moviepy.video.fx.all as vfx
+                                main_video = main_video.fx(vfx.resize, resize_factor)
                     except Exception as e:
                         print(f"[WARN] Failed to apply resize: {e}")
                 
                 # Apply elegant cinematic transitions (fade-in & fade-out)
                 print("[*] -> Applying cinematic FadeIn and FadeOut transitions (1 second)...")
                 try:
-                    from moviepy import vfx
-                    if hasattr(vfx, "FadeIn") and hasattr(vfx, "FadeOut"):
-                        effects.append(vfx.FadeIn(1.0))
-                        effects.append(vfx.FadeOut(1.0))
-                    elif hasattr(vfx, "fadein") and hasattr(vfx, "fadeout"):
-                        main_video = main_video.fx(vfx.fadein, 1.0).fx(vfx.fadeout, 1.0)
+                    try:
+                        from moviepy.video.fx.FadeIn import FadeIn
+                        from moviepy.video.fx.FadeOut import FadeOut
+                        effects.append(FadeIn(1.0))
+                        effects.append(FadeOut(1.0))
+                    except Exception:
+                        try:
+                            from moviepy.video.fx.fadein import fadein
+                            from moviepy.video.fx.fadeout import fadeout
+                            effects.append(fadein(1.0))
+                            effects.append(fadeout(1.0))
+                        except Exception:
+                            import moviepy.video.fx.all as vfx
+                            main_video = main_video.fx(vfx.fadein, 1.0).fx(vfx.fadeout, 1.0)
                 except Exception as e:
                     print(f"[WARN] Failed to apply fade transitions: {e}")
 
@@ -344,12 +362,16 @@ class VideoMergerAgent:
                         speed_factor = min(c.duration / available_gap, 1.35)
                         print(f"[*] VideoMerger [Hybrid]: Block {idx+1} audio ({c.duration:.1f}s) > gap ({available_gap:.1f}s). Speeding up {speed_factor:.2f}x.")
                         try:
-                            from moviepy import vfx
-                            if hasattr(vfx, "MultiplySpeed") and hasattr(c, "with_effects"):
-                                c = c.with_effects([vfx.MultiplySpeed(speed_factor)])
-                            else:
-                                import moviepy.audio.fx.all as afx
-                                c = afx.speedx(c, speed_factor)
+                            try:
+                                from moviepy.audio.fx.MultiplySpeed import MultiplySpeed
+                                c = c.with_effects([MultiplySpeed(speed_factor)])
+                            except Exception:
+                                try:
+                                    from moviepy.video.fx.MultiplySpeed import MultiplySpeed
+                                    c = c.with_effects([MultiplySpeed(speed_factor)])
+                                except Exception:
+                                    import moviepy.audio.fx.all as afx
+                                    c = afx.speedx(c, speed_factor)
                         except Exception as e:
                             print(f"[WARN] VideoMerger: Speed-up failed for block {idx+1}: {e}")
 
@@ -413,11 +435,25 @@ class VideoMergerAgent:
                                 orig_audio = orig_audio.transform(duck_transform)
                             except Exception as duck_err:
                                 print(f"[WARN] VideoMerger: Dynamic ducking transform fallback: {duck_err}")
+                                try:
+                                    from moviepy.audio.fx.MultiplyVolume import MultiplyVolume
+                                    orig_audio = orig_audio.with_effects([MultiplyVolume(duck_vol)])
+                                except Exception:
+                                    try:
+                                        import moviepy.audio.fx.all as afx
+                                        orig_audio = afx.volumex(orig_audio, duck_vol)
+                                    except Exception:
+                                        pass
+                        else:
+                            try:
                                 from moviepy.audio.fx.MultiplyVolume import MultiplyVolume
                                 orig_audio = orig_audio.with_effects([MultiplyVolume(duck_vol)])
-                        else:
-                            from moviepy.audio.fx.MultiplyVolume import MultiplyVolume
-                            orig_audio = orig_audio.with_effects([MultiplyVolume(duck_vol)])
+                            except Exception:
+                                try:
+                                    import moviepy.audio.fx.all as afx
+                                    orig_audio = afx.volumex(orig_audio, duck_vol)
+                                except Exception:
+                                    pass
 
                     # Mix original audio with positioned voiceover clips only if vocals were removed
                     if orig_audio is not None and has_no_vocals:
