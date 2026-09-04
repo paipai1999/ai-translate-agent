@@ -43,10 +43,9 @@ class QAAgent:
             return state
             
         model = config_data.get("gemini", {}).get("models", {}).get("workhorse", "gemini-3.5-flash-lite")
-
         blocks_to_rewrite = []
-        chars_per_sec = 12.0 # Burmese text avg reading speed
-        max_stretch = 1.33 # Allows audio to be up to 1.33x target duration (which requires 0.75x slow motion)
+        chars_per_sec = 9.5  # Burmese Edge-TTS reading speed (~9.5 characters/sec)
+        max_stretch = 1.25  # Allows audio to be up to 1.25x target duration
 
         for i, block in enumerate(script_blocks):
             if not isinstance(block, dict): continue
@@ -55,11 +54,11 @@ class QAAgent:
             
             start = float(block.get("start_sec") or 0.0)
             end = float(block.get("end_sec") or (start + 3.0))
-            target_dur = max(0.5, end - start)
+            target_dur = max(0.8, end - start)
             
             estimated_dur = len(narration) / chars_per_sec
             
-            # If the audio is expected to be more than 1.33x the video duration...
+            # If the audio is expected to exceed the target duration...
             if estimated_dur > (target_dur * max_stretch):
                 target_chars = int(target_dur * chars_per_sec)
                 blocks_to_rewrite.append({
@@ -74,59 +73,65 @@ class QAAgent:
             print("[*] QAAgent (Auto-Rewrite): All script blocks fit within acceptable timing bounds.")
             return state
             
-        print(f"[*] QAAgent (Auto-Rewrite): Found {len(blocks_to_rewrite)} over-length script blocks. Calling Gemini to shorten them...")
+        print(f"[*] QAAgent (Auto-Rewrite): Found {len(blocks_to_rewrite)} over-length script blocks. Calling Gemini in batches to shorten them...")
         
-        prompt_lines = []
-        for b in blocks_to_rewrite:
-            prompt_lines.append(f"Block {b['scene_id']} (Must be < {b['target_chars']} characters):\nORIGINAL: {b['original']}")
-            
-        system_prompt = (
-            "You are a professional Myanmar dubbing scriptwriter and video editor.\n"
-            "Your task: Shorten the provided Burmese dialogue blocks to fit within the target character limit.\n"
-            "RULES FOR SHORTENING:\n"
-            "1. PRESERVE the single most important story beat in each block (character reveals, emotional peaks, key plot facts).\n"
-            "2. DROP filler words, repetitive phrases, and secondary details - NOT key content.\n"
-            "3. NEVER drop: character names, emotional turning points, or plot-critical information.\n"
-            "4. Keep the natural colloquial Burmese style (use particles: \u101c\u1031, \u1015\u1031\u102c\u1037, \u1000\u103d\u102c, \u1017\u103b\u102c).\n"
-            "5. Output ONLY a valid JSON array of objects with scene_id and rewritten_narration. No markdown."
+        system_prompt = (
+            "You are a professional Myanmar dubbing scriptwriter and video editor.\n"
+            "Your task: Shorten the provided Burmese dialogue blocks to fit within the target character limit.\n"
+            "RULES FOR SHORTENING:\n"
+            "1. PRESERVE the single most important story beat in each block (character reveals, emotional peaks, key plot facts).\n"
+            "2. DROP filler words, repetitive phrases, and secondary details - NOT key content.\n"
+            "3. NEVER drop: character names, emotional turning points, or plot-critical information.\n"
+            "4. Keep the natural colloquial Burmese style (use particles: လေ, ပေါ့, ကွာ, ဗျာ).\n"
+            "5. Output ONLY a valid JSON array of objects with: scene_id and rewritten_narration. No markdown."
         )
-        user_prompt = "Rewrite the following blocks:\n\n" + "\n\n".join(prompt_lines)
-        
-        try:
-            raw, _ = call_gemini(system_prompt, user_prompt, api_key, model=model, temperature=0.1)
-            parsed = self._parse_json(raw)
-            if not parsed:
-                import json
-                try:
-                    parsed = json.loads(raw)
-                except Exception:
-                    pass
+
+        BATCH_SIZE = 15
+        rewritten_count = 0
+        import math
+        total_batches = math.ceil(len(blocks_to_rewrite) / BATCH_SIZE)
+
+        for b_idx in range(0, len(blocks_to_rewrite), BATCH_SIZE):
+            batch = blocks_to_rewrite[b_idx:b_idx + BATCH_SIZE]
+            batch_num = (b_idx // BATCH_SIZE) + 1
+
+            prompt_lines = []
+            for b in batch:
+                prompt_lines.append(f"Block {b['scene_id']} (Must be < {b['target_chars']} characters):\nORIGINAL: {b['original']}")
             
-            if isinstance(parsed, dict) and "blocks" in parsed:
-                parsed = parsed["blocks"]
-                
-            if isinstance(parsed, list):
-                rewrite_map = {str(item.get("scene_id")): item.get("rewritten_narration") for item in parsed if isinstance(item, dict)}
-                
-                rewritten_count = 0
-                for b in blocks_to_rewrite:
-                    idx = b["index"]
-                    scene_id = str(b["scene_id"])
-                    if scene_id in rewrite_map and rewrite_map[scene_id]:
-                        old_len = len(state.generated_script[idx]["narration"])
-                        new_text = rewrite_map[scene_id]
-                        new_len = len(new_text)
-                        state.generated_script[idx]["narration"] = new_text
-                        state.generated_script[idx]["qa_rewritten_for_length"] = True
-                        print(f"    - Scene {scene_id} shortened: {old_len} chars -> {new_len} chars.")
-                        rewritten_count += 1
-                
-                print(f"[OK] QAAgent (Auto-Rewrite): Successfully shortened {rewritten_count} blocks.")
-            else:
-                print(f"[!] QAAgent (Auto-Rewrite): Invalid JSON response from Gemini. Skipped.")
-        except Exception as e:
-            print(f"[!] QAAgent (Auto-Rewrite) failed: {e}")
+            user_prompt = "Rewrite the following blocks:\n\n" + "\n\n".join(prompt_lines)
             
+            try:
+                raw, _ = call_gemini(system_prompt, user_prompt, api_key, model=model, temperature=0.2, max_tokens=2048)
+                parsed = self._parse_json(raw)
+                if not parsed:
+                    try:
+                        import json
+                        parsed = json.loads(raw)
+                    except Exception:
+                        pass
+                
+                if isinstance(parsed, dict) and "blocks" in parsed:
+                    parsed = parsed["blocks"]
+                    
+                if isinstance(parsed, list):
+                    rewrite_map = {str(item.get("scene_id")): item.get("rewritten_narration") for item in parsed if isinstance(item, dict)}
+                    
+                    for b in batch:
+                        idx = b["index"]
+                        scene_id = str(b["scene_id"])
+                        if scene_id in rewrite_map and rewrite_map[scene_id]:
+                            old_len = len(state.generated_script[idx]["narration"])
+                            new_text = str(rewrite_map[scene_id]).strip()
+                            if new_text:
+                                new_len = len(new_text)
+                                state.generated_script[idx]["narration"] = new_text
+                                state.generated_script[idx]["qa_rewritten_for_length"] = True
+                                rewritten_count += 1
+            except Exception as e:
+                print(f"[WARN] QAAgent (Auto-Rewrite): Batch {batch_num} failed: {e}")
+
+        print(f"[OK] QAAgent (Auto-Rewrite): Successfully shortened {rewritten_count}/{len(blocks_to_rewrite)} over-length script blocks.")
         return state
 
     def review(self, state: MovieState, original_video_path: str, recap_video_path: str) -> MovieState:
