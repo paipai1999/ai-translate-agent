@@ -47,6 +47,7 @@ class MovieState(BaseModel):
     seo_metadata: Optional[Dict[str, Any]] = None
     subtitle_detection: Optional[Dict[str, Any]] = None
     subtitle_mode: Optional[str] = "auto"
+    subtitle_style_preset: Optional[str] = "box_black"  # "box_black" | "yellow_pop" | "white_stroke" | "cyan_cyber" | "crimson_box"
     custom_thumb_title: Optional[str] = None
     watermark_override: Optional[Dict[str, Any]] = None
     video_format: Optional[str] = "both"  # "both" (16:9 + 9:16) | "16:9" | "9:16"

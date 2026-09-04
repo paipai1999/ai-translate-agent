@@ -646,6 +646,8 @@ class VideoMergerAgent:
                 print(f"[WARN] VideoMerger: Could not cache clean video copy: {ce}")
 
             if burn_subs and subtitle_timings:
+                sub_preset = getattr(state, "subtitle_style_preset", None) or sub_cfg.get("style_preset", "box_black")
+                print(f"[*] VideoMerger: Burning Myanmar Subtitles (Style Preset: {sub_preset})...")
                 self._burn_myanmar_subtitles(
                     video_path    = final_output,
                     timings       = subtitle_timings,
@@ -657,6 +659,7 @@ class VideoMergerAgent:
                     outline_width = int(sub_cfg.get("outline_width", 3)),
                     margin_bottom = int(sub_cfg.get("margin_bottom", 50)),
                     max_chars     = int(sub_cfg.get("max_chars_per_line", 28)),
+                    preset        = sub_preset,
                 )
                 # Also save standalone SRT for YouTube captions / VLC
                 self._export_standalone_srt(subtitle_timings, output_dir)
@@ -812,6 +815,7 @@ class VideoMergerAgent:
         outline_width: int = 3,
         margin_bottom: int = 50,
         max_chars: int    = 28,
+        preset: str       = None,
     ) -> str:
         """
         Write an ASS (Advanced SubStation Alpha) subtitle file.
@@ -821,7 +825,31 @@ class VideoMergerAgent:
         """
         bold_flag = "-1" if bold else "0"
 
-        if border_style == 3:
+        # Resolve style preset from SUBTITLE_PRESETS if provided
+        shadow_val = 2
+        primary_colour = "&H00FFFFFF"
+        outline_colour = "&H00000000"
+
+        if preset:
+            from brain.config import SUBTITLE_PRESETS
+            p_data = SUBTITLE_PRESETS.get(str(preset).lower())
+            if p_data:
+                font_size = int(p_data.get("font_size", font_size))
+                bold_flag = "-1" if p_data.get("bold", bold) else "0"
+                border_style = int(p_data.get("border_style", border_style))
+                outline_val = int(p_data.get("outline_width", outline_width))
+                shadow_val = int(p_data.get("shadow", 2))
+                primary_colour = p_data.get("primary_color", "&H00FFFFFF")
+                outline_colour = p_data.get("outline_color", "&H00000000")
+                back_colour = p_data.get("back_color", "&HB0000000")
+                margin_bottom = int(p_data.get("margin_bottom", margin_bottom))
+            elif border_style == 3:
+                outline_val = 10
+                back_colour = "&HB0000000"
+            else:
+                outline_val = outline_width
+                back_colour = "&H90000000"
+        elif border_style == 3:
             # Box background mode (YouTube-style): Outline=box_padding, Shadow for depth
             outline_val = 10      # box padding in px
             shadow_val  = 2       # subtle depth shadow
@@ -845,7 +873,7 @@ class VideoMergerAgent:
             "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
             "Alignment, MarginL, MarginR, MarginV, Encoding\n"
             f"Style: Default,{font_name},{font_size},"
-            f"&H00FFFFFF,&H000000FF,&H00000000,{back_colour},"
+            f"{primary_colour},&H000000FF,{outline_colour},{back_colour},"
             f"{bold_flag},0,0,0,100,100,0,0,{border_style},{outline_val},{shadow_val},"
             f"2,10,10,{margin_bottom},1\n\n"
             "[Events]\n"
@@ -919,6 +947,7 @@ class VideoMergerAgent:
         outline_width: int = 3,
         margin_bottom: int = 50,
         max_chars: int     = 28,
+        preset: str        = None,
     ):
         """
         Burns Myanmar subtitles into video using FFmpeg 'ass' filter.
@@ -939,7 +968,7 @@ class VideoMergerAgent:
         if font_found:
             print(f"[*] MyanmarSubs: Using font → {font_found}")
 
-        self._write_ass(timings, ass_path, font_name, font_size, bold, border_style, outline_width, margin_bottom, max_chars)
+        self._write_ass(timings, ass_path, font_name, font_size, bold, border_style, outline_width, margin_bottom, max_chars, preset=preset)
 
         if not os.path.exists(ass_path):
             print("[WARN] MyanmarSubs: ASS file was not created. Skipping subtitle burn.")
@@ -1470,9 +1499,20 @@ class VideoMergerAgent:
         # Generate ASS with three styles:
         # Style 1: ReelsBrand (Top Header Badge on Canvas, White/Gold with Dark Pill, MarginV=45)
         # Style 2: ReelsHook (Top Center, Gold/Yellow, Big, MarginV=110)
-        # Style 3: ReelsSubs (Bottom Center Safe Zone, White with Black Outline, MarginV=280)
+        # Style 3: ReelsSubs (Bottom Center Safe Zone, styled according to chosen preset)
         wm_cfg = config_data.get("watermark", {})
         wm_brand_text = wm_cfg.get("text", "PAI AI Movie Recap")
+
+        # Resolve subtitle preset for Reels
+        sub_preset = getattr(state, "subtitle_style_preset", None) or sub_cfg.get("style_preset", "box_black")
+        from brain.config import SUBTITLE_PRESETS
+        p_data = SUBTITLE_PRESETS.get(str(sub_preset).lower(), {})
+        reels_sub_border = int(p_data.get("border_style", 3))
+        reels_sub_outline = int(p_data.get("outline_width", 10 if reels_sub_border == 3 else 4))
+        reels_sub_shadow = int(p_data.get("shadow", 2))
+        reels_sub_primary = p_data.get("primary_color", "&H00FFFFFF")
+        reels_sub_outline_col = p_data.get("outline_color", "&H00000000")
+        reels_sub_back = p_data.get("back_color", "&HB0000000")
         
         ass_content = f"""[Script Info]
 Title: Facebook Reels Canvas Overlay
@@ -1486,7 +1526,7 @@ PlayResY: {h_target}
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: ReelsBrand,{font_name},32,&H00FFFFFF,&H00000000,&H00000000,&H90000000,-1,0,0,0,100,100,0,0,3,8,2,8,40,40,45,1
 Style: ReelsHook,{font_name},{hook_fontsize},&H0000D7FF,&H00000000,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,3,8,40,40,110,1
-Style: ReelsSubs,{font_name},{sub_fontsize},&H00FFFFFF,&H00000000,&H00000000,&HB0000000,-1,0,0,0,100,100,0,0,3,10,2,2,40,40,{safe_margin + 120},1
+Style: ReelsSubs,{font_name},{sub_fontsize},{reels_sub_primary},&H00000000,{reels_sub_outline_col},{reels_sub_back},-1,0,0,0,100,100,0,0,{reels_sub_border},{reels_sub_outline},{reels_sub_shadow},2,40,40,{safe_margin + 120},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
