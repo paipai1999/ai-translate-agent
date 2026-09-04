@@ -1492,17 +1492,63 @@ Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}
         ass_basename = os.path.basename(ass_path)
         temp_reels_out = os.path.join(temp_dir, "temp_reels_render.mp4")
 
+        # Watermark / Brand Badge Overlay for Reels
+        wm_cfg = config_data.get("watermark", {})
+        wm_enabled = wm_cfg.get("enabled", False)
+        wm_png = None
+        if wm_enabled:
+            wm_text = wm_cfg.get("text", "PAI AI Movie Translate")
+            wm_opacity = float(wm_cfg.get("opacity", 0.85))
+            wm_font_size = int(wm_cfg.get("font_size", 24))
+            wm_style = str(wm_cfg.get("style", "badge")).lower()
+            wm_pos = str(wm_cfg.get("position", "bottom_left")).lower()
+            try:
+                wm_png = self._create_watermark_image(
+                    text=wm_text,
+                    font_size=wm_font_size,
+                    opacity=wm_opacity,
+                    style=wm_style
+                )
+            except Exception as e:
+                print(f"[WARN] ReelsExporter: Could not create watermark badge: {e}")
+                wm_png = None
+
         # 16x faster silky bokeh background: downscale to 270x480, blur lightly, then upscale
         bg_w = w_target // 4
         bg_h = h_target // 4
-        filter_complex = (
-            f"[0:v]scale={bg_w}:{bg_h}:force_original_aspect_ratio=increase,"
-            f"crop={bg_w}:{bg_h},boxblur=12:3,"
-            f"scale={w_target}:{h_target}[bg];"
-            f"[0:v]scale={w_target}:-2[fg];"
-            f"[bg][fg]overlay=0:({h_target}-h)/2,"
-            f"ass={ass_basename}[out]"
-        )
+
+        extra_inputs = []
+        if wm_png and os.path.exists(wm_png):
+            abs_wm_png = os.path.abspath(wm_png)
+            extra_inputs = ["-i", abs_wm_png]
+            
+            # Position badge relative to the center 16:9 movie box
+            if wm_pos == "bottom_right":
+                fg_filter = f"[0:v]scale={w_target}:-2[fg_raw];[fg_raw][1:v]overlay=main_w-overlay_w-20:main_h-overlay_h-20[fg];"
+            elif wm_pos == "top_left":
+                fg_filter = f"[0:v]scale={w_target}:-2[fg_raw];[fg_raw][1:v]overlay=20:20[fg];"
+            elif wm_pos == "top_right":
+                fg_filter = f"[0:v]scale={w_target}:-2[fg_raw];[fg_raw][1:v]overlay=main_w-overlay_w-20:20[fg];"
+            else: # bottom_left
+                fg_filter = f"[0:v]scale={w_target}:-2[fg_raw];[fg_raw][1:v]overlay=20:main_h-overlay_h-20[fg];"
+                
+            filter_complex = (
+                f"[0:v]scale={bg_w}:{bg_h}:force_original_aspect_ratio=increase,"
+                f"crop={bg_w}:{bg_h},boxblur=12:3,"
+                f"scale={w_target}:{h_target}[bg];"
+                f"{fg_filter}"
+                f"[bg][fg]overlay=0:({h_target}-h)/2,"
+                f"ass={ass_basename}[out]"
+            )
+        else:
+            filter_complex = (
+                f"[0:v]scale={bg_w}:{bg_h}:force_original_aspect_ratio=increase,"
+                f"crop={bg_w}:{bg_h},boxblur=12:3,"
+                f"scale={w_target}:{h_target}[bg];"
+                f"[0:v]scale={w_target}:-2[fg];"
+                f"[bg][fg]overlay=0:({h_target}-h)/2,"
+                f"ass={ass_basename}[out]"
+            )
 
         codec = enc_info["codec"]
         preset = enc_info.get("preset", "faster")
@@ -1510,6 +1556,7 @@ Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}
         cmd = [
             ffmpeg_bin, "-y",
             "-i", abs_src,
+            *extra_inputs,
             "-filter_complex", filter_complex,
             "-map", "[out]",
             "-map", "0:a?",
