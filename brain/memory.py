@@ -49,6 +49,7 @@ class MovieState(BaseModel):
     subtitle_mode: Optional[str] = "auto"
     custom_thumb_title: Optional[str] = None
     watermark_override: Optional[Dict[str, Any]] = None
+    video_format: Optional[str] = "both"  # "both" (16:9 + 9:16) | "16:9" | "9:16"
     reels_video_path: Optional[str] = None  # Path to generated 9:16 Facebook Reels video
     subtitle_timings: List[Any] = Field(default_factory=list)  # Exact (place_time, duration, text) timings synced with audio
     uploaded_video_name: Optional[str] = None  # Stores the GenAI file name (e.g. files/abc)

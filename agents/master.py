@@ -76,6 +76,7 @@ class MasterAgent:
         watermark_text: str = None,
         watermark_opacity: float = None,
         tts_voice: str = None,
+        video_format: str = None,
     ):
         self.movie_path = movie_path
         movie_name = os.path.splitext(os.path.basename(movie_path))[0]
@@ -84,10 +85,19 @@ class MasterAgent:
         self.subtitle_mode = str(subtitle_mode or "burn").lower()
         self.resolution = str(resolution or "1080p").lower()
 
+        fmt_candidate = str(video_format or os.getenv("VIDEO_FORMAT") or cfg.get("pipeline", {}).get("video_format", "both")).lower()
+        if fmt_candidate in ["16:9", "landscape", "youtube", "horizontal"]:
+            self.video_format = "16:9"
+        elif fmt_candidate in ["9:16", "reels", "portrait", "vertical", "tiktok", "shorts"]:
+            self.video_format = "9:16"
+        else:
+            self.video_format = "both"
+
         self.state = MovieState(movie_name=movie_name)
         self.state.movie_path = movie_path
         self.state.subtitle_mode = self.subtitle_mode
         self.state.resolution = self.resolution
+        self.state.video_format = self.video_format
         self.custom_thumb_title = custom_thumb_title
         if custom_thumb_title:
             self.state.custom_thumb_title = custom_thumb_title.strip()
@@ -338,11 +348,13 @@ class MasterAgent:
             self.state.phase_durations["Phase 6: Video Merge & Subtitles"] = round(time.time() - p6_t0, 2)
             print(f"[⏱️ TIMING] Phase 6 finished in {self.state.phase_durations['Phase 6: Video Merge & Subtitles']}s")
 
-            # Optional Phase 6b: 9:16 Facebook Reels / TikTok Canvas Video Export
+            # Phase 6b: 9:16 Facebook Reels / TikTok Canvas Video Export
             cfg_data = config.load_config()
             reels_cfg = cfg_data.get("reels", {})
-            reels_enabled = (os.getenv("ENABLE_REELS") == "true") or reels_cfg.get("enabled", True)
-            if os.getenv("DISABLE_REELS") == "true":
+            reels_enabled = (self.video_format in ["9:16", "both"]) and reels_cfg.get("enabled", True)
+            if os.getenv("ENABLE_REELS") == "true":
+                reels_enabled = True
+            elif os.getenv("DISABLE_REELS") == "true" or self.video_format == "16:9":
                 reels_enabled = False
 
             if reels_enabled:
@@ -380,6 +392,8 @@ class MasterAgent:
                         self.state.reels_video_path = reels_path
                     except Exception as e:
                         print(f"[WARN] MasterAgent: Failed to generate Reels video: {e}")
+            else:
+                print(f"[*] Phase 6b (9:16 Reels): Skipped (Video format is '{self.video_format}')")
 
             self.save_state()
 
@@ -424,7 +438,8 @@ class MasterAgent:
             print(f"   {'-'*56}")
             print(f"   🌟 TOTAL DURATION                          : {total_elapsed:>7.2f}s ({self.state.total_duration_formatted})")
             print(f"\n📦 OUTPUT DIRECTORY: outputs/{self.state.project_dir}/")
-            print(f"   ├─ final_recap.mp4         (16:9 YouTube Video)")
+            if self.video_format in ["16:9", "both"]:
+                print(f"   ├─ final_recap.mp4         (16:9 YouTube Video)")
             if getattr(self.state, "reels_video_path", None) and os.path.exists(self.state.reels_video_path):
                 print(f"   ├─ final_reels.mp4         (9:16 Facebook Reels Canvas Video)")
             print(f"   ├─ thumbnail.jpg           (High-CTR Thumbnail)")
@@ -441,11 +456,23 @@ class MasterAgent:
             if config_data.get("paths", {}).get("clean_temp_after_merge", True):
                 self._cleanup_temp_files()
 
-            final_video_path = os.path.join(self.output_dir, self.state.project_dir, "final_recap.mp4")
-            if os.path.exists(final_video_path) and os.name == 'nt':
-                print(f"\n[VIDEO READY] Auto-opening final recap video in your media player...")
+            # Select preferred output video for media player auto-launch
+            reels_file = getattr(self.state, "reels_video_path", None)
+            final_16_9 = os.path.join(self.output_dir, self.state.project_dir, "final_recap.mp4")
+            
+            if self.video_format == "9:16" and reels_file and os.path.exists(reels_file):
+                preferred_open_video = reels_file
+            elif os.path.exists(final_16_9):
+                preferred_open_video = final_16_9
+            elif reels_file and os.path.exists(reels_file):
+                preferred_open_video = reels_file
+            else:
+                preferred_open_video = None
+
+            if preferred_open_video and os.name == 'nt':
+                print(f"\n[VIDEO READY] Auto-opening video in your media player: {os.path.basename(preferred_open_video)}")
                 try:
-                    os.startfile(os.path.abspath(final_video_path))
+                    os.startfile(os.path.abspath(preferred_open_video))
                 except Exception as e:
                     print(f"[!] Could not auto-open video: {e}")
                     output_folder = os.path.join(self.output_dir, self.state.project_dir)

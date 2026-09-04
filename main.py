@@ -169,6 +169,177 @@ def main():
         action="store_true",
         help="Re-process movies even if output already exists (ignore skip_completed)"
     )
+import argparse
+import os
+import sys
+import shutil
+from agents.master import MasterAgent
+from agents.downloader_agent import DownloaderAgent
+from brain.planner import BatchProcessor
+from brain import config as cfg
+
+# Force UTF-8 output on Windows to prevent emoji/Unicode encode errors
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+ASCII_ART = r"""
+  __  __            _        _____                       
+ |  \/  |          (_)      |  __ \                      
+ | \  / | _____   ___  ___  | |__) |___  ___ __ _ _ __   
+ | |\/| |/ _ \ \ / / |/ _ \ |  _  // _ \/ __/ _` | '_ \  
+ | |  | | (_) \ V /| |  __/ | | \ \  __/ (_| (_| | |_) | 
+ |_|  |_|\___/ \_/ |_|\___| |_|  \_\___|\___\__,_| .__/  
+                                                  |_|     
+  100% Free Local AI Pipeline  .  Cost = $0              
+"""
+
+def setup_directories():
+    for d in ["movies", "outputs", "temp", "voiceover", "assets/voices", "assets/bgm"]:
+        os.makedirs(d, exist_ok=True)
+
+def run_interactive_cleanup():
+    print("\n=== 🗑️ MOVIE RECAP CLEANUP UTILITY ===")
+    print("1. Delete generated outputs (outputs/ folder)")
+    print("2. Delete source input videos (movies/ folder)")
+    print("3. Clear temporary audio/video cache (temp/ folder)")
+    print("0. Exit")
+    choice = input("\nSelect an option [0-3]: ").strip()
+    
+    if choice == "1":
+        out_dir = "outputs"
+        if not os.path.exists(out_dir) or not os.listdir(out_dir):
+            print("[INFO] No outputs found.")
+            return
+        items = sorted(os.listdir(out_dir))
+        for i, name in enumerate(items, 1):
+            print(f"  {i}. {name}")
+        sel = input("\nEnter number to delete (or 'all' for everything, 0 to cancel): ").strip().lower()
+        if sel == "all":
+            confirm = input("Are you sure you want to delete ALL outputs? (y/N): ").lower()
+            if confirm == "y":
+                for name in items:
+                    shutil.rmtree(os.path.join("outputs", name), ignore_errors=True)
+                    shutil.rmtree(os.path.join("temp", name), ignore_errors=True)
+                print("[OK] All outputs and associated temp files deleted!")
+        elif sel.isdigit() and 1 <= int(sel) <= len(items):
+            name = items[int(sel)-1]
+            shutil.rmtree(os.path.join("outputs", name), ignore_errors=True)
+            shutil.rmtree(os.path.join("temp", name), ignore_errors=True)
+            print(f"[OK] Deleted output: {name}")
+    elif choice == "2":
+        mov_dir = "movies"
+        if not os.path.exists(mov_dir) or not os.listdir(mov_dir):
+            print("[INFO] No input videos found in movies/.")
+            return
+        items = sorted([f for f in os.listdir(mov_dir) if f.lower().endswith(('.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv'))])
+        if not items:
+            print("[INFO] No video files found in movies/.")
+            return
+        for i, name in enumerate(items, 1):
+            print(f"  {i}. {name}")
+        sel = input("\nEnter number to delete (or 'all' for everything, 0 to cancel): ").strip().lower()
+        if sel == "all":
+            confirm = input("Are you sure you want to delete ALL input movies? (y/N): ").lower()
+            if confirm == "y":
+                for name in items: os.remove(os.path.join("movies", name))
+                print("[OK] All input movies deleted!")
+        elif sel.isdigit() and 1 <= int(sel) <= len(items):
+            name = items[int(sel)-1]
+            os.remove(os.path.join("movies", name))
+            print(f"[OK] Deleted input video: {name}")
+    elif choice == "3":
+        if os.path.exists("temp"):
+            shutil.rmtree("temp", ignore_errors=True)
+            os.makedirs("temp", exist_ok=True)
+            print("[OK] Temporary cache cleared!")
+
+def check_dependencies():
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        try:
+            from imageio_ffmpeg import get_ffmpeg_exe
+            ffmpeg = get_ffmpeg_exe()
+        except ImportError:
+            ffmpeg = None
+    if not ffmpeg or not os.path.exists(ffmpeg):
+        print("[CRITICAL ERROR] FFmpeg was not found. Install it or run: pip install imageio-ffmpeg")
+        sys.exit(1)
+    # MoviePy and the post-processing agent both honor this executable.
+    os.environ["IMAGEIO_FFMPEG_EXE"] = ffmpeg
+    ffmpeg_dir = os.path.dirname(ffmpeg)
+    if ffmpeg_dir and ffmpeg_dir not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+    print(f"[*] FFmpeg ready -> {ffmpeg}")
+
+def main():
+    check_dependencies()
+    print(ASCII_ART)
+
+    parser = argparse.ArgumentParser(
+        description="Movie Recap AI — Free Local Pipeline",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+
+    parser.add_argument(
+        "input_source",
+        nargs="?",
+        default=None,
+        help="Path to video file or URL to download"
+    )
+    parser.add_argument(
+        "-i", "--input",
+        dest="input_flag",
+        default=None,
+        help="Path to video file or URL to download"
+    )
+    parser.add_argument(
+        "-b", "--batch",
+        action="store_true",
+        help="Process all videos in movies/ folder sequentially"
+    )
+    parser.add_argument(
+        "-u", "--urls",
+        nargs="+",
+        default=None,
+        help="List of URLs to download and process in batch"
+    )
+    parser.add_argument(
+        "-l", "--lang",
+        dest="language",
+        choices=["burmese", "english", "mm", "en"],
+        default=None,
+        help="Language for recap script and voiceover (default: burmese or config setting)"
+    )
+    parser.add_argument(
+        "--blocks",
+        type=int,
+        default=None,
+        help="Maximum number of narrative blocks (override config)"
+    )
+    parser.add_argument(
+        "--subtitle",
+        action="store_true",
+        help="Enable subtitle blur pass in the final recap video"
+    )
+
+    parser.add_argument(
+        "-e", "--engine",
+        dest="engine",
+        choices=["edge_tts", "f5_tts"],
+        default=None,
+        help="TTS Voiceover Engine: 'edge_tts' (free cloud) or 'f5_tts' (zero-shot cloning)"
+    )
+    parser.add_argument(
+        "--no-voice",
+        action="store_true",
+        help="Skip Text-to-Speech voice generation step"
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-process movies even if output already exists (ignore skip_completed)"
+    )
     parser.add_argument(
         "--thumb-title",
         dest="thumb_title",
@@ -186,6 +357,13 @@ def main():
         dest="no_watermark",
         action="store_true",
         help="Disable watermark overlay in the video"
+    )
+    parser.add_argument(
+        "--format", "--aspect-ratio", "--video-size",
+        dest="video_format",
+        choices=["16:9", "9:16", "both"],
+        default=None,
+        help="Video output aspect ratio / format: '16:9' (YouTube landscape), '9:16' (Vertical Reels), or 'both' (Export both)"
     )
     parser.add_argument(
         "--reels",
@@ -225,9 +403,13 @@ def main():
         run_interactive_cleanup()
         return
 
+    chosen_format = args.video_format
     if args.no_reels:
+        chosen_format = "16:9"
         os.environ["DISABLE_REELS"] = "true"
     elif args.reels:
+        if not chosen_format:
+            chosen_format = "both"
         os.environ["ENABLE_REELS"] = "true"
 
     if args.no_voice:
@@ -238,8 +420,6 @@ def main():
 
     if args.subtitle:
         os.environ["ENABLE_SUBTITLES"] = "true"
-
-
 
     # Single video or URL
     chosen_input = (args.input_flag or args.input_source or "").strip()
@@ -272,6 +452,7 @@ def main():
                 custom_thumb_title=args.thumb_title,
                 watermark_enabled=False if args.no_watermark else True,
                 watermark_text=args.watermark_text,
+                video_format=chosen_format,
             )
             master.run_pipeline()
         except Exception as e:
@@ -296,6 +477,7 @@ def main():
             custom_thumb_title=args.thumb_title,
             watermark_enabled=False if args.no_watermark else True,
             watermark_text=args.watermark_text,
+            video_format=chosen_format,
         ).process_all()
 
     # Batch: URL list
@@ -314,6 +496,7 @@ def main():
             custom_thumb_title=args.thumb_title,
             watermark_enabled=False if args.no_watermark else True,
             watermark_text=args.watermark_text,
+            video_format=chosen_format,
         ).process_all(url_list=args.urls, local_paths=[])
     else:
         parser.print_help()

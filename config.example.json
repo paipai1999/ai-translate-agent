@@ -21,6 +21,7 @@
   },
   "pipeline": {
     "language": "burmese",
+    "video_format": "both",
     "whisper_model": "base",
     "scene_threshold": 30.0,
     "max_characters": 6,
