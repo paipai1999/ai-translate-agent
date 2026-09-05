@@ -56,8 +56,11 @@ class AudioAgent:
         """Separates vocals from background music using Demucs to improve Whisper accuracy."""
         import subprocess, shutil, sys
 
-        if os.getenv("SKIP_DEMUCS") == "true":
-            print("[*] AudioAgent: Skipping vocal separation (SKIP_DEMUCS active) -> using direct audio for Whisper.")
+        import brain.config as cfg
+        config_data = cfg.load_config()
+        use_demucs_cfg = config_data.get("pipeline", {}).get("use_demucs", True)
+        if os.getenv("SKIP_DEMUCS") == "true" or not use_demucs_cfg:
+            print("[*] AudioAgent: Skipping vocal separation (Demucs disabled) -> using direct audio for Whisper.")
             return audio_path
 
         base_name = os.path.splitext(os.path.basename(audio_path))[0]
@@ -87,15 +90,16 @@ class AudioAgent:
             
         try:
             import torch
+            cpu_jobs = str(max(1, (os.cpu_count() or 4) - 1))
             if torch.cuda.is_available():
                 gpu_name = torch.cuda.get_device_name(0)
                 print(f"[*] AudioAgent (Demucs): 🚀 Separating vocals via NVIDIA GPU ({gpu_name}) [CUDA Active]...")
                 device_flag = ["-d", "cuda"]
             else:
-                print("[*] AudioAgent (Demucs): 💻 Separating vocals via CPU Multi-Core...")
-                device_flag = ["-d", "cpu"]
+                print(f"[*] AudioAgent (Demucs): 💻 Separating vocals via CPU Multi-Core ({cpu_jobs} worker threads)...")
+                device_flag = ["-d", "cpu", "-j", cpu_jobs]
             cmd = [*demucs_cmd, "--two-stems=vocals", "-n", "htdemucs", *device_flag, audio_path, "-o", output_dir]
-            subprocess.run(cmd, check=True, capture_output=True)
+            subprocess.run(cmd, check=True)
             
             base_name = os.path.splitext(os.path.basename(audio_path))[0]
             vocals_path = os.path.join(output_dir, "htdemucs", base_name, "vocals.wav")

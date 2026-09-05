@@ -268,7 +268,8 @@ class MasterAgent:
                 if getattr(state, "timeline", None) and isinstance(state.timeline, list) and len(state.timeline) > 0:
                     print(f"[*] MasterAgent: Reusing cached scene detection ({len(state.timeline)} scenes)...")
                     return state
-                scene_cfg = cfg.get("scene_detection", False)
+                cfg_data = config.load_config()
+                scene_cfg = cfg_data.get("pipeline", {}).get("scene_detection", False)
                 skip_scenes = os.environ.get("SKIP_SCENES", "").lower() in ("1", "true", "yes") or not scene_cfg
                 if skip_scenes:
                     print("[*] MasterAgent: Scene detection skipped (1:1 dialogue mode uses Whisper timestamps). Populating fallback macro scene.")
@@ -510,8 +511,7 @@ class MasterAgent:
             print(f"{'='*60}\n")
 
             # Auto Cleanup of intermediate temp files if enabled
-            import brain.config as cfg
-            config_data = cfg.load_config()
+            config_data = config.load_config()
             if config_data.get("paths", {}).get("clean_temp_after_merge", True):
                 self._cleanup_temp_files()
 
