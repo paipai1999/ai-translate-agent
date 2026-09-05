@@ -416,14 +416,18 @@ class MasterAgent:
                 reels_enabled = False
 
             if reels_enabled:
-                final_video_path = os.path.join(self.output_dir, self.state.project_dir, "final_recap.mp4")
-                if os.path.exists(final_video_path):
+                final_video_path = getattr(self.state, "final_video_path", None) or os.path.join(self.output_dir, self.state.project_dir, "final_recap.mp4")
+                clean_vid = getattr(self.state, "clean_video_path", None)
+                src_to_use = clean_vid if (clean_vid and os.path.exists(clean_vid)) else final_video_path
+                if src_to_use and os.path.exists(src_to_use):
                     self._phase("Phase 6b: Generating 9:16 Facebook Reels Canvas Video", progress=95)
                     hook_title = (
                         self.custom_thumb_title
                         or (self.state.seo_metadata.get("title") if isinstance(self.state.seo_metadata, dict) else "")
                         or self.state.movie_name
                     )
+                    if hook_title and "|" in hook_title:
+                        hook_title = hook_title.split("|")[0].strip()
                     sub_timings = getattr(self.state, "subtitle_timings", None) or []
                     if not sub_timings and self.state.generated_script:
                         for block in self.state.generated_script:
@@ -433,9 +437,6 @@ class MasterAgent:
                                 txt = str(block.get("narration") or block.get("text") or "").strip()
                                 if txt:
                                     sub_timings.append((s_start, max(s_end - s_start, 0.8), txt))
-                    
-                    clean_vid = getattr(self.state, "clean_video_path", None)
-                    src_to_use = clean_vid if (clean_vid and os.path.exists(clean_vid)) else final_video_path
 
                     try:
                         reels_path = self.video_merger.generate_reels_video(
