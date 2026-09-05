@@ -202,8 +202,8 @@ class VideoMergerAgent:
                 print("[*] VideoMerger (Copyright-Safe): Applying Fair Use anti-copyright visual transformations...")
                 effects = []
 
-                # Default to True for maximum safety against Content ID
-                mirror_enabled = copyright_cfg.get("mirror_video", True)
+                # Default to False to preserve natural movie orientation (subtitles & signage legible)
+                mirror_enabled = copyright_cfg.get("mirror_video", False)
                 if mirror_enabled:
                     print("[*] -> Applying horizontal mirror/flip effect for max anti-copyright protection...")
                     try:
@@ -512,7 +512,8 @@ class VideoMergerAgent:
             wm_cfg = config_data.get("watermark", {})
             wm_override = getattr(state, "watermark_override", {}) or {}
             wm_enabled = wm_override.get("enabled", wm_cfg.get("enabled", False))
-            if wm_enabled:
+            is_reels_only = getattr(state, "video_format", "16:9") == "9:16"
+            if wm_enabled and not is_reels_only:
                 wm_text = wm_override.get("text") or wm_cfg.get("text", "PAI AI Movie Translate")
                 wm_opacity = float(wm_override.get("opacity") if wm_override.get("opacity") is not None else wm_cfg.get("opacity", 0.85))
                 wm_font_size = int(wm_override.get("font_size") or wm_cfg.get("font_size", 28))
@@ -1493,6 +1494,7 @@ class VideoMergerAgent:
         codec = enc_info.get("codec", "libx264")
         preset = enc_info.get("preset", "faster")
 
+        quality_args = ["-b:v", "6M", "-maxrate", "9M", "-bufsize", "12M"] if enc_info.get("type") == "gpu" else ["-crf", "20"]
         cmd = [
             ffmpeg_bin, "-y",
             "-i", os.path.abspath(video_path),
@@ -1500,6 +1502,7 @@ class VideoMergerAgent:
             "-map", "0:a?",
             "-c:v", codec,
             "-preset", preset,
+            *quality_args,
             "-pix_fmt", "yuv420p",
             "-movflags", "+faststart",
             "-c:a", "copy",
@@ -1527,6 +1530,9 @@ class VideoMergerAgent:
                     fallback_cmd[fallback_cmd.index(codec)] = "libx264"
                 if preset in fallback_cmd:
                     fallback_cmd[fallback_cmd.index(preset)] = "superfast"
+                if "-b:v" in fallback_cmd:
+                    b_idx = fallback_cmd.index("-b:v")
+                    fallback_cmd = fallback_cmd[:b_idx] + ["-crf", "20"] + fallback_cmd[b_idx+6:]
                 result = subprocess.run(fallback_cmd, cwd=working_dir, capture_output=True, text=True, timeout=dyn_timeout)
 
             if result.returncode == 0 and os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 100_000:
@@ -1655,7 +1661,10 @@ class VideoMergerAgent:
         reels_sub_outline_col = p_data.get("outline_color", "&H00000000")
         reels_sub_back = p_data.get("back_color", "&HB0000000")
         
-        brand_line = f"Dialogue: 0,0:00:00.00,9:59:59.99,ReelsBrand,,0,0,0,,🎬 {wm_brand_text}\\n" if wm_brand_enabled else ""
+        brand_events = [f"Dialogue: 0,0:00:00.00,9:59:59.99,ReelsBrand,,0,0,0,,🎬 {wm_brand_text}"] if wm_brand_enabled else []
+        hook_events = [f"Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}"]
+        events_str = "\n".join(brand_events + hook_events)
+
         ass_content = f"""[Script Info]
 Title: Facebook Reels Canvas Overlay
 ScriptType: v4.00+
@@ -1672,7 +1681,7 @@ Style: ReelsSubs,{font_name},{sub_fontsize},{reels_sub_primary},&H00000000,{reel
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-{brand_line}Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}
+{events_str}
 """
         burn_reels_subs = sub_mode not in ["none", "off", "no"]
         is_clean_source = "_clean" in os.path.basename(source_video_path).lower()
