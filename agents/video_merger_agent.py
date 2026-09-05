@@ -1639,7 +1639,9 @@ class VideoMergerAgent:
         # Style 2: ReelsHook (Top Center, Gold/Yellow, Big, MarginV=110)
         # Style 3: ReelsSubs (Bottom Center Safe Zone, styled according to chosen preset)
         wm_cfg = config_data.get("watermark", {})
-        wm_brand_text = wm_cfg.get("text", "PAI AI Movie Recap")
+        wm_override = getattr(state, "watermark_override", {}) or {}
+        wm_brand_enabled = wm_override.get("enabled", wm_cfg.get("enabled", True))
+        wm_brand_text = wm_override.get("text") or wm_cfg.get("text", "PAI AI Movie Recap")
 
         # Resolve subtitle preset for Reels
         sub_cfg = config_data.get("subtitle_overlay", {})
@@ -1653,6 +1655,7 @@ class VideoMergerAgent:
         reels_sub_outline_col = p_data.get("outline_color", "&H00000000")
         reels_sub_back = p_data.get("back_color", "&HB0000000")
         
+        brand_line = f"Dialogue: 0,0:00:00.00,9:59:59.99,ReelsBrand,,0,0,0,,🎬 {wm_brand_text}\\n" if wm_brand_enabled else ""
         ass_content = f"""[Script Info]
 Title: Facebook Reels Canvas Overlay
 ScriptType: v4.00+
@@ -1669,8 +1672,7 @@ Style: ReelsSubs,{font_name},{sub_fontsize},{reels_sub_primary},&H00000000,{reel
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:00.00,9:59:59.99,ReelsBrand,,0,0,0,,🎬 {wm_brand_text}
-Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}
+{brand_line}Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}
 """
         burn_reels_subs = sub_mode not in ["none", "off", "no"]
         is_clean_source = "_clean" in os.path.basename(source_video_path).lower()
