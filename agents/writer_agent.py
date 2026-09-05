@@ -54,10 +54,16 @@ class WriterAgent:
                 text = str(getattr(seg, "text", "")).strip()
 
             if text and len(text) > 1 and t_end > t_start:
+                dur = round(t_end - t_start, 2)
+                # Syllable / character budget: Edge-TTS Burmese speaks ~9.5 to 11 chars/sec
+                # Setting max_chars prevents Gemini from writing long essays that cause chipmunk speedup or audio drift
+                max_chars = max(16, int(dur * 9.5))
                 raw_segments.append({
                     "id": len(raw_segments) + 1,
                     "start_sec": round(t_start, 2),
                     "end_sec": round(t_end, 2),
+                    "duration_sec": dur,
+                    "max_chars": max_chars,
                     "text": text
                 })
 
@@ -86,9 +92,8 @@ class WriterAgent:
             batch_prompt = (
                 f"Target Language: {self.language.upper()}\n"
                 f"Movie Title: {state.movie_name}\n"
-                # FIX-BUG4: Use dynamic language instead of hardcoded target language
-                # This allows English dubbing mode (language='english') to work correctly
-                f"Translate the following movie dialogues into natural colloquial {self.language.title()} for professional dubbing:\n"
+                f"Translate the following movie dialogues into natural colloquial {self.language.title()} for professional dubbing.\n"
+                f"CRITICAL TIMING RULE: Fit the translation to `duration_sec` and stay within `max_chars` characters so speech timing synchronizes perfectly without rushing.\n"
                 f"{json.dumps(batch, ensure_ascii=False, indent=2)}\n\n"
                 f"Output a JSON array where each object has: id, narration, start_sec, end_sec, emotion, character, gender (\"male\" or \"female\")."
             )
@@ -130,6 +135,12 @@ class WriterAgent:
                     emotion = str(item.get("emotion", "normal")).strip()
                     gender = str(item.get("gender", "male")).strip().lower()
                     character = str(item.get("character", "Narrator")).strip()
+                    try:
+                        from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
+                        narration = replace_numbers_with_burmese(narration)
+                        narration = transliterate_english_acronyms(narration)
+                    except Exception:
+                        pass
                 else:
                     # Individual line fallback if dropped by Gemini
                     narration = seg["text"]
@@ -149,6 +160,12 @@ class WriterAgent:
                             )
                             clean_line = line_res.strip().strip('"').strip("'").strip()
                             if clean_line and not any(bad in clean_line.lower() for bad in ["json", "```", "here is", "here's"]):
+                                try:
+                                    from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
+                                    clean_line = replace_numbers_with_burmese(clean_line)
+                                    clean_line = transliterate_english_acronyms(clean_line)
+                                except Exception:
+                                    pass
                                 narration = clean_line
                         except Exception:
                             pass

@@ -194,6 +194,7 @@ def pipeline_worker(
     thumbnail_intro=False,
     source_language="auto",
     skip_demucs=False,
+    detect_scenes=False,
 ):
     current_job_id.set(job_id)
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
@@ -201,6 +202,11 @@ def pipeline_worker(
         os.environ["SKIP_DEMUCS"] = "true"
     else:
         os.environ.pop("SKIP_DEMUCS", None)
+
+    if detect_scenes:
+        os.environ["SKIP_SCENES"] = "0"
+    else:
+        os.environ["SKIP_SCENES"] = "1"
 
     if video_format == "16:9" or reels_enabled is False:
         os.environ["DISABLE_REELS"] = "true"
@@ -341,6 +347,7 @@ def batch_worker(
     thumbnail_intro=False,
     source_language="auto",
     skip_demucs=False,
+    detect_scenes=False,
 ):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
@@ -349,6 +356,11 @@ def batch_worker(
         os.environ["SKIP_DEMUCS"] = "true"
     else:
         os.environ.pop("SKIP_DEMUCS", None)
+
+    if detect_scenes:
+        os.environ["SKIP_SCENES"] = "0"
+    else:
+        os.environ["SKIP_SCENES"] = "1"
 
     if video_format == "16:9" or reels_enabled is False:
         os.environ["DISABLE_REELS"] = "true"
@@ -477,6 +489,7 @@ class StartRequest(BaseModel):
     thumbnail_intro: Optional[bool] = False
     source_language: Optional[str] = "auto"
     skip_demucs: Optional[bool] = False
+    detect_scenes: Optional[bool] = False
 
 class BatchStartRequest(BaseModel):
     inputs: List[str]
@@ -494,6 +507,7 @@ class BatchStartRequest(BaseModel):
     thumbnail_intro: Optional[bool] = False
     source_language: Optional[str] = "auto"
     skip_demucs: Optional[bool] = False
+    detect_scenes: Optional[bool] = False
 
 class SubtitleConfigRequest(BaseModel):
     preset: str = "box_black"
@@ -642,6 +656,7 @@ async def start_pipeline(req: StartRequest):
             req.thumbnail_intro,
             req.source_language or "auto",
             req.skip_demucs or False,
+            req.detect_scenes or False,
         ),
         daemon=True,
     )
@@ -696,6 +711,7 @@ async def start_batch_pipeline(req: BatchStartRequest):
             req.thumbnail_intro,
             req.source_language or "auto",
             req.skip_demucs or False,
+            req.detect_scenes or False,
         ),
         daemon=True,
     )
@@ -1093,6 +1109,11 @@ async def handle_config(request: Request):
             if "pipeline" not in config_data:
                 config_data["pipeline"] = {}
             config_data["pipeline"]["use_demucs"] = bool(data["use_demucs"])
+            cfg.save_config(config_data)
+        if "scene_detection" in data:
+            if "pipeline" not in config_data:
+                config_data["pipeline"] = {}
+            config_data["pipeline"]["scene_detection"] = bool(data["scene_detection"])
             cfg.save_config(config_data)
         public_config = json.loads(json.dumps(config_data))
         public_config.get("gemini", {}).pop("api_keys", None)

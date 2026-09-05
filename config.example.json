@@ -27,7 +27,8 @@
     "max_characters": 6,
     "max_scenes_for_llm": 50,
     "parallel_processing": true,
-    "use_demucs": true
+    "use_demucs": true,
+    "scene_detection": false
   },
   "voice": {
     "enabled": true,

@@ -826,6 +826,13 @@
                     📉 Dynamic Ducking (ဇာတ်ကြောင်းပြောချိန် နောက်ခံအသံတိုးမည်)
                 </label>
             </div>
+            <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">🎬 Scene Detection:</span>
+                <label style="font-size:0.82rem; cursor:pointer;" title="Enable PySceneDetect frame analysis (slower, scans all frames)">
+                    <input type="checkbox" id="chk-scene-detect" onchange="updateSceneDetectSetting(this.checked)">
+                    🔍 Detect Scenes (PySceneDetect ဖွင့်မည်)
+                </label>
+            </div>
         </div>
 
         <!-- ── Thumbnail Title & Watermark Branding Strip ── -->
@@ -1409,6 +1416,7 @@
         const thumbnailIntro = document.getElementById('chk-thumb-intro') ? document.getElementById('chk-thumb-intro').checked : false;
         const sourceLanguage = document.getElementById('select-source-lang') ? document.getElementById('select-source-lang').value : 'auto';
         const skipDemucs = document.getElementById('chk-skip-demucs') ? document.getElementById('chk-skip-demucs').checked : false;
+        const detectScenes = document.getElementById('chk-scene-detect') ? document.getElementById('chk-scene-detect').checked : false;
 
         const btn = document.getElementById('btn-start');
         const btnText = document.getElementById('btn-start-text');
@@ -1437,7 +1445,8 @@
                     video_format: videoFormat,
                     thumbnail_intro: thumbnailIntro,
                     source_language: sourceLanguage,
-                    skip_demucs: skipDemucs
+                    skip_demucs: skipDemucs,
+                    detect_scenes: detectScenes
                 })
             });
             const data = await res.json();
@@ -1477,6 +1486,7 @@
         const thumbnailIntro = document.getElementById('chk-thumb-intro') ? document.getElementById('chk-thumb-intro').checked : false;
         const sourceLanguage = document.getElementById('select-source-lang') ? document.getElementById('select-source-lang').value : 'auto';
         const skipDemucs = document.getElementById('chk-skip-demucs') ? document.getElementById('chk-skip-demucs').checked : false;
+        const detectScenes = document.getElementById('chk-scene-detect') ? document.getElementById('chk-scene-detect').checked : false;
 
         const btn = document.getElementById('btn-batch');
         btn.disabled = true;
@@ -1502,7 +1512,8 @@
                     video_format: videoFormat,
                     thumbnail_intro: thumbnailIntro,
                     source_language: sourceLanguage,
-                    skip_demucs: skipDemucs
+                    skip_demucs: skipDemucs,
+                    detect_scenes: detectScenes
                 })
             });
             const data = await res.json();
@@ -2214,6 +2225,20 @@
                 const chkDuck = document.getElementById('chk-audio-ducking');
                 if (chkDuck) chkDuck.checked = !!cfg.audio_ducking.enabled;
             }
+            if (cfg.pipeline && cfg.pipeline.scene_detection !== undefined) {
+                const chkScene = document.getElementById('chk-scene-detect');
+                if (chkScene) chkScene.checked = !!cfg.pipeline.scene_detection;
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    async function updateSceneDetectSetting(enabled) {
+        try {
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ scene_detection: enabled })
+            });
         } catch (e) { console.error(e); }
     }
 

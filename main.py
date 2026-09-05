@@ -181,6 +181,16 @@ def main():
         help="Skip Demucs vocal separation (dramatically speeds up audio pipeline on CPU)"
     )
     parser.add_argument(
+        "--detect-scenes",
+        action="store_true",
+        help="Enable PySceneDetect frame analysis (default: skipped for fast 1:1 dialogue dubbing)"
+    )
+    parser.add_argument(
+        "--skip-scenes",
+        action="store_true",
+        help="Explicitly bypass PySceneDetect frame analysis"
+    )
+    parser.add_argument(
         "--thumb-title",
         dest="thumb_title",
         default=None,
@@ -289,6 +299,11 @@ def main():
 
     if args.skip_demucs:
         os.environ["SKIP_DEMUCS"] = "true"
+
+    if args.detect_scenes:
+        os.environ["SKIP_SCENES"] = "0"
+    elif args.skip_scenes:
+        os.environ["SKIP_SCENES"] = "1"
 
     # Single video or URL
     chosen_input = (args.input_flag or args.input_source or "").strip()

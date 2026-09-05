@@ -395,38 +395,58 @@ class VideoMergerAgent:
 
                 try:
                     orig_audio = main_video.audio
+                    duck_applied = False
                     if orig_audio is not None:
                         if duck_enabled and positioned_clips:
                             import numpy as np
-                            speech_intervals = [
-                                (float(getattr(c, "start", 0.0) or 0.0), float(getattr(c, "start", 0.0) or 0.0) + float(getattr(c, "duration", 0.0) or 0.0))
+                            # Pre-merge overlapping speech intervals for ultra-fast evaluation
+                            raw_intervals = [
+                                (max(0.0, float(getattr(c, "start", 0.0) or 0.0) - 0.25),
+                                 float(getattr(c, "start", 0.0) or 0.0) + float(getattr(c, "duration", 0.0) or 0.0) + 0.25)
                                 for c in positioned_clips
                             ]
-                            print(f"[*] VideoMerger (Dynamic Audio Ducking): Ducking BGM to {duck_vol*100:.0f}% during speech, ambient swells to {ambient_vol*100:.0f}% across {len(speech_intervals)} dialogue segments.")
+                            raw_intervals.sort(key=lambda x: x[0])
+                            merged_intervals = []
+                            for s, e in raw_intervals:
+                                if not merged_intervals or merged_intervals[-1][1] < s:
+                                    merged_intervals.append([s, e])
+                                else:
+                                    merged_intervals[-1][1] = max(merged_intervals[-1][1], e)
+
+                            print(f"[*] VideoMerger (Dynamic Audio Ducking): Ducking BGM to {duck_vol*100:.0f}% during speech, ambient swells to {ambient_vol*100:.0f}% across {len(merged_intervals)} merged intervals.")
                             try:
                                 def duck_transform(get_frame, t):
                                     frame = get_frame(t)
                                     if np.isscalar(t):
-                                        is_speech = any(s - 0.25 <= t <= e + 0.25 for s, e in speech_intervals)
+                                        is_speech = any(s <= t <= e for s, e in merged_intervals)
                                         return (duck_vol if is_speech else ambient_vol) * frame
                                     else:
-                                        vol = np.full(t.shape[0], ambient_vol, dtype=float)
-                                        for s, e in speech_intervals:
-                                            vol[(t >= (s - 0.25)) & (t <= (e + 0.25))] = duck_vol
+                                        t_min = t[0]
+                                        t_max = t[-1]
+                                        vol = np.full(t.shape[0], ambient_vol, dtype=np.float32)
+                                        for s, e in merged_intervals:
+                                            if e < t_min:
+                                                continue
+                                            if s > t_max:
+                                                break
+                                            vol[(t >= s) & (t <= e)] = duck_vol
                                         if hasattr(frame, 'ndim') and frame.ndim == 2:
                                             return vol[:, np.newaxis] * frame
                                         return vol * frame
 
                                 orig_audio = orig_audio.transform(duck_transform)
+                                duck_applied = True
                             except Exception as duck_err:
                                 print(f"[WARN] VideoMerger: Dynamic ducking transform fallback: {duck_err}")
                                 try:
                                     from moviepy.audio.fx.MultiplyVolume import MultiplyVolume
                                     orig_audio = orig_audio.with_effects([MultiplyVolume(duck_vol)])
+                                    duck_applied = True
                                 except Exception:
                                     try:
                                         import moviepy.audio.fx.all as afx
                                         orig_audio = afx.volumex(orig_audio, duck_vol)
+                                        duck_applied = True
                                     except Exception:
                                         pass
                         else:
@@ -442,9 +462,9 @@ class VideoMergerAgent:
 
                     # Mix original audio with positioned voiceover clips
                     if orig_audio is not None:
-                        if not has_no_vocals:
-                            # When vocal separation is bypassed/skipped, duck original audio down to 15%
-                            # so original dialogue is faint while preserving background music & SFX!
+                        if not has_no_vocals and not duck_applied:
+                            # When vocal separation is bypassed/skipped and dynamic ducking was NOT applied,
+                            # duck original audio down to 15% so original dialogue is faint while preserving background music & SFX!
                             try:
                                 from moviepy.audio.fx.MultiplyVolume import MultiplyVolume
                                 orig_audio = orig_audio.with_effects([MultiplyVolume(0.15)])

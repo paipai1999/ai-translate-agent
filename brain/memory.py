@@ -18,8 +18,8 @@ class SpeakerSegment(BaseModel):
 
 class SceneData(BaseModel):
     scene_id: int
-    start_time: str
-    end_time: str
+    start_time: str = ""
+    end_time: str = ""
     start_sec: float = 0.0
     end_sec: float = 0.0
     summary: Optional[str] = None
