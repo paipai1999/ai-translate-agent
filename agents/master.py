@@ -121,6 +121,20 @@ class MasterAgent:
             try:
                 prev_state = MovieState.load_from_json(state_file)
                 self.state.subtitle_detection = prev_state.subtitle_detection
+                if getattr(prev_state, "transcript", None) and len(prev_state.transcript) > 0:
+                    self.state.transcript = prev_state.transcript
+                if getattr(prev_state, "timeline", None) and isinstance(prev_state.timeline, list) and len(prev_state.timeline) > 0:
+                    self.state.timeline = prev_state.timeline
+                if getattr(prev_state, "audio_path", None) and os.path.exists(prev_state.audio_path):
+                    self.state.audio_path = prev_state.audio_path
+                if getattr(prev_state, "generated_script", None) and len(prev_state.generated_script) > 0:
+                    self.state.generated_script = prev_state.generated_script
+                if getattr(prev_state, "seo_metadata", None):
+                    self.state.seo_metadata = prev_state.seo_metadata
+                if getattr(prev_state, "custom_thumb_title", None):
+                    self.state.custom_thumb_title = prev_state.custom_thumb_title
+                if getattr(prev_state, "thumbnail_path", None) and os.path.exists(prev_state.thumbnail_path):
+                    self.state.thumbnail_path = prev_state.thumbnail_path
             except Exception:
                 pass
 
@@ -233,6 +247,9 @@ class MasterAgent:
             
             def run_audio_pipeline(state):
                 state = self.audio_agent.extract_audio(state, temp_audio_dir)
+                if getattr(state, "transcript", None) and len(state.transcript) > 0:
+                    print(f"[*] MasterAgent: Reusing cached transcript ({len(state.transcript)} segments)...")
+                    return state
                 print("[*] MasterAgent: Running Whisper Transcription...")
                 state = self.audio_agent.transcribe_audio(state, self.whisper_model)
                 if not state.transcript:
@@ -241,6 +258,14 @@ class MasterAgent:
                 return state
                 
             def run_scene_pipeline(state):
+                if getattr(state, "timeline", None) and isinstance(state.timeline, list) and len(state.timeline) > 0:
+                    print(f"[*] MasterAgent: Reusing cached scene detection ({len(state.timeline)} scenes)...")
+                    return state
+                scene_cfg = cfg.get("scene_detection", True)
+                skip_scenes = os.environ.get("SKIP_SCENES", "").lower() in ("1", "true", "yes") or not scene_cfg
+                if skip_scenes:
+                    print("[*] MasterAgent: Scene detection skipped via configuration.")
+                    return state
                 from agents.scene_agent import SceneAgent
                 scene_agent = SceneAgent()
                 return scene_agent.extract_scenes(state, self.movie_path)
@@ -285,10 +310,14 @@ class MasterAgent:
             self._phase("Phase 4: Script Writing, SEO & Thumbnail", progress=65)
             
             # 4.1 Script Writing (Needs Phase 2 & 3 outputs)
-            self.state = self.writer_agent.generate_script(self.state)
-            
-            # 4.1b Auto-Rewrite Over-length Blocks (QA Sync)
-            self.state = self.qa_agent.enforce_duration_constraints(self.state)
+            if getattr(self.state, "generated_script", None) and len(self.state.generated_script) > 0:
+                print(f"[*] MasterAgent: Reusing cached script ({len(self.state.generated_script)} blocks)...")
+            else:
+                self.state = self.writer_agent.generate_script(self.state)
+                # 4.1b Auto-Rewrite Over-length Blocks (QA Sync)
+                self.state = self.qa_agent.enforce_duration_constraints(self.state)
+                # 4.1c Pre-TTS Language Check & Natural Burmese Auto-Rewrite
+                self.state = self.qa_agent.review_and_rewrite_script(self.state)
             
             # 4.2 SEO and Thumbnail Frame Extraction (Parallel)
             def run_seo(state):

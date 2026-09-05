@@ -160,13 +160,13 @@ def call_gemini(
                         _record_api_usage(key, m, "rate_limited")
                         time.sleep(1)   # tiny pause — don't hammer
                         continue        # next key, same model
-                    elif e.code == 404:
-                        # FIX-W2: 404 = model doesn't exist for any key → skip whole model
+                    elif e.code in (404, 503):
+                        # FIX-W2: 404/503 = model doesn't exist or service unavailable globally → skip whole model
                         print(
-                            f"[!] Gemini API model '{m}' not found (404). "
+                            f"[!] Gemini API model '{m}' returned HTTP {e.code}. "
                             f"Skipping model and trying next fallback model..."
                         )
-                        _record_api_usage(key, m, "error_404")
+                        _record_api_usage(key, m, f"error_{e.code}")
                         model_404 = True
                         break           # FIX-W2: exit key loop → outer for-m loop moves to next model
                     else:
@@ -211,7 +211,7 @@ def call_gemini_vision(
     user_text: str,
     image_path: str,
     api_key: Union[str, List[str]],
-    model: str = "gemini-3.5-flash-lite",
+    model: str = "gemini-3.5-flash",
     temperature: float = 0.7,
     max_tokens: int = 2048,
 ) -> tuple:
@@ -438,7 +438,7 @@ def upload_video_file(video_path: str, api_key) -> tuple:
                 
     raise Exception("All Gemini API keys failed to upload the video.")
 
-def ask_gemini_with_video(file_name: str, system_prompt: str, user_text: str, key: str, model: str = "gemini-3.5-flash-lite", temperature: float = 0.3) -> str:
+def ask_gemini_with_video(file_name: str, system_prompt: str, user_text: str, key: str, model: str = "gemini-3.5-flash", temperature: float = 0.3) -> str:
     models_to_try = _build_model_list(model)
     last_err = None
     

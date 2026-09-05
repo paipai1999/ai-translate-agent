@@ -692,15 +692,18 @@ async def stop_pipeline(job_id: Optional[str] = None):
                     pass
                 print(f"\n🛑 [STOP] Force-stop signal received! Cancelled job {jid}.")
 
-    # Terminate any spawned ffmpeg / yt-dlp child subprocesses if lingering
+    # Safely terminate child processes (ffmpeg, ffprobe, yt-dlp, demucs) spawned by THIS process tree only
     try:
-        import subprocess, sys
-        if sys.platform == "win32":
-            subprocess.run(["taskkill", "/F", "/IM", "ffmpeg.exe", "/T"], capture_output=True)
-            subprocess.run(["taskkill", "/F", "/IM", "ffprobe.exe", "/T"], capture_output=True)
-        else:
-            subprocess.run(["pkill", "-f", "ffmpeg"], capture_output=True)
-            subprocess.run(["pkill", "-f", "ffprobe"], capture_output=True)
+        import psutil
+        current_process = psutil.Process()
+        children = current_process.children(recursive=True)
+        for child in children:
+            try:
+                cname = child.name().lower()
+                if any(x in cname for x in ["ffmpeg", "ffprobe", "yt-dlp", "demucs"]):
+                    child.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
     except Exception:
         pass
 

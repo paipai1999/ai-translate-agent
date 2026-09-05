@@ -298,31 +298,15 @@ class VideoMergerAgent:
                     print("[WARN] No exact timestamps. Falling back to simple proportional dubbing mode.")
                     starts = [0.2 + (idx / max(n_blocks - 1, 1)) * (video_dur - 0.4) for idx in range(n_blocks)]
 
-                # --- SLOW MOTION CHECK ---
-                # Check if total audio length exceeds video length
+                # --- NATURAL PACE MODE (1.0x Video Speed Preserved) ---
+                # Video is NEVER slowed down artificially. Dialogue timing is handled via hybrid audio placement.
                 sim_curr_t = 0.0
                 for idx, c in enumerate(audio_clips):
                     place_time = max(sim_curr_t, starts[idx])
                     sim_curr_t = place_time + c.duration + 0.05
                 
                 if video_dur > 0 and sim_curr_t > video_dur:
-                    factor = max(0.2, video_dur / sim_curr_t)
-                    print(f"[*] VideoMerger: Audio total ({sim_curr_t:.1f}s) exceeds video ({video_dur:.1f}s).")
-                    print(f"[*] VideoMerger: Applying SLOW MOTION (factor {factor:.2f}x) to fit audio perfectly!")
-                    try:
-                        try:
-                            # moviepy v2
-                            from moviepy.video.fx.MultiplySpeed import MultiplySpeed
-                            main_video = main_video.with_effects([MultiplySpeed(factor)])
-                        except ImportError:
-                            # moviepy v1
-                            import moviepy.video.fx.all as vfx
-                            main_video = main_video.fx(vfx.speedx, factor)
-                            
-                        video_dur = main_video.duration
-                        starts = [s / factor for s in starts]
-                    except Exception as e:
-                        print(f"[WARN] VideoMerger: Failed to apply slow motion: {e}")
+                    print(f"[*] VideoMerger: Audio total ({sim_curr_t:.1f}s) exceeds video duration ({video_dur:.1f}s). Preserving 1.0x natural movie speed.")
 
                 # ─────────────────────────────────────────────────────────────────
                 # HYBRID APPROACH: STEP 3 — Region-Based Placement with Sequential Fallback
@@ -614,29 +598,7 @@ class VideoMergerAgent:
                 )
             print("[OK] VideoMerger: Video merge complete! Original video untouched with cohesive story recap.")
 
-            # ── Subtitle Blur Post-pass (FFmpeg) ────────────────────────────────
-            # Blurs the bottom subtitle region in a single fast FFmpeg pass.
-            # Analyzes the ORIGINAL MOVIE (not the recap) to correctly detect subtitles.
-            if blur_enabled or color_enabled:
-                self._blur_subtitle_region(
-                    state,
-                    final_output,
-                    source_video_for_detection = movie_path,   # <-- Original movie to detect subtitles from
-                    region_pct    = blur_region_pct    if blur_enabled  else 0.0,
-                    blur_strength = blur_strength      if blur_enabled  else 0,
-                    color_enabled = color_enabled,
-                    brightness    = cg_brightness,
-                    contrast      = cg_contrast,
-                    saturation    = cg_saturation,
-                )
-
-            # ── Myanmar Subtitle Overlay Post-pass (FFmpeg drawtext) ─────────
-            sub_cfg = config_data.get("subtitle_overlay", {})
-            burn_subs = True
-            if self.subtitle_mode in ["none", "off", "no"]:
-                burn_subs = False
-            elif self.subtitle_mode in ["burn", "hardsub", "both", "auto"]:
-                burn_subs = True
+            # ── Cache Clean Video for Reels Canvas ─────────────────────────────
             # Save a clean (un-subtitled) video copy for Facebook Reels 9:16 Canvas
             # so Reels can display clean 16:9 middle frame with dedicated bottom subtitles!
             temp_dir = os.path.abspath("temp")
@@ -648,27 +610,58 @@ class VideoMergerAgent:
             except Exception as ce:
                 print(f"[WARN] VideoMerger: Could not cache clean video copy: {ce}")
 
-            if burn_subs and subtitle_timings:
-                sub_preset = getattr(state, "subtitle_style_preset", None) or sub_cfg.get("style_preset", "box_black")
-                print(f"[*] VideoMerger: Burning Myanmar Subtitles (Style Preset: {sub_preset})...")
-                self._burn_myanmar_subtitles(
-                    video_path    = final_output,
-                    timings       = subtitle_timings,
-                    output_dir    = output_dir,
-                    font_name     = (sub_cfg.get("font_name") or "Myanmar Text") if sys.platform == "win32" else "Padauk",
-                    font_size     = int(sub_cfg.get("font_size", 40)),
-                    bold          = bool(sub_cfg.get("bold", True)),
-                    border_style  = int(sub_cfg.get("border_style", 3)),
-                    outline_width = int(sub_cfg.get("outline_width", 3)),
-                    margin_bottom = int(sub_cfg.get("margin_bottom", 50)),
-                    max_chars     = int(sub_cfg.get("max_chars_per_line", 28)),
-                    preset        = sub_preset,
+            # ── Subtitles Preparation ──────────────────────────────────────────
+            sub_cfg = config_data.get("subtitle_overlay", {})
+            burn_subs = True
+            if self.subtitle_mode in ["none", "off", "no"]:
+                burn_subs = False
+            elif self.subtitle_mode in ["burn", "hardsub", "both", "auto"]:
+                burn_subs = True
+
+            target_ass_path = None
+            if subtitle_timings:
+                # Always export standalone SRT for YouTube captions / VLC
+                self._export_standalone_srt(subtitle_timings, output_dir)
+
+                if burn_subs:
+                    import re
+                    safe_id = re.sub(r'[^\w\-]', '_', os.path.splitext(os.path.basename(final_output))[0])
+                    target_ass_path = os.path.join(temp_dir, f"myanmar_subs_{safe_id}.ass")
+                    sub_preset = getattr(state, "subtitle_style_preset", None) or sub_cfg.get("style_preset", "box_black")
+                    font_name = (sub_cfg.get("font_name") or "Myanmar Text") if sys.platform == "win32" else "Padauk"
+                    print(f"[*] VideoMerger: Preparing Myanmar ASS Subtitles (Style Preset: {sub_preset})...")
+                    self._write_ass(
+                        timings       = subtitle_timings,
+                        ass_path      = target_ass_path,
+                        font_name     = font_name,
+                        font_size     = int(sub_cfg.get("font_size", 40)),
+                        bold          = bool(sub_cfg.get("bold", True)),
+                        border_style  = int(sub_cfg.get("border_style", 3)),
+                        outline_width = int(sub_cfg.get("outline_width", 3)),
+                        margin_bottom = int(sub_cfg.get("margin_bottom", 50)),
+                        max_chars     = int(sub_cfg.get("max_chars_per_line", 28)),
+                        preset        = sub_preset,
+                    )
+                else:
+                    print("[*] VideoMerger: Subtitle Mode is 'Voiceover Only' (Hardsub disabled). Exported standalone .srt subtitles.")
+
+            # ── Unified Single-Pass Post-Processing (FFmpeg) ───────────────────
+            # Combines Subtitle Blurring + Color Grading + Myanmar Subtitle Burn into a SINGLE hardware-accelerated pass.
+            need_post_pass = blur_enabled or color_enabled or (burn_subs and target_ass_path and os.path.exists(target_ass_path))
+            if need_post_pass:
+                print("[*] VideoMerger: Running Single-Pass Hardware-Accelerated Post-Processing...")
+                self._blur_subtitle_region(
+                    state,
+                    final_output,
+                    source_video_for_detection = movie_path,   # <-- Original movie to detect subtitles from
+                    region_pct    = blur_region_pct    if blur_enabled  else 0.0,
+                    blur_strength = blur_strength      if blur_enabled  else 0,
+                    color_enabled = color_enabled,
+                    brightness    = cg_brightness,
+                    contrast      = cg_contrast,
+                    saturation    = cg_saturation,
+                    ass_path      = target_ass_path    if (burn_subs and target_ass_path and os.path.exists(target_ass_path)) else None,
                 )
-                # Also save standalone SRT for YouTube captions / VLC
-                self._export_standalone_srt(subtitle_timings, output_dir)
-            elif subtitle_timings:
-                print("[*] VideoMerger: Subtitle Mode is 'Voiceover Only' (Hardsub disabled). Exporting standalone .srt/.ass subtitles...")
-                self._export_standalone_srt(subtitle_timings, output_dir)
 
             # Thumbnail is now stitched as a video intro, skipping cover art embedding.
                     
@@ -791,20 +784,58 @@ class VideoMergerAgent:
         return f"{h}:{m:02d}:{s:02d}.{cs:02d}"
 
     def _wrap_burmese_text(self, text: str, max_chars: int) -> str:
-        """Wrap long Myanmar text into multiple lines at word boundaries (ASS uses {\\N})."""
+        """Wrap long Myanmar text into multiple lines at natural syllable/word boundaries (ASS uses {\\N})."""
+        text = str(text or "").strip()
         if len(text) <= max_chars:
             return text
+
+        import re
+        # Break text into tokens: split by space, but for segments longer than max_chars,
+        # perform Myanmar syllable-level segmentation to prevent horizontal screen overflow.
+        pattern = re.compile(
+            r'[\u1000-\u102a\u104e]'
+            r'[\u102b-\u103e\u1036-\u1038]*'
+            r'(?:[\u1039][\u1000-\u1021][\u102b-\u103e\u1036-\u1038]*)*'
+            r'(?:[\u1000-\u1021][\u103a][\u1037\u1038]*)*'
+            r'|[\u1040-\u1049]+'
+            r'|[a-zA-Z0-9]+'
+            r'|[^\u1000-\u104f\s]'
+        )
+
         words = text.split(" ")
-        lines, current = [], ""
+        refined_tokens = []
         for word in words:
-            if len(current) + len(word) + 1 <= max_chars:
-                current = (current + " " + word).strip()
+            if len(word) <= max_chars:
+                refined_tokens.append(word)
+            else:
+                last_idx = 0
+                for m in pattern.finditer(word):
+                    if m.start() > last_idx:
+                        refined_tokens.append(word[last_idx:m.start()])
+                    refined_tokens.append(m.group(0))
+                    last_idx = m.end()
+                if last_idx < len(word):
+                    refined_tokens.append(word[last_idx:])
+
+        lines, current = [], ""
+        for tok in refined_tokens:
+            if not tok:
+                continue
+            # Keep punctuation with current line
+            if tok in ["၊", "။", ",", ".", "!", "?"] and current:
+                current += tok
+                continue
+            sep = " " if current and not ('\u1000' <= tok[0] <= '\u109F' and '\u1000' <= current[-1] <= '\u109F') else ""
+            candidate = current + sep + tok if current else tok
+            if len(candidate) <= max_chars:
+                current = candidate
             else:
                 if current:
                     lines.append(current)
-                current = word
+                current = tok
         if current:
             lines.append(current)
+
         return "{\\N}".join(lines)
 
     def _write_ass(
@@ -962,10 +993,12 @@ class VideoMergerAgent:
             font_name = "Padauk"
         import subprocess, shutil
 
-        # Write ASS to temp/ with no spaces in filename — avoids FFmpeg filter parsing issues
+        # Write ASS to temp/ with safe unique filename — avoids FFmpeg filter parsing issues and job collisions
         temp_dir = os.path.abspath("temp")
         os.makedirs(temp_dir, exist_ok=True)
-        ass_path = os.path.join(temp_dir, "myanmar_subs.ass")
+        import re
+        safe_id = re.sub(r'[^\w\-]', '_', os.path.splitext(os.path.basename(video_path))[0])
+        ass_path = os.path.join(temp_dir, f"myanmar_subs_{safe_id}.ass")
 
         font_found = self._find_myanmar_font()
         if font_found:
@@ -979,32 +1012,39 @@ class VideoMergerAgent:
 
         # -----------------------------------------------------------------------------------
         # BUG FIX: FFmpeg's filter graph escaping is notoriously brittle on Windows.
-        # If the absolute path to the .ass file contains a single quote (e.g., Pai's Recap)
-        # or a comma, FFmpeg will crash because `ass='D\:/path'` breaks the filter string.
-        # FIX: We run ffmpeg with `cwd=temp_dir` and just pass `ass=myanmar_subs.ass` 
-        # (no quotes, no spaces, no absolute paths) to bypass FFmpeg path parsing completely!
+        # FIX: We run ffmpeg with `cwd=temp_dir` and pass the basename to bypass path escaping.
+        # Hardware acceleration: Uses QSV/NVENC with automatic CPU fallback.
         # -----------------------------------------------------------------------------------
         ass_basename = os.path.basename(ass_path)
         abs_video_path = os.path.abspath(video_path)
         name, ext = os.path.splitext(abs_video_path)
         temp_output = f"{name}_subtitled.mp4"
 
-        # BUG-M8 Fix: Use consistent ffmpeg lookup: imageio env var → shutil.which → fallback
         ffmpeg_bin = _get_ffmpeg_bin()
+        enc_info = detect_hardware_encoder()
+        codec = enc_info.get("codec", "libx264")
+        preset = enc_info.get("preset", "faster")
+
         cmd = [
             ffmpeg_bin, "-y",
             "-i", abs_video_path,
             "-vf", f"ass={ass_basename}",
-            "-c:v", "libx264",
-            "-preset", "superfast",
+            "-c:v", codec,
+            "-preset", preset,
             "-pix_fmt", "yuv420p",
             "-c:a", "copy",
             "-movflags", "+faststart",
             temp_output
         ]
 
-        print(f"[*] MyanmarSubs: Burning ASS subtitles (font: {font_name}, size: {font_size}px)...")
+        print(f"[*] MyanmarSubs: Burning ASS subtitles ({font_name}, {font_size}px) using {enc_info['label']} [{codec}]...")
         result = subprocess.run(cmd, cwd=temp_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
+
+        if result.returncode != 0 and codec != "libx264":
+            print(f"[WARN] MyanmarSubs: Hardware encoder '{codec}' failed. Retrying with CPU libx264...")
+            cmd[cmd.index(codec)] = "libx264"
+            cmd[cmd.index(preset)] = "superfast"
+            result = subprocess.run(cmd, cwd=temp_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
         if result.returncode == 0 and os.path.exists(temp_output) and os.path.getsize(temp_output) > 100_000:
             shutil.move(temp_output, video_path)
@@ -1091,7 +1131,7 @@ class VideoMergerAgent:
             config_data = cfg.load_config()
             gemini_cfg = config_data.get("gemini", {})
             api_keys = gemini_cfg.get("api_keys", [])
-            model = gemini_cfg.get("model", "gemini-3.5-flash-lite")
+            model = gemini_cfg.get("model", "gemini-3.5-flash")
 
             prompt = (
                 "Analyze this video frame carefully. Look at the lower half of the frame (bottom 50%). "
@@ -1246,9 +1286,10 @@ class VideoMergerAgent:
         brightness: float = 0.03,
         contrast: float = 1.02,
         saturation: float = 1.08,
+        ass_path: str = None,
     ):
         """
-        Single FFmpeg post-pass that applies two copyright-protection layers:
+        Unified single FFmpeg post-pass that combines up to three post-processing operations:
 
         Layer 1 — Vision AI Powered Subtitle Blur:
           Uses Gemini Vision AI to detect exact subtitle Y-boundaries from the
@@ -1257,23 +1298,21 @@ class VideoMergerAgent:
 
         Layer 2 — Color Grading (eq filter):
           Applies slight brightness / contrast / saturation shift via FFmpeg.
+
+        Layer 3 — Myanmar Subtitle Burn (ASS filter):
+          Burns styled Myanmar ASS subtitles in the SAME encode pass.
+        Hardware-accelerated via Intel QSV / NVIDIA NVENC with automatic libx264 CPU fallback.
         """
         import subprocess, shutil, os
 
-        ffmpeg_bin = shutil.which("ffmpeg")
-        if not ffmpeg_bin:
-            try:
-                from imageio_ffmpeg import get_ffmpeg_exe
-                ffmpeg_bin = get_ffmpeg_exe()
-            except ImportError:
-                pass
-
+        ffmpeg_bin = _get_ffmpeg_bin()
         if not ffmpeg_bin:
             print("[WARN] PostProcess: ffmpeg not found. Skipping post-pass.")
             return
 
         do_blur  = blur_strength > 0
         do_color = color_enabled
+        do_subtitles = bool(ass_path and os.path.exists(ass_path))
 
         user_sub_mode = getattr(state, "subtitle_mode", "auto") if state is not None else "auto"
         user_sub_mode = user_sub_mode or "auto"
@@ -1324,14 +1363,19 @@ class VideoMergerAgent:
                     print("[*] PostProcess: No subtitles detected in source — skipping blur pass.")
                     do_blur = False
 
+        if not do_blur and not do_color and not do_subtitles:
+            print("[*] PostProcess: No blur, color grade, or subtitles requested. Skipping post-processing pass.")
+            return
+
         if do_blur:
             start_y_pct = max(0.0, min(float(start_y_pct), 0.95))
             height_pct = max(0.02, min(float(height_pct), 1.0 - start_y_pct))
 
         steps = []
-        if do_blur:  steps.append(f"VisionAI subtitle blur (Y-start={start_y_pct*100:.1f}%, h={height_pct*100:.1f}%, r={blur_strength})")
-        if do_color: steps.append(f"color grade (b={brightness:+.2f}, c={contrast:.2f}, s={saturation:.2f}), dynamic noise, vignette")
-        print(f"[*] PostProcess: Applying — {', '.join(steps)}")
+        if do_blur:      steps.append(f"VisionAI subtitle blur (Y-start={start_y_pct*100:.1f}%, h={height_pct*100:.1f}%, r={blur_strength})")
+        if do_color:     steps.append(f"color grade (b={brightness:+.2f}, c={contrast:.2f}, s={saturation:.2f}), dynamic noise, vignette")
+        if do_subtitles: steps.append(f"Myanmar ASS subtitles burn ({os.path.basename(ass_path)})")
+        print(f"[*] PostProcess: Applying unified single-pass — {', '.join(steps)}")
 
         base, ext = os.path.splitext(video_path)
         tmp_path  = base + "_posttmp" + ext
@@ -1363,24 +1407,34 @@ class VideoMergerAgent:
                 f",noise=alls=2:allf=t"       # Dynamic Film Grain
                 f",vignette=PI/4"             # Subtle Edge Darkening
             )
-            flt += f";{last_out}{eq_str}[out]"
-            last_out = "[out]"
+            flt += f";{last_out}{eq_str}[graded]"
+            last_out = "[graded]"
+
+        working_dir = None
+        if do_subtitles:
+            ass_basename = os.path.basename(ass_path)
+            working_dir = os.path.dirname(os.path.abspath(ass_path))
+            flt += f";{last_out}ass={ass_basename}[subbed]"
+            last_out = "[subbed]"
 
         # Map last output label
         filter_args = ["-filter_complex", flt, "-map", last_out]
 
+        enc_info = detect_hardware_encoder()
+        codec = enc_info.get("codec", "libx264")
+        preset = enc_info.get("preset", "faster")
+
         cmd = [
-            _get_ffmpeg_bin(), "-y",
-            "-i", video_path,
+            ffmpeg_bin, "-y",
+            "-i", os.path.abspath(video_path),
             *filter_args,
             "-map", "0:a?",
-            "-c:v", "libx264",
+            "-c:v", codec,
+            "-preset", preset,
             "-pix_fmt", "yuv420p",
-            "-preset", "ultrafast",
-            "-crf", "20",
             "-movflags", "+faststart",
             "-c:a", "copy",
-            tmp_path,
+            os.path.abspath(tmp_path),
         ]
 
         # Dynamically scale timeout to allow ample time for full movies
@@ -1395,10 +1449,17 @@ class VideoMergerAgent:
         dyn_timeout = max(1200, int((dur_sec or 600.0) * 2.5))
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=dyn_timeout)
-            if result.returncode == 0 and os.path.exists(tmp_path):
+            print(f"[*] PostProcess: Encoding with {enc_info.get('label', codec)} [{codec}]...")
+            result = subprocess.run(cmd, cwd=working_dir, capture_output=True, text=True, timeout=dyn_timeout)
+            if result.returncode != 0 and codec != "libx264":
+                print(f"[WARN] PostProcess: Hardware encoder '{codec}' failed. Retrying with CPU libx264...")
+                cmd[cmd.index(codec)] = "libx264"
+                cmd[cmd.index(preset)] = "superfast"
+                result = subprocess.run(cmd, cwd=working_dir, capture_output=True, text=True, timeout=dyn_timeout)
+
+            if result.returncode == 0 and os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 100_000:
                 os.replace(tmp_path, video_path)
-                print("[OK] PostProcess: Copyright-safe post-processing complete!")
+                print("[OK] PostProcess: Copyright-safe single-pass post-processing complete!")
             else:
                 print(f"[WARN] PostProcess: FFmpeg returned exit code {result.returncode}.")
                 if result.stderr:

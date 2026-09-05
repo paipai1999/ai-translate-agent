@@ -84,7 +84,7 @@ class VoiceAgent:
         # If the environment cannot list voices (offline or package mismatch), use a known-good default.
         for candidate in candidates:
             if candidate.lower().startswith("my-"):
-                return "my-MM-ThihaNeural"
+                return candidate
         return "en-US-GuyNeural"
 
     def _extract_character_reference_clips(self, state: MovieState) -> dict:
@@ -175,6 +175,12 @@ class VoiceAgent:
         else:
             audio_out_dir = os.path.join(self.output_dir, state.project_dir, "voiceover")
         os.makedirs(audio_out_dir, exist_ok=True)
+        # Check if complete voiceover files already exist
+        existing_mp3s = [f for f in os.listdir(audio_out_dir) if f.startswith("scene_") and f.endswith(".mp3") and os.path.getsize(os.path.join(audio_out_dir, f)) > 1000]
+        if state.generated_script and len(existing_mp3s) >= len(state.generated_script):
+            print(f"[*] VoiceAgent: Reusing {len(existing_mp3s)} cached voiceover clips from {audio_out_dir}...")
+            return state
+
         for old_file in os.listdir(audio_out_dir):
             if old_file.endswith(".mp3"):
                 try:
