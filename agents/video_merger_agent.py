@@ -790,10 +790,13 @@ class VideoMergerAgent:
         draw = ImageDraw.Draw(dummy_img)
         try:
             bbox = draw.textbbox((0, 0), text, font=font)
-            text_width = bbox[2] - bbox[0]
-            text_height = bbox[3] - bbox[1]
-        except AttributeError:
-            text_width, text_height = draw.textsize(text, font=font)
+            text_width = max(1, bbox[2] - bbox[0])
+            text_height = max(1, bbox[3] - bbox[1])
+        except Exception:
+            try:
+                text_width, text_height = draw.textsize(text, font=font)
+            except Exception:
+                text_width, text_height = max(1, len(text) * 14), 28
 
         pad_x = 18
         pad_y = 8
@@ -1014,10 +1017,18 @@ class VideoMergerAgent:
         candidates = [
             r"assets\fonts\NotoSansMyanmar-Regular.ttf",
             r"assets/fonts/NotoSansMyanmar-Regular.ttf",
+            # Windows fonts
             r"C:\Windows\Fonts\mmrtext.ttf",     # Myanmar Text (Win10+)
             r"C:\Windows\Fonts\mmrtextb.ttf",
             r"C:\Windows\Fonts\NotoSansMyanmar-Regular.ttf",
             r"C:\Windows\Fonts\Padauk-Regular.ttf",
+            # Linux (Colab, Kaggle, Docker) fonts
+            "/usr/share/fonts/truetype/padauk/Padauk-Regular.ttf",
+            "/usr/share/fonts/truetype/padauk/Padauk.ttf",
+            "/usr/share/fonts/truetype/padauk/Padauk-Bold.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSansMyanmar-Regular.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSansMyanmar-Bold.ttf",
+            "/usr/share/fonts/opentype/noto/NotoSansMyanmar-Regular.otf",
         ]
         for path in candidates:
             if os.path.exists(path):

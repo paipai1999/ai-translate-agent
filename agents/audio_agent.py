@@ -344,10 +344,11 @@ print(f"[Whisper] Transcribed {{len(results)}} segments in language: {{detected_
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as out_tmp:
             result_path = out_tmp.name
 
+        whisper_timeout = int(os.getenv("WHISPER_TIMEOUT", "1800"))
         try:
             proc = subprocess.run(
                 [python_exe, helper_path, state.audio_path, model_size, result_path, state.movie_name, source_lang],
-                capture_output=True, text=True, timeout=600
+                capture_output=True, text=True, timeout=whisper_timeout
             )
             if proc.stdout:
                 print(f"[*] AudioAgent: {proc.stdout.strip()}")
