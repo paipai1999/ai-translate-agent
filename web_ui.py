@@ -56,7 +56,7 @@ templates = Jinja2Templates(directory="templates")
 VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.m4v')
 
 jobs = {}
-jobs_lock = threading.Lock()
+jobs_lock = threading.RLock()
 JOB_RETENTION_SECONDS = 7200  # Clean up finished jobs after 2 hours
 
 def _cleanup_old_jobs():
