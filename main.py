@@ -305,6 +305,25 @@ def main():
     elif args.skip_scenes:
         os.environ["SKIP_SCENES"] = "1"
 
+    # Multi-voice & language resolution
+    clean_lang = args.language
+    chosen_voice = args.tts_voice
+    if clean_lang in ["burmese_nilar", "nilar"]:
+        clean_lang = "burmese"
+        if not chosen_voice:
+            chosen_voice = "my-MM-NilarNeural"
+    elif clean_lang in ["burmese_thiha", "thiha"]:
+        clean_lang = "burmese"
+        if not chosen_voice:
+            chosen_voice = "my-MM-ThihaNeural"
+    elif chosen_voice in ["nilar", "female"]:
+        chosen_voice = "my-MM-NilarNeural"
+    elif chosen_voice in ["thiha", "male"]:
+        chosen_voice = "my-MM-ThihaNeural"
+
+    watermark_enabled = False if args.no_watermark else None
+    thumb_intro = True if args.thumbnail_intro else (False if args.no_thumbnail_intro else None)
+
     # Single video or URL
     chosen_input = (args.input_flag or args.input_source or "").strip()
     if chosen_input:
@@ -325,23 +344,6 @@ def main():
                 print("[TIP] If this is a URL, make sure it starts with http:// or https://")
                 sys.exit(1)
 
-        # Multi-voice resolution
-        clean_lang = args.language
-        chosen_voice = args.tts_voice
-        if clean_lang in ["burmese_nilar", "nilar"]:
-            clean_lang = "burmese"
-            if not chosen_voice:
-                chosen_voice = "my-MM-NilarNeural"
-        elif clean_lang in ["burmese_thiha", "thiha"]:
-            clean_lang = "burmese"
-            if not chosen_voice:
-                chosen_voice = "my-MM-ThihaNeural"
-        elif chosen_voice in ["nilar", "female"]:
-            chosen_voice = "my-MM-NilarNeural"
-        elif chosen_voice in ["thiha", "male"]:
-            chosen_voice = "my-MM-ThihaNeural"
-
-        thumb_intro = True if args.thumbnail_intro else (False if args.no_thumbnail_intro else None)
         try:
             sub_mode = "burn" if args.subtitle else (args.sub_mode or "burn")
             master = MasterAgent(
@@ -353,7 +355,7 @@ def main():
                 tts_engine=args.engine,
                 tts_voice=chosen_voice,
                 custom_thumb_title=args.thumb_title,
-                watermark_enabled=False if args.no_watermark else True,
+                watermark_enabled=watermark_enabled,
                 watermark_text=args.watermark_text,
                 video_format=chosen_format,
                 thumbnail_intro=thumb_intro,
@@ -372,17 +374,17 @@ def main():
         conf = cfg.load_config()
         skip = conf.get("batch", {}).get("skip_completed", True) and not args.force
         sub_mode = "burn" if args.subtitle else (args.sub_mode or "burn")
-        thumb_intro = True if args.thumbnail_intro else (False if args.no_thumbnail_intro else None)
         BatchProcessor(
             movies_folder=conf.get("batch", {}).get("movies_folder", "movies"),
             skip_completed=skip,
-            language=args.language,
+            language=clean_lang,
             subtitle_mode=sub_mode,
             subtitle_style=args.subtitle_style,
             resolution=args.resolution,
             tts_engine=args.engine,
+            tts_voice=chosen_voice,
             custom_thumb_title=args.thumb_title,
-            watermark_enabled=False if args.no_watermark else True,
+            watermark_enabled=watermark_enabled,
             watermark_text=args.watermark_text,
             video_format=chosen_format,
             thumbnail_intro=thumb_intro,
@@ -395,17 +397,17 @@ def main():
         conf = cfg.load_config()
         skip = conf.get("batch", {}).get("skip_completed", True) and not args.force
         sub_mode = "burn" if args.subtitle else (args.sub_mode or "burn")
-        thumb_intro = True if args.thumbnail_intro else (False if args.no_thumbnail_intro else None)
         BatchProcessor(
             movies_folder=conf.get("batch", {}).get("movies_folder", "movies"),
             skip_completed=skip,
-            language=args.language,
+            language=clean_lang,
             subtitle_mode=sub_mode,
             subtitle_style=args.subtitle_style,
             resolution=args.resolution,
             tts_engine=args.engine,
+            tts_voice=chosen_voice,
             custom_thumb_title=args.thumb_title,
-            watermark_enabled=False if args.no_watermark else True,
+            watermark_enabled=watermark_enabled,
             watermark_text=args.watermark_text,
             video_format=chosen_format,
             thumbnail_intro=thumb_intro,

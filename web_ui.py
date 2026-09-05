@@ -71,10 +71,11 @@ def _cleanup_old_jobs():
         for jid in to_delete:
             jobs.pop(jid, None)
             # BUG-C6 Fix: Also free thread_stdout buffers and subscribers to prevent memory leak
-            if hasattr(thread_stdout, 'buffers'):
-                thread_stdout.buffers.pop(jid, None)
-            if hasattr(thread_stdout, 'subscribers'):
-                thread_stdout.subscribers.pop(jid, None)
+            t_out = globals().get('thread_stdout')
+            if t_out and hasattr(t_out, 'buffers'):
+                t_out.buffers.pop(jid, None)
+            if t_out and hasattr(t_out, 'subscribers'):
+                t_out.subscribers.pop(jid, None)
 
 def _has_running_job():
     with jobs_lock:

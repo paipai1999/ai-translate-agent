@@ -362,9 +362,7 @@ def _record_api_usage(key: str, model: str, status: str):
 # Video File API (For Hybrid Architecture)
 # ------------------------------------------------------------------------------------------------
 def upload_video_file(video_path: str, api_key) -> tuple:
-    # Use brain.gemini_client imports indirectly or rely on locals
-    import brain.gemini_client as gc
-    api_keys = gc._normalize_keys(api_key)
+    api_keys = _normalize_keys(api_key)
     file_size = os.path.getsize(video_path)
     mime_type = "video/mp4"
     
@@ -384,7 +382,7 @@ def upload_video_file(video_path: str, api_key) -> tuple:
             with urllib.request.urlopen(req1) as res1:
                 upload_url = res1.headers.get("X-Goog-Upload-URL")
         except Exception as e:
-            print(f"[WARN] Upload start failed for key {gc._mask_key(key)}: {e}")
+            print(f"[WARN] Upload start failed for key {_mask_key(key)}: {e}")
             continue
             
         if not upload_url:
