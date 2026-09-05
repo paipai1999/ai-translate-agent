@@ -147,9 +147,20 @@ class VideoMergerAgent:
 
             # --- REPLACE ORIGINAL AUDIO WITH NO_VOCALS (SFX ONLY) IF AVAILABLE ---
             has_no_vocals = False
-            base_name = os.path.splitext(os.path.basename(movie_path))[0]
-            no_vocals_path = os.path.join("temp", state.project_dir, "audio", "htdemucs", base_name, "no_vocals.wav")
-            if os.path.exists(no_vocals_path):
+            base_candidates = [
+                getattr(state, "movie_name", None),
+                os.path.splitext(os.path.basename(movie_path))[0],
+            ]
+            no_vocals_path = None
+            for b_name in base_candidates:
+                if not b_name:
+                    continue
+                cand_path = os.path.join("temp", state.project_dir, "audio", "htdemucs", b_name, "no_vocals.wav")
+                if os.path.exists(cand_path):
+                    no_vocals_path = cand_path
+                    break
+
+            if no_vocals_path and os.path.exists(no_vocals_path):
                 has_no_vocals = True
                 print(f"[*] VideoMerger: Found Demucs no_vocals.wav (SFX Only). Replacing original audio to remove dialogue...")
                 try:
@@ -161,7 +172,7 @@ class VideoMergerAgent:
                 except Exception as e:
                     print(f"[WARN] VideoMerger: Failed to load no_vocals.wav: {e}")
             else:
-                print(f"[WARN] VideoMerger: no_vocals.wav not found at {no_vocals_path}. Will use original mixed audio.")
+                print(f"[WARN] VideoMerger: no_vocals.wav not found in Demucs cache. Will use original mixed audio.")
 
             # H.264 requires width and height to be divisible by 2 (even numbers)
             w, h = main_video.size
