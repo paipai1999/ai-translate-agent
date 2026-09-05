@@ -334,8 +334,23 @@ def call_gemini_vision(
 # ─────────────────────────────────────────────────────────────────────────────
 def _normalize_keys(api_key: Union[str, List[str]]) -> List[str]:
     if isinstance(api_key, str):
-        return [k.strip() for k in api_key.split(",")] if "," in api_key else [api_key]
-    return [str(k).strip() for k in api_key if k]
+        raw = api_key.replace("\r\n", ",").replace("\n", ",").replace(";", ",")
+        return [k.strip() for k in raw.split(",") if k.strip()]
+    elif isinstance(api_key, (list, tuple)):
+        result = []
+        for item in api_key:
+            if isinstance(item, str):
+                raw = item.replace("\r\n", ",").replace("\n", ",").replace(";", ",")
+                for sub in raw.split(","):
+                    sub_clean = sub.strip()
+                    if sub_clean:
+                        result.append(sub_clean)
+            elif item:
+                val = str(item).strip()
+                if val:
+                    result.append(val)
+        return result
+    return []
 
 
 def _build_model_list(requested_model: str) -> List[str]:

@@ -243,6 +243,21 @@ def load_config() -> dict:
                 merged[section] = {**merged[section], **values}
             else:
                 merged[section] = values
+
+        # Auto-detect environment GEMINI_API_KEY or GEMINI_API_KEYS
+        env_keys = os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEYS")
+        if env_keys:
+            parsed_env = [k.strip() for k in env_keys.replace("\r\n", ",").replace("\n", ",").replace(";", ",").split(",") if k.strip()]
+            if parsed_env:
+                if "gemini" not in merged:
+                    merged["gemini"] = {}
+                existing = merged["gemini"].get("api_keys", []) or []
+                combined = []
+                for k in parsed_env + existing:
+                    if k and k not in combined:
+                        combined.append(k)
+                merged["gemini"]["api_keys"] = combined
+
         _config_cache = merged
         _config_cache_mtime = mtime
         return merged

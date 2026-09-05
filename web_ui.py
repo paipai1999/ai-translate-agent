@@ -897,6 +897,14 @@ async def stream_job_logs(job_id: str, request: Request):
         }
     )
 
+@app.get("/api/status")
+async def latest_status_endpoint():
+    with jobs_lock:
+        if not jobs:
+            return {"status": "idle", "phase": "Idle", "progress": 0, "job_id": None, "log": []}
+        latest_id = list(jobs.keys())[-1]
+    return await status_endpoint(latest_id)
+
 @app.get("/api/status/{job_id}")
 async def status_endpoint(job_id: str):
     with jobs_lock:
@@ -1080,7 +1088,7 @@ async def clear_cache():
                     else:
                         os.remove(p)
                     cleared += 1
-                except:
+                except Exception:
                     pass
 
     for root, dirs, files in os.walk('.'):
@@ -1090,7 +1098,7 @@ async def clear_cache():
                     shutil.rmtree(os.path.join(root, d), ignore_errors=True)
                     dirs.remove(d)
                     cleared += 1
-                except:
+                except Exception:
                     pass
 
     return {"success": True, "cleared_items": cleared}

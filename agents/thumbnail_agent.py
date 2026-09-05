@@ -77,7 +77,7 @@ class ThumbnailAgent:
                 except ImportError:
                     from moviepy import VideoFileClip
                 clip = VideoFileClip(movie_path)
-                t = min(clip.duration * 0.3, clip.duration - 1)
+                t = max(0.0, min(clip.duration * 0.3, max(0.0, clip.duration - 0.5)))
                 frame = clip.get_frame(t)
                 clip.close()
                 base_img = Image.fromarray(frame)
@@ -117,8 +117,18 @@ class ThumbnailAgent:
             )
             
             import re as _re
-            clean_json = _re.sub(r'(?i)^```json\s*|\s*```$', '', res_text.strip(), flags=_re.MULTILINE).strip()
-            parsed = json.loads(clean_json)
+            clean_json = _re.sub(r'(?i)^```(?:json)?\s*|\s*```$', '', res_text.strip(), flags=_re.MULTILINE).strip()
+            parsed = {}
+            try:
+                parsed = json.loads(clean_json)
+            except Exception:
+                start = clean_json.find('{')
+                end = clean_json.rfind('}')
+                if start != -1 and end > start:
+                    try:
+                        parsed = json.loads(clean_json[start:end+1])
+                    except Exception:
+                        pass
             if not isinstance(parsed, dict):
                 parsed = {}
             
