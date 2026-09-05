@@ -478,10 +478,11 @@ class VoiceAgent:
     def _prepare_tts_text(self, text: str) -> str:
         """Normalize script text so Edge TTS / F5-TTS reads narration naturally."""
         try:
-            from brain.burmese_utils import replace_numbers_with_burmese
+            from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
             text = replace_numbers_with_burmese(text)
+            text = transliterate_english_acronyms(text)
         except Exception as e:
-            print(f"[WARN] VoiceAgent: Failed to convert numbers to Burmese: {e}")
+            print(f"[WARN] VoiceAgent: Failed to normalize text with burmese_utils: {e}")
 
         text = re.sub(r'[\*#_~`]', '', str(text))
         text = text.replace("…", "။")

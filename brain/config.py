@@ -11,7 +11,8 @@ DEFAULT_CONFIG = {
         "max_characters": 6,               # Max character names to detect
         "max_scenes_for_llm": 30,          # Scene count cap passed to LLM (context limit)
         "parallel_processing": True,       # Run STT & Scene detection in parallel (set False for Low RAM)
-        "use_demucs": True                 # Vocal separation with Demucs (high accuracy)
+        "use_demucs": True,                # Vocal separation with Demucs (high accuracy)
+        "scene_detection": False           # Skip PySceneDetect in 1:1 dialogue mode (saves 10-25 mins per video)
     },
     "gemini": {
         "enabled": True,                   # Use Gemini API when writing Burmese recap scripts for natural spoken flow

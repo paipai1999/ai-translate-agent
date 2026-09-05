@@ -268,10 +268,28 @@ class MasterAgent:
                 if getattr(state, "timeline", None) and isinstance(state.timeline, list) and len(state.timeline) > 0:
                     print(f"[*] MasterAgent: Reusing cached scene detection ({len(state.timeline)} scenes)...")
                     return state
-                scene_cfg = cfg.get("scene_detection", True)
+                scene_cfg = cfg.get("scene_detection", False)
                 skip_scenes = os.environ.get("SKIP_SCENES", "").lower() in ("1", "true", "yes") or not scene_cfg
                 if skip_scenes:
-                    print("[*] MasterAgent: Scene detection skipped via configuration.")
+                    print("[*] MasterAgent: Scene detection skipped (1:1 dialogue mode uses Whisper timestamps). Populating fallback macro scene.")
+                    dur = getattr(state, "video_duration", 0.0) or 0.0
+                    if dur <= 0.0:
+                        try:
+                            from moviepy import VideoFileClip
+                            clip = VideoFileClip(self.movie_path)
+                            dur = clip.duration
+                            clip.close()
+                        except Exception:
+                            try:
+                                import moviepy.editor as mp
+                                clip = mp.VideoFileClip(self.movie_path)
+                                dur = clip.duration
+                                clip.close()
+                            except Exception:
+                                dur = 120.0
+                    from brain.memory import SceneData
+                    max_dur = max(float(dur), 120.0)
+                    state.timeline = [SceneData(scene_id=1, start_sec=0.0, end_sec=max_dur, start_time="00:00:00", end_time=f"{int(max_dur//60):02d}:{int(max_dur%60):02d}")]
                     return state
                 from agents.scene_agent import SceneAgent
                 scene_agent = SceneAgent()

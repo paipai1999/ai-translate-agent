@@ -160,6 +160,9 @@ CRITICAL TRANSLATION RULES:
    - Transliterate all character names, places, weapons, and terms into natural Burmese phonetics:
      Riley → ရိုင်လီ, Mike → မိုက်, Cholo → ချိုလို, Big Daddy → ဘစ်ဒယ်ဒီ, Charlie → ချာလီ, Kaufman → ကော့ဖ်မန်း
      Dead Reckoning → ဒက်ဒ် ရက်ကနင်, Fiddler's Green → ဖစ်ဒလာ့စ် ဂရင်း, Zombie → ဇွန်ဘီ
+   - Transliterate English acronyms & loan words into Burmese phonetics:
+     CCTV → စီစီတီဗီ, VIP → ဗွီအိုင်ပီ, FBI → အက်ဖ်ဘီအိုင်, CIA → စီအိုင်အေ, CEO → စီအီးအို, AI → အေအိုင်,
+     OK → အိုကေ, USB → ယူအက်စ်ဘီ, SIM → ဆင်းမ်, GPS → ဂျီပီအက်စ်, TV → တီဗီ, PC → ပီစီ, iPhone → အိုင်ဖုန်း
    - NEVER leave raw English letters inside the translation text.
 
 4. ⏸️ NATURAL PHRASE SEGMENTATION & BREATHING PAUSES (သဘာဝကျသော မြန်မာစကား အဖြတ်အတောက် စည်းမျဉ်း):
@@ -172,7 +175,14 @@ CRITICAL TRANSLATION RULES:
      ❌ Bad (Awkward unnatural commas): "အသက် ၁၄ နှစ်၊ အရွယ်၊ ဂျိမ်းစ်ဟာ၊ မိဘတွေ၊ ကားတိုက်မှုနဲ့၊ ဆုံးသွားတော့၊"
      ✅ Good (Professional movie recap flow): "အသက် ၁၄ နှစ်အရွယ် ဂျိမ်းစ်ဟာ၊ မိဘတွေ ကားတိုက်မှုနဲ့ ဆုံးသွားတဲ့အခါ၊ သူ့အဘိုးဆီမှာ သွားနေရတာပေါ့။"
 
-5. ⏱️ TIMING & JSON STRUCTURE:
+5. ⚖️ DURATION-FIT CHARACTER BUDGET (အချိန်နှင့် စာလုံးအရေအတွက် ကိုက်ညီမှု):
+   - Strictly respect the "duration_sec" and "max_chars" budget provided for each dialogue!
+   - Spoken Burmese rate in TTS is ~9.5 to 11 characters per second.
+   - For short dialogue lines (e.g. 1.0s - 2.5s), keep your translation concise, sharp, and within "max_chars".
+   - ❌ FORBIDDEN: Writing a 40-character long paragraph for a 2-second clip. This causes extreme unnatural chipmunk speedup or audio drift.
+   - For longer scenes, translate fully, emotionally, and naturally.
+
+6. ⏱️ TIMING & JSON STRUCTURE:
    - For each item, keep "id", "start_sec", and "end_sec" EXACTLY as given in the input.
    - Accurately infer whether the speaker is female or male from dialogue context (pronouns, voice tone, conversational role).
    - Return a JSON array of objects with:
