@@ -360,7 +360,6 @@ print(f"[Whisper] Transcribed {{len(results)}} segments in language: {{detected_
                     for s in data.get("segments", [])
                 ]
                 state.transcript = transcript_list
-                state.transcript = transcript_list
                 print(f"[*] AudioAgent completed: Transcribed {len(transcript_list)} dialogue segments "
                       f"(lang: {data.get('language','?')}).")
             else:
