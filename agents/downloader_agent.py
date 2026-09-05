@@ -126,6 +126,8 @@ class DownloaderAgent:
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     print(f"[*] DownloaderAgent: Fetching video stream (Attempt {attempt}/{max_attempts})...", flush=True)
                     info_dict = ydl.extract_info(url, download=True)
+                    if not info_dict:
+                        raise RuntimeError(f"yt-dlp could not extract stream metadata for URL: {url}")
                     filename = ydl.prepare_filename(info_dict)
                     
                     # If extension changed during merging, ensure we point to the existing file

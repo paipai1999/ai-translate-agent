@@ -97,9 +97,20 @@ class VoiceAgent:
         if not movie_path:
             return character_clips
 
-        base_name = os.path.splitext(os.path.basename(movie_path))[0]
-        vocals_path = os.path.join("temp", state.project_dir, "audio", "htdemucs", base_name, "vocals.wav")
-        if not os.path.exists(vocals_path):
+        base_candidates = [
+            getattr(state, "movie_name", None),
+            os.path.splitext(os.path.basename(movie_path))[0],
+        ]
+        vocals_path = None
+        for b_name in base_candidates:
+            if not b_name:
+                continue
+            cand = os.path.join("temp", state.project_dir, "audio", "htdemucs", b_name, "vocals.wav")
+            if os.path.exists(cand):
+                vocals_path = cand
+                break
+
+        if not vocals_path or not os.path.exists(vocals_path):
             vocals_path = getattr(state, "audio_path", None)
             if not vocals_path or not os.path.exists(vocals_path):
                 return character_clips
