@@ -59,31 +59,33 @@ class VideoAgent:
         if not cap.isOpened():
             raise RuntimeError(f"Could not open video file: {self.movie_path}")
 
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        try:
+            fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
 
-        if fps > 0:
-            duration_sec = frame_count / fps
-            hours = int(duration_sec // 3600)
-            minutes = int((duration_sec % 3600) // 60)
-            seconds = int(duration_sec % 60)
-            state.duration = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-        else:
-            # Fix: FPS=0 common for MKV/broken headers — fallback to ffprobe
-            print("[WARN] VideoAgent: cv2 returned FPS=0. Trying ffprobe for accurate duration...")
-            state.duration = self._get_duration_via_ffprobe()
-            if state.duration:
-                print(f"[OK] VideoAgent: ffprobe duration -> {state.duration}")
+            if fps > 0 and frame_count > 0:
+                duration_sec = frame_count / fps
+                hours = int(duration_sec // 3600)
+                minutes = int((duration_sec % 3600) // 60)
+                seconds = int(duration_sec % 60)
+                state.duration = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
             else:
-                print("[WARN] VideoAgent: Could not determine duration. Downstream agents will use safe fallbacks.")
+                # Fix: FPS=0 common for MKV/broken headers — fallback to ffprobe
+                print("[WARN] VideoAgent: cv2 returned FPS=0. Trying ffprobe for accurate duration...")
+                state.duration = self._get_duration_via_ffprobe()
+                if state.duration:
+                    print(f"[OK] VideoAgent: ffprobe duration -> {state.duration}")
+                else:
+                    print("[WARN] VideoAgent: Could not determine duration. Downstream agents will use safe fallbacks.")
 
-        state.fps = fps
-        state.frames_count = frame_count
-        state.resolution = f"{width}x{height}"
-        state.file_path = self.movie_path
+            state.fps = fps
+            state.frames_count = frame_count
+            state.resolution = f"{width}x{height}"
+            state.file_path = self.movie_path
+        finally:
+            cap.release()
 
-        cap.release()
-        print(f"[*] VideoAgent completed: FPS={fps:.2f}, Resolution={state.resolution}, Duration={state.duration}")
+        print(f"[*] VideoAgent completed: FPS={state.fps:.2f}, Resolution={state.resolution}, Duration={state.duration}")
         return state

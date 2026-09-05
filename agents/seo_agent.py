@@ -55,26 +55,47 @@ class SEOAgent:
 
     def _parse_json(self, raw_content: str):
         clean_json = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw_content, flags=re.MULTILINE).strip()
+        parsed = None
         for candidate in [clean_json, raw_content]:
             # Strip trailing commas before closing braces/brackets which LLMs often add
             cleaned = re.sub(r',\s*([\]}])', r'\1', candidate)
             try:
-                return json.loads(cleaned)
+                parsed = json.loads(cleaned)
+                break
             except json.JSONDecodeError:
                 pass
             start = cleaned.find('{')
             end = cleaned.rfind('}')
             if start != -1 and end != -1 and end > start:
                 try:
-                    return json.loads(cleaned[start:end+1])
+                    parsed = json.loads(cleaned[start:end+1])
+                    break
                 except json.JSONDecodeError:
                     pass
             m = re.search(r'\{.*\}', cleaned, re.DOTALL)
             if m:
                 try:
-                    return json.loads(m.group())
+                    parsed = json.loads(m.group())
+                    break
                 except json.JSONDecodeError:
                     pass
+
+        if isinstance(parsed, dict):
+            # Normalize keywords to clean list
+            kw = parsed.get("keywords")
+            if isinstance(kw, str):
+                parsed["keywords"] = [k.strip() for k in kw.split(",") if k.strip()]
+            elif not isinstance(kw, list):
+                parsed["keywords"] = []
+
+            # Normalize hashtags to clean list
+            ht = parsed.get("hashtags")
+            if isinstance(ht, str):
+                parsed["hashtags"] = [h.strip() for h in ht.split() if h.strip()]
+            elif not isinstance(ht, list):
+                parsed["hashtags"] = []
+
+            return parsed
         return None
 
     def _heuristic_seo(self, state: MovieState) -> dict:
@@ -138,10 +159,14 @@ class SEOAgent:
             f.write(f"==================================================\n\n")
             
             if state.seo_metadata:
+                tags = state.seo_metadata.get('hashtags', [])
+                tag_str = ' '.join(tags) if isinstance(tags, list) else str(tags or '')
+                keys = state.seo_metadata.get('keywords', [])
+                key_str = ', '.join(keys) if isinstance(keys, list) else str(keys or '')
                 f.write(f"[PIN] YOUTUBE TITLE: {state.seo_metadata.get('title', 'N/A')}\n")
-                f.write(f"[TAG] HASHTAGS: {' '.join(state.seo_metadata.get('hashtags', []))}\n\n")
+                f.write(f"[TAG] HASHTAGS: {tag_str}\n\n")
                 f.write(f"[TEXT] DESCRIPTION:\n{state.seo_metadata.get('description', '')}\n\n")
-                f.write(f"[KEY] KEYWORDS:\n{', '.join(state.seo_metadata.get('keywords', []))}\n")
+                f.write(f"[KEY] KEYWORDS:\n{key_str}\n")
                 f.write(f"--------------------------------------------------\n\n")
 
             f.write(f"[NARRATION] VOICE-OVER NARRATION SCRIPT\n")

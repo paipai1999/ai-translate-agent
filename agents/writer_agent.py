@@ -279,6 +279,12 @@ class WriterAgent:
                         pass
                 txt = txt.strip().strip('"').strip("'").strip()
                 if txt and len(txt) > 4:
+                    try:
+                        from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
+                        txt = replace_numbers_with_burmese(txt)
+                        txt = transliterate_english_acronyms(txt)
+                    except Exception:
+                        pass
                     bridge_dur = min(cand["gap_dur"] - 2.0, 5.5)
                     b_start = round(cand["gap_start"], 2)
                     b_end = round(b_start + max(bridge_dur, 3.0), 2)
@@ -378,21 +384,34 @@ class WriterAgent:
         """Ensure the script is a list of dicts with string values.
         CRITICAL: Preserve start_sec and end_sec so video sync is never broken.
         """
+        if not data:
+            return []
         if isinstance(data, dict):
             data = [data]
+        elif not isinstance(data, list):
+            return []
+
         result = []
         for i, item in enumerate(data):
-            narration = (
-                item.get("narration")
-                or item.get("translation")
-                or item.get("myanmar_text")
-                or item.get("burmese_text")
-                or item.get("text")
-                or ""
-            )
+            if isinstance(item, str):
+                narration = item
+                block_id = i + 1
+                item = {}
+            elif isinstance(item, dict):
+                narration = (
+                    item.get("narration")
+                    or item.get("translation")
+                    or item.get("myanmar_text")
+                    or item.get("burmese_text")
+                    or item.get("text")
+                    or ""
+                )
+                block_id = item.get("id", item.get("scene_id", i + 1))
+            else:
+                continue
+
             if not str(narration).strip():
                 continue
-            block_id = item.get("id", item.get("scene_id", i + 1))
             block = {
                 "id":         block_id,
                 "scene_id":   str(block_id),
@@ -401,9 +420,11 @@ class WriterAgent:
             }
             # Preserve exact timestamps — these drive character lip-sync placement
             if "start_sec" in item:
-                block["start_sec"] = float(item["start_sec"])
+                try: block["start_sec"] = float(item["start_sec"])
+                except (ValueError, TypeError): pass
             if "end_sec" in item:
-                block["end_sec"] = float(item["end_sec"])
+                try: block["end_sec"] = float(item["end_sec"])
+                except (ValueError, TypeError): pass
             if "speaker" in item:
                 block["speaker"] = str(item["speaker"])
             if "gender" in item:
