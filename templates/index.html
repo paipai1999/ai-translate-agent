@@ -692,7 +692,7 @@
         </div>
         <div class="nav-model-pill">
             <div class="pulse-dot"></div>
-            <span id="model-display">gemini-2.5-flash</span>
+            <span id="model-display">gemini-3.5-flash-lite</span>
         </div>
         <button class="btn-nav" onclick="loadKeyStatus()">🔄 Refresh Keys</button>
         <button class="btn-nav" onclick="clearCache()">🧹 Clear Cache</button>
@@ -777,6 +777,17 @@
                     <option value="white_stroke">⚪ Classic Movie White (Drop Shadow)</option>
                     <option value="cyan_cyber">🔷 Cyber Cyan (Sci-Fi / Modern Blue)</option>
                     <option value="crimson_box">🟥 Thriller Crimson (Dark Red Box)</option>
+                </select>
+            </div>
+            <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">🌐 Source Audio:</span>
+                <select class="lang-select" id="select-source-lang" style="padding:0.35rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600;">
+                    <option value="auto" selected>🤖 Auto Detect (အလိုအလျောက်)</option>
+                    <option value="zh">🇨🇳 Chinese (中文 / တရုတ်)</option>
+                    <option value="en">🇺🇸 English (အင်္ဂလိပ်)</option>
+                    <option value="th">🇹🇭 Thai (ภาษาไทย / ထိုင်း)</option>
+                    <option value="ko">🇰🇷 Korean (한국어 / ကိုရီးယား)</option>
+                    <option value="ja">🇯🇵 Japanese (日本語 / ဂျပန်)</option>
                 </select>
             </div>
             <div style="display:inline-flex; align-items:center; gap:0.5rem;">
@@ -1382,6 +1393,7 @@
         const reelsEnabled = (videoFormat === 'both' || videoFormat === '9:16');
         const subtitleStyle = document.getElementById('select-subtitle-style') ? document.getElementById('select-subtitle-style').value : 'box_black';
         const thumbnailIntro = document.getElementById('chk-thumb-intro') ? document.getElementById('chk-thumb-intro').checked : false;
+        const sourceLanguage = document.getElementById('select-source-lang') ? document.getElementById('select-source-lang').value : 'auto';
 
         const btn = document.getElementById('btn-start');
         const btnText = document.getElementById('btn-start-text');
@@ -1408,7 +1420,8 @@
                     watermark_opacity: watermarkOpacity,
                     reels_enabled: reelsEnabled,
                     video_format: videoFormat,
-                    thumbnail_intro: thumbnailIntro
+                    thumbnail_intro: thumbnailIntro,
+                    source_language: sourceLanguage
                 })
             });
             const data = await res.json();
@@ -1446,6 +1459,7 @@
         const reelsEnabled = (videoFormat === 'both' || videoFormat === '9:16');
         const subtitleStyle = document.getElementById('select-subtitle-style') ? document.getElementById('select-subtitle-style').value : 'box_black';
         const thumbnailIntro = document.getElementById('chk-thumb-intro') ? document.getElementById('chk-thumb-intro').checked : false;
+        const sourceLanguage = document.getElementById('select-source-lang') ? document.getElementById('select-source-lang').value : 'auto';
 
         const btn = document.getElementById('btn-batch');
         btn.disabled = true;
@@ -1469,7 +1483,8 @@
                     watermark_opacity: watermarkOpacity,
                     reels_enabled: reelsEnabled,
                     video_format: videoFormat,
-                    thumbnail_intro: thumbnailIntro
+                    thumbnail_intro: thumbnailIntro,
+                    source_language: sourceLanguage
                 })
             });
             const data = await res.json();

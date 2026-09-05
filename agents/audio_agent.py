@@ -138,17 +138,89 @@ class AudioAgent:
             print(f"[!] AudioAgent FFmpeg exception: {e}")
             return None
 
+    def _parse_srt_file(self, srt_path: str):
+        """Parses an SRT or VTT subtitle file into a list of TranscriptSegment."""
+        import re
+        if not os.path.exists(srt_path):
+            return []
+
+        content = ""
+        for encoding in ["utf-8-sig", "utf-8", "gb18030", "cp1252", "latin-1"]:
+            try:
+                with open(srt_path, "r", encoding=encoding) as f:
+                    content = f.read()
+                break
+            except Exception:
+                continue
+        if not content:
+            return []
+
+        # Matches: 00:01:23,456 --> 00:01:25,789 or 01:23.456 --> 01:25.789
+        time_pattern = re.compile(
+            r'(?:(\d{1,2}):)?(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(?:(\d{1,2}):)?(\d{2}):(\d{2})[,.](\d{3})'
+        )
+
+        segments = []
+        blocks = re.split(r'\n\s*\n', content.strip())
+        for block in blocks:
+            lines = [line.strip() for line in block.splitlines() if line.strip()]
+            if not lines:
+                continue
+            time_match = None
+            text_lines = []
+            for line in lines:
+                m = time_pattern.search(line)
+                if m:
+                    time_match = m
+                elif not time_match:
+                    continue
+                else:
+                    cleaned_line = re.sub(r'<[^>]+>', '', line).strip()
+                    if cleaned_line:
+                        text_lines.append(cleaned_line)
+
+            if time_match and text_lines:
+                g = time_match.groups()
+                h1, m1, s1, ms1 = int(g[0] or 0), int(g[1]), int(g[2]), int(g[3])
+                h2, m2, s2, ms2 = int(g[4] or 0), int(g[5]), int(g[6]), int(g[7])
+                start_sec = round(h1 * 3600 + m1 * 60 + s1 + ms1 / 1000.0, 2)
+                end_sec = round(h2 * 3600 + m2 * 60 + s2 + ms2 / 1000.0, 2)
+                full_text = " ".join(text_lines)
+                segments.append(TranscriptSegment(start=start_sec, end=end_sec, text=full_text))
+
+        return segments
+
     def transcribe_audio(self, state: MovieState, model_size: str = "small") -> MovieState:
         """
         Transcribes audio via faster-whisper running in a child subprocess.
         This isolates any native-library crash (e.g. ctranslate2 on Python 3.14)
         so the main pipeline always continues even if Whisper fails.
         """
+        # 1. First check if external subtitle file exists (.srt / .vtt) to bypass Whisper
+        movie_base, _ = os.path.splitext(self.movie_path) if self.movie_path else ("", "")
+        movie_dir = os.path.dirname(os.path.abspath(self.movie_path)) if self.movie_path else ""
+        candidate_subs = [
+            f"{movie_base}.srt",
+            f"{movie_base}.vtt",
+            os.path.join(movie_dir, "subtitles.srt"),
+            os.path.join(movie_dir, "subtitle.srt"),
+            os.path.join(movie_dir, "movie.srt"),
+            os.path.join(movie_dir, f"{state.movie_name}.srt"),
+        ]
+        for sub_file in candidate_subs:
+            if sub_file and os.path.exists(sub_file):
+                parsed = self._parse_srt_file(sub_file)
+                if parsed:
+                    print(f"[*] AudioAgent: 🎯 Found external subtitle ({len(parsed)} segments) -> {sub_file}. Bypassing Whisper STT!")
+                    state.transcript = parsed
+                    return state
+
         if not state.audio_path or not os.path.exists(state.audio_path):
             print("[!] AudioAgent: No audio file found for transcription. Skipping STT.")
             return state
 
-        print(f"[*] AudioAgent: Starting local Speech-to-Text (Whisper model: {model_size})...")
+        source_lang = getattr(state, "source_language", "auto") or "auto"
+        print(f"[*] AudioAgent: Starting local Speech-to-Text (Whisper model: {model_size}, source_lang: {source_lang})...")
 
         import subprocess, sys, json, tempfile
 
@@ -205,9 +277,11 @@ audio_path  = sys.argv[1]
 model_size  = sys.argv[2]
 output_path = sys.argv[3]
 movie_name  = sys.argv[4]
+source_lang = sys.argv[5] if len(sys.argv) > 5 else "auto"
+whisper_lang = None if source_lang in ["auto", "", None] else source_lang
 
 results = []
-detected_lang = "en"
+detected_lang = whisper_lang or "en"
 
 # Try 1: Faster-Whisper (CUDA / INT8)
 try:
@@ -227,12 +301,13 @@ try:
     model = WhisperModel(model_size, device=device, compute_type=compute_type, cpu_threads=num_threads)
     segments, info = model.transcribe(
         audio_path,
+        language=whisper_lang,
         beam_size=1,
         vad_filter=True,
         vad_parameters=dict(min_silence_duration_ms=500),
         initial_prompt=f"This is a dialogue transcript for the movie {{movie_name}}."
     )
-    detected_lang = info.language
+    detected_lang = whisper_lang or info.language
     for seg in segments:
         results.append({{"start": round(seg.start, 2), "end": round(seg.end, 2), "text": seg.text.strip()}})
 
@@ -244,8 +319,13 @@ except Exception as fw_err:
     print(f"[*] AudioAgent (Whisper): Running on device: {{device}}")
     model = whisper.load_model(model_size, device=device)
     use_fp16 = bool(torch.cuda.is_available())
-    res = model.transcribe(audio_path, fp16=use_fp16, initial_prompt=f"This is a dialogue transcript for the movie {{movie_name}}.")
-    detected_lang = res.get("language", "en")
+    res = model.transcribe(
+        audio_path,
+        language=whisper_lang,
+        fp16=use_fp16,
+        initial_prompt=f"This is a dialogue transcript for the movie {{movie_name}}."
+    )
+    detected_lang = whisper_lang or res.get("language", "en")
     for seg in res.get("segments", []):
         results.append({{"start": round(float(seg["start"]), 2), "end": round(float(seg["end"]), 2), "text": seg["text"].strip()}})
 
@@ -262,7 +342,7 @@ print(f"[Whisper] Transcribed {{len(results)}} segments in language: {{detected_
 
         try:
             proc = subprocess.run(
-                [python_exe, helper_path, state.audio_path, model_size, result_path, state.movie_name],
+                [python_exe, helper_path, state.audio_path, model_size, result_path, state.movie_name, source_lang],
                 capture_output=True, text=True, timeout=600
             )
             if proc.stdout:
@@ -275,6 +355,7 @@ print(f"[Whisper] Transcribed {{len(results)}} segments in language: {{detected_
                     TranscriptSegment(start=s["start"], end=s["end"], text=s["text"])
                     for s in data.get("segments", [])
                 ]
+                state.transcript = transcript_list
                 state.transcript = transcript_list
                 print(f"[*] AudioAgent completed: Transcribed {len(transcript_list)} dialogue segments "
                       f"(lang: {data.get('language','?')}).")

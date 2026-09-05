@@ -217,8 +217,8 @@ class ThumbnailAgent:
                         best_part = part
                 
                 if best_part:
-                    # Remove any leftover English words in the best part just to be strictly pure Burmese
-                    title = re.sub(r'[A-Za-z0-9]', '', best_part).strip()
+                    # Clean up leftover English letters while preserving numbers (0-9 and Myanmar digits)
+                    title = re.sub(r'[A-Za-z]', '', best_part).strip()
                     # Clean up random leftover spaces or punctuation
                     title = re.sub(r'[\s+]', ' ', title).strip(" .,!?'\"()[]{}")
                     print(f"[*] ThumbnailAgent: Auto-generated pure Burmese thumbnail text from SEO: '{title}'")
