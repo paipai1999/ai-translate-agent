@@ -62,8 +62,8 @@ Choose from 5 professionally designed subtitle styles with real-time live previe
 ### 🧠 7. Google AI Studio 2026 PRO Tier & Model Auto-Rotation Chain
 * **Tier Synchronization:** Pre-configured with Google AI Studio 2026 PRO quotas:
   - **Workhorse:** `gemini-3.5-flash-lite` (15 RPM) & `gemini-3.1-flash-lite` (15 RPM)
-  - **Primary & SEO:** `gemini-3.5-flash` (5 RPM) & `gemini-3.7-flash` (5 RPM)
-  - **High-Capacity Fallbacks:** `gemini-3.6-flash`, `gemini-3-flash`, `gemini-2.5-flash`, `gemini-2.5-flash-lite`
+  - **Fastest Cloud:** `gemini-flash-latest` (Dynamic auto-routed to newest stable engine)
+  - **Primary & Fallbacks:** `gemini-3.5-flash` (5 RPM), `gemini-3.7-flash` (5 RPM), `gemini-3.6-flash`, `gemini-3-flash`
 * **Zero-Error Parsing:** Safe `_extract_text_from_gemini_response` multi-part and thought-block extractor preventing `KeyError: 'parts'`.
 
 ### ⏱️ 8. Process Records Time & Live Stopwatch Dashboard
@@ -75,6 +75,10 @@ Choose from 5 professionally designed subtitle styles with real-time live previe
 * **Google Colab Mode:** Dedicated **NVIDIA T4 GPU (16GB VRAM)** execution utilizing Whisper CUDA FP16 Tensor Cores, Demucs `-d cuda`, and FFmpeg NVENC (`h264_nvenc`) hardware encoder.
 * **Kaggle Mode:** Dedicated **Dual NVIDIA T4 GPUs (30GB VRAM)** or **P100 GPU (16GB VRAM)** with 12-hour continuous sessions and Cloudflare Secure Tunnel.
 * **Local PC Mode:** Intelligent auto-detection of NVIDIA CUDA, Intel QuickSync (`h264_qsv`), and AMD AMF (`h264_amf`), with zero-error fallback to CPU Multi-core.
+
+### 🖼️ 10. Optional 3-Second Thumbnail Intro & Smart Audio Ducking
+* **Toggleable Thumbnail Intro:** Control whether a 3-second thumbnail freeze-frame appears at video start via Web UI checkbox, `config.json` (`"thumbnail_intro": {"enabled": false, "duration_sec": 3.0}`), or CLI flags (`--thumbnail-intro` / `--no-thumbnail-intro`). When enabled, ASS subtitles are dynamically shifted to preserve flawless subtitle-to-voice synchronization.
+* **Zero Dead Silence Audio Ducking:** Preserves movie ambient background SFX, BGM, and foley sound effects even when Demucs is bypassed (`--skip-demucs`), automatically ducking original audio down to 15% volume under the AI Burmese voiceover.
 
 ---
 
