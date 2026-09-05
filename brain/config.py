@@ -10,7 +10,8 @@ DEFAULT_CONFIG = {
         "scene_threshold": 30.0,           # PySceneDetect sensitivity (lower = more scenes)
         "max_characters": 6,               # Max character names to detect
         "max_scenes_for_llm": 30,          # Scene count cap passed to LLM (context limit)
-        "parallel_processing": True        # Run STT & Scene detection in parallel (set False for Low RAM)
+        "parallel_processing": True,       # Run STT & Scene detection in parallel (set False for Low RAM)
+        "use_demucs": True                 # Vocal separation with Demucs (high accuracy)
     },
     "gemini": {
         "enabled": True,                   # Use Gemini API when writing Burmese recap scripts for natural spoken flow
@@ -56,7 +57,8 @@ DEFAULT_CONFIG = {
     },
     "paths": {
         "output_dir": "outputs",
-        "temp_dir": "temp"
+        "temp_dir": "temp",
+        "clean_temp_after_merge": True
     },
     "copyright_protection": {
         "enabled": True,
@@ -97,6 +99,26 @@ DEFAULT_CONFIG = {
         "outline_width": 3,
         "margin_bottom": 50,
         "max_chars_per_line": 28
+    },
+    "reels": {
+        "enabled": True,
+        "width": 1080,
+        "height": 1920,
+        "blur_background": True,
+        "blur_sigma": 25,
+        "hook_title_color": "&H00D7FF",
+        "font_size": 52,
+        "safe_zone_margin": 160
+    },
+    "action_narration": {
+        "enabled": True,
+        "min_gap_sec": 18.0,
+        "max_bridge_duration_sec": 6.0
+    },
+    "audio_ducking": {
+        "enabled": True,
+        "duck_volume": 0.12,
+        "ambient_volume": 0.35
     },
     "thumbnail_intro": {
         "enabled": False,                  # If True, prepends 3-second freeze-frame thumbnail intro

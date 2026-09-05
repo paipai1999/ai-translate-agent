@@ -193,9 +193,15 @@ def pipeline_worker(
     subtitle_style="box_black",
     thumbnail_intro=False,
     source_language="auto",
+    skip_demucs=False,
 ):
     current_job_id.set(job_id)
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
+    if skip_demucs:
+        os.environ["SKIP_DEMUCS"] = "true"
+    else:
+        os.environ.pop("SKIP_DEMUCS", None)
+
     if video_format == "16:9" or reels_enabled is False:
         os.environ["DISABLE_REELS"] = "true"
         os.environ.pop("ENABLE_REELS", None)
@@ -334,10 +340,16 @@ def batch_worker(
     subtitle_style="box_black",
     thumbnail_intro=False,
     source_language="auto",
+    skip_demucs=False,
 ):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
+    if skip_demucs:
+        os.environ["SKIP_DEMUCS"] = "true"
+    else:
+        os.environ.pop("SKIP_DEMUCS", None)
+
     if video_format == "16:9" or reels_enabled is False:
         os.environ["DISABLE_REELS"] = "true"
         os.environ.pop("ENABLE_REELS", None)
@@ -464,6 +476,7 @@ class StartRequest(BaseModel):
     subtitle_style: Optional[str] = "box_black"
     thumbnail_intro: Optional[bool] = False
     source_language: Optional[str] = "auto"
+    skip_demucs: Optional[bool] = False
 
 class BatchStartRequest(BaseModel):
     inputs: List[str]
@@ -480,6 +493,7 @@ class BatchStartRequest(BaseModel):
     subtitle_style: Optional[str] = "box_black"
     thumbnail_intro: Optional[bool] = False
     source_language: Optional[str] = "auto"
+    skip_demucs: Optional[bool] = False
 
 class SubtitleConfigRequest(BaseModel):
     preset: str = "box_black"
@@ -627,6 +641,7 @@ async def start_pipeline(req: StartRequest):
             subtitle_style,
             req.thumbnail_intro,
             req.source_language or "auto",
+            req.skip_demucs or False,
         ),
         daemon=True,
     )
@@ -680,6 +695,7 @@ async def start_batch_pipeline(req: BatchStartRequest):
             subtitle_style,
             req.thumbnail_intro,
             req.source_language or "auto",
+            req.skip_demucs or False,
         ),
         daemon=True,
     )
@@ -1065,6 +1081,19 @@ async def handle_config(request: Request):
             elif isinstance(data["thumbnail_intro"], bool):
                 config_data["thumbnail_intro"]["enabled"] = data["thumbnail_intro"]
             cfg.save_config(config_data)
+        if "audio_ducking" in data:
+            if "audio_ducking" not in config_data:
+                config_data["audio_ducking"] = {}
+            if isinstance(data["audio_ducking"], dict):
+                config_data["audio_ducking"].update(data["audio_ducking"])
+            elif isinstance(data["audio_ducking"], bool):
+                config_data["audio_ducking"]["enabled"] = data["audio_ducking"]
+            cfg.save_config(config_data)
+        if "use_demucs" in data:
+            if "pipeline" not in config_data:
+                config_data["pipeline"] = {}
+            config_data["pipeline"]["use_demucs"] = bool(data["use_demucs"])
+            cfg.save_config(config_data)
         public_config = json.loads(json.dumps(config_data))
         public_config.get("gemini", {}).pop("api_keys", None)
         return {"success": True, "config": public_config}
@@ -1105,7 +1134,7 @@ def get_key_status():
                     headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Recap/2.2"},
                     method="GET"
                 )
-                with urllib.request.urlopen(req, timeout=3.5) as resp:
+                with urllib.request.urlopen(req, timeout=8.0) as resp:
                     if resp.status == 200:
                         return "ONLINE", 200
             except urllib.error.HTTPError as e:

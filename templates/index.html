@@ -812,6 +812,20 @@
                     🪞 Mirror Video (ဘယ်ညာလှည့် — Maximum Protection)
                 </label>
             </div>
+            <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">🎵 Audio Demucs:</span>
+                <label style="font-size:0.82rem; cursor:pointer;" title="Skip Demucs vocal separation to speed up processing significantly on CPU">
+                    <input type="checkbox" id="chk-skip-demucs" onchange="updateDemucsSetting(this.checked)">
+                    ⚡ Skip Demucs (အသံခွဲထုတ်မှုကျော်ရန် — CPU ပိုမြန်မည်)
+                </label>
+            </div>
+            <div style="display:inline-flex; align-items:center; gap:0.5rem;">
+                <span class="strip-title" style="color:var(--muted); font-weight:700;">🔊 Audio Ducking:</span>
+                <label style="font-size:0.82rem; cursor:pointer;" title="Automatically lower original video/BGM audio when voiceover is speaking">
+                    <input type="checkbox" id="chk-audio-ducking" checked onchange="updateAudioDuckingSetting(this.checked)">
+                    📉 Dynamic Ducking (ဇာတ်ကြောင်းပြောချိန် နောက်ခံအသံတိုးမည်)
+                </label>
+            </div>
         </div>
 
         <!-- ── Thumbnail Title & Watermark Branding Strip ── -->
@@ -1394,6 +1408,7 @@
         const subtitleStyle = document.getElementById('select-subtitle-style') ? document.getElementById('select-subtitle-style').value : 'box_black';
         const thumbnailIntro = document.getElementById('chk-thumb-intro') ? document.getElementById('chk-thumb-intro').checked : false;
         const sourceLanguage = document.getElementById('select-source-lang') ? document.getElementById('select-source-lang').value : 'auto';
+        const skipDemucs = document.getElementById('chk-skip-demucs') ? document.getElementById('chk-skip-demucs').checked : false;
 
         const btn = document.getElementById('btn-start');
         const btnText = document.getElementById('btn-start-text');
@@ -1421,7 +1436,8 @@
                     reels_enabled: reelsEnabled,
                     video_format: videoFormat,
                     thumbnail_intro: thumbnailIntro,
-                    source_language: sourceLanguage
+                    source_language: sourceLanguage,
+                    skip_demucs: skipDemucs
                 })
             });
             const data = await res.json();
@@ -1460,6 +1476,7 @@
         const subtitleStyle = document.getElementById('select-subtitle-style') ? document.getElementById('select-subtitle-style').value : 'box_black';
         const thumbnailIntro = document.getElementById('chk-thumb-intro') ? document.getElementById('chk-thumb-intro').checked : false;
         const sourceLanguage = document.getElementById('select-source-lang') ? document.getElementById('select-source-lang').value : 'auto';
+        const skipDemucs = document.getElementById('chk-skip-demucs') ? document.getElementById('chk-skip-demucs').checked : false;
 
         const btn = document.getElementById('btn-batch');
         btn.disabled = true;
@@ -1484,7 +1501,8 @@
                     reels_enabled: reelsEnabled,
                     video_format: videoFormat,
                     thumbnail_intro: thumbnailIntro,
-                    source_language: sourceLanguage
+                    source_language: sourceLanguage,
+                    skip_demucs: skipDemucs
                 })
             });
             const data = await res.json();
@@ -2188,6 +2206,34 @@
             if (cfg.gemini && cfg.gemini.model) {
                 document.getElementById('model-display').textContent = cfg.gemini.model;
             }
+            if (cfg.pipeline && cfg.pipeline.use_demucs !== undefined) {
+                const chkDemucs = document.getElementById('chk-skip-demucs');
+                if (chkDemucs) chkDemucs.checked = !cfg.pipeline.use_demucs;
+            }
+            if (cfg.audio_ducking && cfg.audio_ducking.enabled !== undefined) {
+                const chkDuck = document.getElementById('chk-audio-ducking');
+                if (chkDuck) chkDuck.checked = !!cfg.audio_ducking.enabled;
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    async function updateDemucsSetting(skip) {
+        try {
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ use_demucs: !skip })
+            });
+        } catch (e) { console.error(e); }
+    }
+
+    async function updateAudioDuckingSetting(enabled) {
+        try {
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ audio_ducking: { enabled: enabled } })
+            });
         } catch (e) { console.error(e); }
     }
 
