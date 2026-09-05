@@ -15,21 +15,20 @@ DEFAULT_CONFIG = {
     "gemini": {
         "enabled": True,                   # Use Gemini API when writing Burmese recap scripts for natural spoken flow
         "api_keys": [],
-        "model": "gemini-3.5-flash",       # Primary model: gemini-3.5-flash (fast, reliable 2026 production model)
+        "model": "gemini-3.5-flash-lite",       # Primary model: gemini-3.5-flash-lite (fast, reliable 2026 production model)
         "daily_limit_per_key": 50,
         "model_limits": {
             "gemini-3.5-flash-lite": 15,
+            "gemini-flash-latest": 15,
             "gemini-3.1-flash-lite": 15,
-            "gemini-2.5-flash-lite": 10,
             "gemini-3.5-flash": 5,
-            "gemini-3.7-flash": 5,
             "gemini-3.6-flash": 5,
-            "gemini-3-flash": 5,
-            "gemini-2.5-flash": 5
+            "gemini-3.7-flash": 5,
+            "gemini-3-flash": 5
         },
         "models": {
-            "heavy": "gemini-3.5-flash",
-            "workhorse": "gemini-3.5-flash",
+            "heavy": "gemini-flash-latest",
+            "workhorse": "gemini-3.5-flash-lite",
             "polish": "gemini-3.1-flash-lite"
         }
     },
@@ -98,6 +97,10 @@ DEFAULT_CONFIG = {
         "outline_width": 3,
         "margin_bottom": 50,
         "max_chars_per_line": 28
+    },
+    "thumbnail_intro": {
+        "enabled": False,                  # If True, prepends 3-second freeze-frame thumbnail intro
+        "duration_sec": 3.0
     },
     "logging": {
         "level": "INFO",                   # DEBUG | INFO | WARNING

@@ -12,26 +12,22 @@ def _mask_key(key: str) -> str:
     return key[:6] + '...' + key[-4:]
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Valid Google AI Studio Gemini Models (2026 Production Tier from AI Studio):
-#
-# 1. gemini-3.5-flash         : Primary — Best Burmese translation quality
-# 2. gemini-3.5-flash-lite    : Workhorse — Ultra fast + 15 RPM limit
+# Valid Google AI Studio Gemini Models (2026 Production Tier from AI# Priority order:
+# 1. gemini-3.5-flash-lite    : Workhorse — Ultra fast, reliable, 15 RPM limit
+# 2. gemini-flash-latest      : Always updated latest flash model (15 RPM)
 # 3. gemini-3.1-flash-lite    : High-speed Lite fallback (15 RPM)
-# 4. gemini-3.7-flash         : Advanced reasoning & translation (5 RPM)
+# 4. gemini-3.5-flash         : Heavy quality model (5 RPM)
 # 5. gemini-3.6-flash         : High-speed Flash fallback (5 RPM)
-# 6. gemini-3-flash           : Standard Flash fallback (5 RPM)
-# 7. gemini-2.5-flash         : Robust fallback (5 RPM)
-# 8. gemini-2.5-flash-lite    : 10 RPM Lite fallback
-# ─────────────────────────────────────────────────────────────────────────────
+# 6. gemini-3.7-flash         : Advanced reasoning & translation (5 RPM)
+# 7. gemini-3-flash           : Standard Flash fallback (5 RPM)
 _FALLBACK_MODELS = [
-    "gemini-3.5-flash",
     "gemini-3.5-flash-lite",
+    "gemini-flash-latest",
     "gemini-3.1-flash-lite",
-    "gemini-3.7-flash",
+    "gemini-3.5-flash",
     "gemini-3.6-flash",
+    "gemini-3.7-flash",
     "gemini-3-flash",
-    "gemini-2.5-flash",
-    "gemini-2.5-flash-lite",
 ]
 
 # How many seconds to wait when ALL keys are rate-limited before retrying.
@@ -70,7 +66,7 @@ def call_gemini(
     system_prompt: str,
     user_prompt: str,
     api_key: Union[str, List[str]],
-    model: str = "gemini-3.5-flash",
+    model: str = "gemini-3.5-flash-lite",
     temperature: float = 0.7,
     max_tokens: int = 4096,
     response_mime_type: str = "application/json",  # FIX-BUG3: allow "text/plain" for non-JSON callers
@@ -211,7 +207,7 @@ def call_gemini_vision(
     user_text: str,
     image_path: str,
     api_key: Union[str, List[str]],
-    model: str = "gemini-3.5-flash",
+    model: str = "gemini-3.5-flash-lite",
     temperature: float = 0.7,
     max_tokens: int = 2048,
 ) -> tuple:
@@ -438,7 +434,7 @@ def upload_video_file(video_path: str, api_key) -> tuple:
                 
     raise Exception("All Gemini API keys failed to upload the video.")
 
-def ask_gemini_with_video(file_name: str, system_prompt: str, user_text: str, key: str, model: str = "gemini-3.5-flash", temperature: float = 0.3) -> str:
+def ask_gemini_with_video(file_name: str, system_prompt: str, user_text: str, key: str, model: str = "gemini-3.5-flash-lite", temperature: float = 0.3) -> str:
     models_to_try = _build_model_list(model)
     last_err = None
     

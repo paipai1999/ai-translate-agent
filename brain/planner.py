@@ -23,6 +23,7 @@ class BatchProcessor:
         tts_voice: str = None,
         video_format: str = None,
         subtitle_style: str = None,
+        thumbnail_intro: bool = None,
     ):
         self.movies_folder = movies_folder
         self.skip_completed = skip_completed
@@ -37,6 +38,7 @@ class BatchProcessor:
         self.watermark_enabled = watermark_enabled
         self.watermark_text = watermark_text
         self.watermark_opacity = watermark_opacity
+        self.thumbnail_intro = thumbnail_intro
         self.supported_extensions = [".mp4", ".mkv", ".avi", ".mov", ".webm"]
         self.results = []
 
@@ -127,6 +129,7 @@ class BatchProcessor:
                     watermark_opacity=self.watermark_opacity,
                     video_format=self.video_format,
                     subtitle_style=self.subtitle_style,
+                    thumbnail_intro=self.thumbnail_intro,
                 )
                 master.run_pipeline()
                 self.results.append({"movie": movie_name, "status": "SUCCESS"})

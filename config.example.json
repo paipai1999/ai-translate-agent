@@ -2,22 +2,21 @@
   "gemini": {
     "enabled": true,
     "api_keys": [],
-    "model": "gemini-3.5-flash",
+    "model": "gemini-3.5-flash-lite",
     "models": {
-      "heavy": "gemini-3.5-flash",
+      "heavy": "gemini-flash-latest",
       "workhorse": "gemini-3.5-flash-lite",
       "polish": "gemini-3.1-flash-lite"
     },
     "daily_limit_per_key": 50,
     "model_limits": {
       "gemini-3.5-flash-lite": 15,
+      "gemini-flash-latest": 15,
       "gemini-3.1-flash-lite": 15,
-      "gemini-2.5-flash-lite": 10,
       "gemini-3.5-flash": 5,
-      "gemini-3.7-flash": 5,
       "gemini-3.6-flash": 5,
-      "gemini-3-flash": 5,
-      "gemini-2.5-flash": 5
+      "gemini-3.7-flash": 5,
+      "gemini-3-flash": 5
     }
   },
   "pipeline": {
@@ -99,6 +98,10 @@
     "enabled": true,
     "duck_volume": 0.12,
     "ambient_volume": 0.35
+  },
+  "thumbnail_intro": {
+    "enabled": false,
+    "duration_sec": 3.0
   },
   "logging": {"level": "INFO", "save_log_file": true}
 }

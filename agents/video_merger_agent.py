@@ -440,8 +440,21 @@ class VideoMergerAgent:
                                 except Exception:
                                     pass
 
-                    # Mix original audio with positioned voiceover clips only if vocals were removed
-                    if orig_audio is not None and has_no_vocals:
+                    # Mix original audio with positioned voiceover clips
+                    if orig_audio is not None:
+                        if not has_no_vocals:
+                            # When vocal separation is bypassed/skipped, duck original audio down to 15%
+                            # so original dialogue is faint while preserving background music & SFX!
+                            try:
+                                from moviepy.audio.fx.MultiplyVolume import MultiplyVolume
+                                orig_audio = orig_audio.with_effects([MultiplyVolume(0.15)])
+                            except Exception:
+                                try:
+                                    import moviepy.audio.fx.all as afx
+                                    orig_audio = afx.volumex(orig_audio, 0.15)
+                                except Exception:
+                                    pass
+                            print("[*] VideoMerger: Original audio mixed at 15% duck volume (vocal separation bypassed).")
                         final_audio = CompositeAudioClip([orig_audio] + positioned_clips)
                     else:
                         final_audio = CompositeAudioClip(positioned_clips)
@@ -526,11 +539,17 @@ class VideoMergerAgent:
                 except Exception as e:
                     print(f"[WARN] VideoMerger: Failed to apply watermark: {e}")
 
-            # --- THUMBNAIL INTRO STITCH (3 SECONDS) ---
+            # --- THUMBNAIL INTRO STITCH (OPTIONAL / TOGGLEABLE) ---
             # NOTE: output_dir already includes the project subdirectory path
+            thumb_intro_cfg = config_data.get("thumbnail_intro", {})
+            thumb_intro_enabled = getattr(state, "thumbnail_intro_enabled", None)
+            if thumb_intro_enabled is None:
+                thumb_intro_enabled = thumb_intro_cfg.get("enabled", False)
+            thumb_duration = float(thumb_intro_cfg.get("duration_sec", 3.0))
+
             thumbnail_path = os.path.join(output_dir, "thumbnail.jpg")
-            if os.path.exists(thumbnail_path):
-                print("[*] VideoMerger: Stitching Thumbnail as a 3-second Intro...")
+            if thumb_intro_enabled and os.path.exists(thumbnail_path):
+                print(f"[*] VideoMerger: Stitching Thumbnail as a {thumb_duration}-second Intro...")
                 try:
                     try:
                         from moviepy.editor import ImageClip, concatenate_videoclips
@@ -539,9 +558,9 @@ class VideoMergerAgent:
                         
                     intro_clip = ImageClip(thumbnail_path)
                     if hasattr(intro_clip, "with_duration"):
-                        intro_clip = intro_clip.with_duration(3.0)
+                        intro_clip = intro_clip.with_duration(thumb_duration)
                     else:
-                        intro_clip = intro_clip.set_duration(3.0)
+                        intro_clip = intro_clip.set_duration(thumb_duration)
                         
                     # Match FPS
                     if hasattr(intro_clip, "with_fps"):
@@ -564,12 +583,14 @@ class VideoMergerAgent:
 
                     final_clip = concatenate_videoclips([intro_clip, final_clip], method="compose")
                     
-                    # CRITICAL: Shift subtitle timings by 3 seconds so Myanmar ASS subtitles stay perfectly synced!
+                    # CRITICAL: Shift subtitle timings so Myanmar ASS subtitles stay perfectly synced!
                     if subtitle_timings:
-                        subtitle_timings = [(start + 3.0, dur, txt) for (start, dur, txt) in subtitle_timings]
+                        subtitle_timings = [(start + thumb_duration, dur, txt) for (start, dur, txt) in subtitle_timings]
                         state.subtitle_timings = subtitle_timings
                 except Exception as e:
                     print(f"[WARN] VideoMerger: Failed to stitch thumbnail intro: {e}")
+            else:
+                print(f"[*] VideoMerger: Thumbnail Intro skipped (enabled={thumb_intro_enabled})")
 
             enc_info = detect_hardware_encoder()
             print(f"[*] VideoMerger (Hardware Acceleration): Exporting video using {enc_info['label']} [{enc_info['codec']}]...")
@@ -604,11 +625,14 @@ class VideoMergerAgent:
             temp_dir = os.path.abspath("temp")
             os.makedirs(temp_dir, exist_ok=True)
             clean_video_path = os.path.join(temp_dir, f"{os.path.splitext(os.path.basename(final_output))[0]}_clean.mp4")
+            persistent_clean_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(final_output))[0]}_clean.mp4")
             try:
                 shutil.copy2(final_output, clean_video_path)
-                state.clean_video_path = clean_video_path
+                shutil.copy2(final_output, persistent_clean_path)
+                state.clean_video_path = persistent_clean_path
             except Exception as ce:
                 print(f"[WARN] VideoMerger: Could not cache clean video copy: {ce}")
+                state.clean_video_path = clean_video_path
 
             # ── Subtitles Preparation ──────────────────────────────────────────
             sub_cfg = config_data.get("subtitle_overlay", {})
@@ -1601,6 +1625,13 @@ Dialogue: 0,0:00:00.00,9:59:59.99,ReelsBrand,,0,0,0,,🎬 {wm_brand_text}
 Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}
 """
         burn_reels_subs = sub_mode not in ["none", "off", "no"]
+        is_clean_source = "_clean" in os.path.basename(source_video_path).lower()
+        if not is_clean_source and burn_reels_subs:
+            # If source video is already hard-subbed (e.g. fallback when clean video was deleted),
+            # prevent burning duplicate overlapping subtitles
+            if getattr(state, "subtitles_burned", True) or sub_mode not in ["none", "off", "no"]:
+                print("[*] ReelsExporter: Source video already contains burned subtitles. Skipping duplicate subtitle burn.")
+                burn_reels_subs = False
 
         if burn_reels_subs and subtitle_timings:
             for item in subtitle_timings:
