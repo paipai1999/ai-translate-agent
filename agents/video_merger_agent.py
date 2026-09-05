@@ -1108,9 +1108,12 @@ class VideoMergerAgent:
 
         if result.returncode != 0 and codec != "libx264":
             print(f"[WARN] MyanmarSubs: Hardware encoder '{codec}' failed. Retrying with CPU libx264...")
-            cmd[cmd.index(codec)] = "libx264"
-            cmd[cmd.index(preset)] = "superfast"
-            result = subprocess.run(cmd, cwd=temp_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
+            fallback_cmd = list(cmd)
+            if codec in fallback_cmd:
+                fallback_cmd[fallback_cmd.index(codec)] = "libx264"
+            if preset in fallback_cmd:
+                fallback_cmd[fallback_cmd.index(preset)] = "superfast"
+            result = subprocess.run(fallback_cmd, cwd=temp_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
 
         if result.returncode == 0 and os.path.exists(temp_output) and os.path.getsize(temp_output) > 100_000:
             shutil.move(temp_output, video_path)
@@ -1519,9 +1522,12 @@ class VideoMergerAgent:
             result = subprocess.run(cmd, cwd=working_dir, capture_output=True, text=True, timeout=dyn_timeout)
             if result.returncode != 0 and codec != "libx264":
                 print(f"[WARN] PostProcess: Hardware encoder '{codec}' failed. Retrying with CPU libx264...")
-                cmd[cmd.index(codec)] = "libx264"
-                cmd[cmd.index(preset)] = "superfast"
-                result = subprocess.run(cmd, cwd=working_dir, capture_output=True, text=True, timeout=dyn_timeout)
+                fallback_cmd = list(cmd)
+                if codec in fallback_cmd:
+                    fallback_cmd[fallback_cmd.index(codec)] = "libx264"
+                if preset in fallback_cmd:
+                    fallback_cmd[fallback_cmd.index(preset)] = "superfast"
+                result = subprocess.run(fallback_cmd, cwd=working_dir, capture_output=True, text=True, timeout=dyn_timeout)
 
             if result.returncode == 0 and os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 100_000:
                 os.replace(tmp_path, video_path)
