@@ -238,6 +238,18 @@ def main():
         help="Video resolution preset: '1080p' (Full HD) or '720p' (Fast render HD)"
     )
     parser.add_argument(
+        "--thumbnail-intro",
+        action="store_true",
+        default=None,
+        help="Include 3-second thumbnail intro at the start of recap video"
+    )
+    parser.add_argument(
+        "--no-thumbnail-intro",
+        action="store_true",
+        default=None,
+        help="Disable 3-second thumbnail intro at start of video"
+    )
+    parser.add_argument(
         "--clean",
         action="store_true",
         help="Interactive cleanup menu to delete old source videos or generated outputs"
@@ -307,6 +319,7 @@ def main():
         elif chosen_voice in ["thiha", "male"]:
             chosen_voice = "my-MM-ThihaNeural"
 
+        thumb_intro = True if args.thumbnail_intro else (False if args.no_thumbnail_intro else None)
         try:
             sub_mode = "burn" if args.subtitle else (args.sub_mode or "burn")
             master = MasterAgent(
@@ -321,6 +334,7 @@ def main():
                 watermark_enabled=False if args.no_watermark else True,
                 watermark_text=args.watermark_text,
                 video_format=chosen_format,
+                thumbnail_intro=thumb_intro,
             )
             master.run_pipeline()
         except Exception as e:
@@ -335,6 +349,7 @@ def main():
         conf = cfg.load_config()
         skip = conf.get("batch", {}).get("skip_completed", True) and not args.force
         sub_mode = "burn" if args.subtitle else (args.sub_mode or "burn")
+        thumb_intro = True if args.thumbnail_intro else (False if args.no_thumbnail_intro else None)
         BatchProcessor(
             movies_folder=conf.get("batch", {}).get("movies_folder", "movies"),
             skip_completed=skip,
@@ -347,6 +362,7 @@ def main():
             watermark_enabled=False if args.no_watermark else True,
             watermark_text=args.watermark_text,
             video_format=chosen_format,
+            thumbnail_intro=thumb_intro,
         ).process_all()
 
     # Batch: URL list
@@ -355,6 +371,7 @@ def main():
         conf = cfg.load_config()
         skip = conf.get("batch", {}).get("skip_completed", True) and not args.force
         sub_mode = "burn" if args.subtitle else (args.sub_mode or "burn")
+        thumb_intro = True if args.thumbnail_intro else (False if args.no_thumbnail_intro else None)
         BatchProcessor(
             movies_folder=conf.get("batch", {}).get("movies_folder", "movies"),
             skip_completed=skip,
@@ -367,6 +384,7 @@ def main():
             watermark_enabled=False if args.no_watermark else True,
             watermark_text=args.watermark_text,
             video_format=chosen_format,
+            thumbnail_intro=thumb_intro,
         ).process_all(url_list=args.urls, local_paths=[])
     else:
         parser.print_help()

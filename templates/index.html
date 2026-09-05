@@ -814,8 +814,14 @@
                 <input type="text" id="input-thumb-title" placeholder="အလွတ်ထားပါက AI က Auto ရေးပေးမည် (သို့) မိမိစိတ်ကြိုက် Title ရိုက်ထည့်ပါ..." 
                        oninput="updateThumbBadge(this.value)"
                        style="width:100%; box-sizing:border-box; padding:0.5rem 0.75rem; font-size:0.82rem; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:6px; color:#fff;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.06);">
+                    <label style="font-size:0.82rem; font-weight:600; color:var(--text); cursor:pointer; display:flex; align-items:center; gap:0.4rem;">
+                        <input type="checkbox" id="chk-thumb-intro" onchange="updateThumbnailIntroSetting(this.checked)">
+                        ⏱️ 3s Thumbnail Intro ထည့်မည် (ဗီဒီယိုအစတွင် ၃ စက္ကန့်ပြသရန်)
+                    </label>
+                </div>
                 <div style="font-size:0.73rem; color:var(--muted); margin-top:4px;">
-                    💡 အလွတ်ထားပါက AI က SEO High-CTR မြန်မာခေါင်းစဉ်ကို Auto ထုတ်ယူပေးမည်။
+                    💡 အလွတ်ထားပါက AI က SEO High-CTR မြန်မာခေါင်းစဉ်ကို Auto ထုတ်ယူပေးမည်။ Intro ကို အမှန်ခြစ်ထားမှသာ ဗီဒီယိုအစ၌ Thumbnail ပုံ ၃ စက္ကန့် ပါဝင်မည်။
                 </div>
             </div>
 
@@ -1375,6 +1381,7 @@
         const videoFormat = document.getElementById('select-video-format') ? document.getElementById('select-video-format').value : 'both';
         const reelsEnabled = (videoFormat === 'both' || videoFormat === '9:16');
         const subtitleStyle = document.getElementById('select-subtitle-style') ? document.getElementById('select-subtitle-style').value : 'box_black';
+        const thumbnailIntro = document.getElementById('chk-thumb-intro') ? document.getElementById('chk-thumb-intro').checked : false;
 
         const btn = document.getElementById('btn-start');
         const btnText = document.getElementById('btn-start-text');
@@ -1400,7 +1407,8 @@
                     watermark_text: watermarkText,
                     watermark_opacity: watermarkOpacity,
                     reels_enabled: reelsEnabled,
-                    video_format: videoFormat
+                    video_format: videoFormat,
+                    thumbnail_intro: thumbnailIntro
                 })
             });
             const data = await res.json();
@@ -1437,6 +1445,7 @@
         const videoFormat = document.getElementById('select-video-format') ? document.getElementById('select-video-format').value : 'both';
         const reelsEnabled = (videoFormat === 'both' || videoFormat === '9:16');
         const subtitleStyle = document.getElementById('select-subtitle-style') ? document.getElementById('select-subtitle-style').value : 'box_black';
+        const thumbnailIntro = document.getElementById('chk-thumb-intro') ? document.getElementById('chk-thumb-intro').checked : false;
 
         const btn = document.getElementById('btn-batch');
         btn.disabled = true;
@@ -1459,7 +1468,8 @@
                     watermark_text: watermarkText,
                     watermark_opacity: watermarkOpacity,
                     reels_enabled: reelsEnabled,
-                    video_format: videoFormat
+                    video_format: videoFormat,
+                    thumbnail_intro: thumbnailIntro
                 })
             });
             const data = await res.json();
@@ -2149,6 +2159,10 @@
             if (cfg.copyright_protection) {
                 document.getElementById('chk-mirror').checked = !!cfg.copyright_protection.mirror_video;
             }
+            if (cfg.thumbnail_intro && cfg.thumbnail_intro.enabled !== undefined) {
+                const chkIntro = document.getElementById('chk-thumb-intro');
+                if (chkIntro) chkIntro.checked = !!cfg.thumbnail_intro.enabled;
+            }
             if (cfg.voice && cfg.voice.engine) {
                 const eng = cfg.voice.engine;
                 const sel = document.getElementById('select-tts-engine');
@@ -2159,6 +2173,16 @@
             if (cfg.gemini && cfg.gemini.model) {
                 document.getElementById('model-display').textContent = cfg.gemini.model;
             }
+        } catch (e) { console.error(e); }
+    }
+
+    async function updateThumbnailIntroSetting(enabled) {
+        try {
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ thumbnail_intro: { enabled: enabled } })
+            });
         } catch (e) { console.error(e); }
     }
 

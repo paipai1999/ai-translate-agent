@@ -78,6 +78,7 @@ class MasterAgent:
         tts_voice: str = None,
         video_format: str = None,
         subtitle_style: str = None,
+        thumbnail_intro: bool = None,
     ):
         self.movie_path = movie_path
         movie_name = os.path.splitext(os.path.basename(movie_path))[0]
@@ -101,6 +102,10 @@ class MasterAgent:
         self.state.subtitle_style_preset = self.subtitle_style
         self.state.resolution = self.resolution
         self.state.video_format = self.video_format
+        if thumbnail_intro is not None:
+            self.state.thumbnail_intro_enabled = bool(thumbnail_intro)
+        else:
+            self.state.thumbnail_intro_enabled = cfg.get("thumbnail_intro", {}).get("enabled", False)
         self.custom_thumb_title = custom_thumb_title
         if custom_thumb_title:
             self.state.custom_thumb_title = custom_thumb_title.strip()

@@ -191,6 +191,7 @@ def pipeline_worker(
     reels_enabled=True,
     video_format="both",
     subtitle_style="box_black",
+    thumbnail_intro=False,
 ):
     current_job_id.set(job_id)
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
@@ -264,6 +265,7 @@ def pipeline_worker(
             watermark_text=watermark_text,
             watermark_opacity=watermark_opacity,
             video_format=video_format,
+            thumbnail_intro=thumbnail_intro,
         )
         master.run_pipeline()
         
@@ -328,6 +330,7 @@ def batch_worker(
     reels_enabled=True,
     video_format="both",
     subtitle_style="box_black",
+    thumbnail_intro=False,
 ):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
@@ -389,6 +392,7 @@ def batch_worker(
             watermark_text=watermark_text,
             watermark_opacity=watermark_opacity,
             video_format=video_format,
+            thumbnail_intro=thumbnail_intro,
         )
         print(f"[*] Batch Mode: Starting batch run for {len(inputs_list)} item(s)...")
         processor.process_all(url_list=urls, local_paths=local_paths)
@@ -454,6 +458,7 @@ class StartRequest(BaseModel):
     reels_enabled: Optional[bool] = True
     video_format: Optional[str] = "both"
     subtitle_style: Optional[str] = "box_black"
+    thumbnail_intro: Optional[bool] = False
 
 class BatchStartRequest(BaseModel):
     inputs: List[str]
@@ -468,6 +473,7 @@ class BatchStartRequest(BaseModel):
     reels_enabled: Optional[bool] = True
     video_format: Optional[str] = "both"
     subtitle_style: Optional[str] = "box_black"
+    thumbnail_intro: Optional[bool] = False
 
 class SubtitleConfigRequest(BaseModel):
     preset: str = "box_black"
@@ -613,6 +619,7 @@ async def start_pipeline(req: StartRequest):
             req.reels_enabled,
             video_format,
             subtitle_style,
+            req.thumbnail_intro,
         ),
         daemon=True,
     )
@@ -664,6 +671,7 @@ async def start_batch_pipeline(req: BatchStartRequest):
             req.reels_enabled,
             video_format,
             subtitle_style,
+            req.thumbnail_intro,
         ),
         daemon=True,
     )
@@ -712,7 +720,10 @@ async def stop_pipeline(job_id: Optional[str] = None):
 @app.get("/api/config/branding")
 async def get_branding_config():
     c = cfg.load_config()
-    return {"watermark": c.get("watermark", {})}
+    return {
+        "watermark": c.get("watermark", {}),
+        "thumbnail_intro": c.get("thumbnail_intro", {"enabled": False, "duration_sec": 3.0}),
+    }
 
 @app.post("/api/config/branding")
 async def save_branding_config(req: BrandingConfigRequest):
@@ -1037,6 +1048,14 @@ async def handle_config(request: Request):
             if "voice" not in config_data:
                 config_data["voice"] = {}
             config_data["voice"]["engine"] = str(data["tts_engine"]).strip().lower()
+            cfg.save_config(config_data)
+        if "thumbnail_intro" in data:
+            if "thumbnail_intro" not in config_data:
+                config_data["thumbnail_intro"] = {}
+            if isinstance(data["thumbnail_intro"], dict):
+                config_data["thumbnail_intro"].update(data["thumbnail_intro"])
+            elif isinstance(data["thumbnail_intro"], bool):
+                config_data["thumbnail_intro"]["enabled"] = data["thumbnail_intro"]
             cfg.save_config(config_data)
         public_config = json.loads(json.dumps(config_data))
         public_config.get("gemini", {}).pop("api_keys", None)
