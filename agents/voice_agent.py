@@ -458,7 +458,7 @@ class VoiceAgent:
                     if abs(effective_ratio - 1.0) > 0.05:
                         base, ext = os.path.splitext(output_file)
                         temp_file = base + "_temp" + ext
-                        os.rename(output_file, temp_file)
+                        os.replace(output_file, temp_file)
                         
                         atempo_val = 1.0 / effective_ratio
                         if atempo_val > 2.0:
@@ -475,14 +475,16 @@ class VoiceAgent:
                             output_file
                         ]
                         subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
-                        os.remove(temp_file)
+                        if os.path.exists(temp_file):
+                            try: os.remove(temp_file)
+                            except Exception: pass
                         print(f"[*] VoiceAgent (Exact Sync): Scene {scene_id} stretched (raw: {raw_dur:.1f}s -> target: {target_dur:.1f}s | filter: {filter_str})") 
             except Exception as stretch_err:
                 print(f"[WARN] VoiceAgent: FFmpeg atempo stretch failed for Scene {scene_id}: {stretch_err}")
                 base, ext = os.path.splitext(output_file)
                 temp_fallback = base + "_temp" + ext
                 if not os.path.exists(output_file) and os.path.exists(temp_fallback):
-                    os.rename(temp_fallback, output_file)
+                    os.replace(temp_fallback, output_file)
 
         return True
 
