@@ -67,7 +67,10 @@
     "text": "PAI AI Movie Translate",
     "opacity": 0.4,
     "margin": 30,
-    "font_size": 40
+    "font_size": 40,
+    "position": "bottom_left",
+    "style": "badge",
+    "logo_path": ""
   },
   "subtitle_overlay": {
     "enabled": true,
