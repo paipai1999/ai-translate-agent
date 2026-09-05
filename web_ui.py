@@ -945,16 +945,37 @@ async def status_endpoint(job_id: str):
 
     created_at = job.get("created_at")
     elapsed_sec = round(time.time() - created_at, 1) if created_at else None
-                
+
+    # Compute progress integer (0-100) from phase name for frontend progress bar
+
+    progress_map = {
+        "Phase 1": 5, "Phase 2": 20, "Phase 3": 25, "Phase 4": 40,
+        "Phase 5": 60, "Phase 6": 85, "Phase 6b": 95, "Phase 7": 98,
+        "Done": 100, "Downloading": 3, "Starting": 1,
+    }
+    progress = 0
+    if job["status"] == "done":
+        progress = 100
+    elif job["status"] in ("error", "cancelled"):
+        progress = 0
+    else:
+        for phase_key, pval in progress_map.items():
+            if phase_key.lower() in current_phase.lower():
+                progress = pval
+                break
+
     return {
+        "job_id": job_id,
         "status": job["status"],
         "phase": current_phase,
+        "progress": progress,
         "batch_status": batch_status,
         "elapsed_sec": elapsed_sec,
         "phase_timings": phase_timings,
         "log": log_lines,
         "error": job.get("error"),
     }
+
 
 @app.get("/api/outputs")
 def list_outputs():
