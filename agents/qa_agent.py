@@ -4,6 +4,7 @@ import re
 from brain.memory import MovieState
 from brain.prompts import QA_SYNC_SYSTEM_PROMPT, QA_LANGUAGE_SYSTEM_PROMPT, OUTPUT_VIDEO_EXTRACT_SYSTEM_PROMPT
 from brain.gemini_client import upload_video_file, ask_gemini_with_video, delete_video_file, call_gemini
+from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
 
 
 class QAAgent:
@@ -124,6 +125,8 @@ class QAAgent:
                             old_len = len(state.generated_script[idx]["narration"])
                             new_text = str(rewrite_map[scene_id]).strip()
                             if new_text:
+                                new_text = replace_numbers_with_burmese(new_text)
+                                new_text = transliterate_english_acronyms(new_text)
                                 new_len = len(new_text)
                                 state.generated_script[idx]["narration"] = new_text
                                 state.generated_script[idx]["qa_rewritten_for_length"] = True
@@ -324,11 +327,14 @@ class QAAgent:
             sid = str(block.get("scene_id", ""))
             if sid in rewrite_map:
                 old = block.get("narration", "")
-                block["narration"] = rewrite_map[sid]
+                rewritten_text = str(rewrite_map[sid]).strip()
+                rewritten_text = replace_numbers_with_burmese(rewritten_text)
+                rewritten_text = transliterate_english_acronyms(rewritten_text)
+                block["narration"] = rewritten_text
                 block["qa_rewritten"] = True
                 print(f"[QA] Block {sid} rewritten (score was below {threshold})")
                 print(f"     OLD: {old[:70]}...")
-                print(f"     NEW: {rewrite_map[sid][:70]}...")
+                print(f"     NEW: {rewritten_text[:70]}...")
                 rewritten_count += 1
 
         if rewritten_count > 0:
