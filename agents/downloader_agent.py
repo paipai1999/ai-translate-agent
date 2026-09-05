@@ -59,6 +59,10 @@ class DownloaderAgent:
             '/content/drive/MyDrive/MovieRecapOutputs/cookies.txt',
             os.path.join(self.output_dir, 'cookies.txt')
         ]
+        import glob
+        for k_match in glob.glob('/kaggle/input/**/cookies*.txt', recursive=True):
+            cookie_candidates.append(k_match)
+
         active_cookie = None
         for c_file in cookie_candidates:
             if os.path.exists(c_file) and os.path.getsize(c_file) > 10:
