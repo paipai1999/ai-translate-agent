@@ -29,7 +29,7 @@ DEFAULT_CONFIG = {
         },
         "models": {
             "heavy": "gemini-3.5-flash",
-            "workhorse": "gemini-3.5-flash-lite",
+            "workhorse": "gemini-3.5-flash",
             "polish": "gemini-3.1-flash-lite"
         }
     },

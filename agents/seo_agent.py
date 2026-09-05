@@ -32,7 +32,7 @@ class SEOAgent:
         gemini_enabled = gemini_cfg.get("enabled", False)
         gemini_key = gemini_cfg.get("api_keys") or os.getenv("GEMINI_API_KEY") or ""
         models_dict = gemini_cfg.get("models", {})
-        gemini_model = models_dict.get("workhorse", "gemini-3.5-flash-lite")
+        gemini_model = models_dict.get("workhorse", "gemini-3.5-flash")
 
         if gemini_enabled and gemini_key:
             try:

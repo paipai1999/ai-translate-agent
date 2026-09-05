@@ -55,6 +55,17 @@ class AudioAgent:
     def separate_vocals(self, audio_path: str, output_dir: str) -> str:
         """Separates vocals from background music using Demucs to improve Whisper accuracy."""
         import subprocess, shutil, sys
+
+        if os.getenv("SKIP_DEMUCS") == "true":
+            print("[*] AudioAgent: Skipping vocal separation (SKIP_DEMUCS active) -> using direct audio for Whisper.")
+            return audio_path
+
+        base_name = os.path.splitext(os.path.basename(audio_path))[0]
+        cached_vocals = os.path.join(output_dir, "htdemucs", base_name, "vocals.wav")
+        cached_no_vocals = os.path.join(output_dir, "htdemucs", base_name, "no_vocals.wav")
+        if os.path.exists(cached_vocals) and os.path.exists(cached_no_vocals) and os.path.getsize(cached_vocals) > 1000:
+            print(f"[*] AudioAgent: Reusing existing Demucs separated audio -> {cached_vocals}")
+            return cached_vocals
         
         demucs_cmd = None
         if shutil.which("demucs"):
@@ -319,7 +330,7 @@ print(f"[Whisper] Transcribed {{len(results)}} segments in language: {{detected_
                 f"{full_text}"
             )
             
-            raw, _ = call_gemini(sys_prompt, user_prompt, api_key, model=gemini_cfg.get("model", "gemini-3.5-flash-lite"), temperature=0.1)
+            raw, _ = call_gemini(sys_prompt, user_prompt, api_key, model=gemini_cfg.get("model", "gemini-3.5-flash"), temperature=0.1)
 
             import re, json
             corrected_segments = []

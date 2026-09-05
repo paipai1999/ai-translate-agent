@@ -39,7 +39,7 @@ class WriterAgent:
         gemini_cfg = config_data.get("gemini", {})
         gemini_key = gemini_cfg.get("api_keys") or os.getenv("GEMINI_API_KEY") or ""
         models_dict = gemini_cfg.get("models", {})
-        model_workhorse = models_dict.get("workhorse", "gemini-3.5-flash-lite")
+        model_workhorse = models_dict.get("workhorse", "gemini-3.5-flash")
 
         # 1. Extract and clean all Whisper dialogue segments
         raw_segments = []
@@ -90,7 +90,7 @@ class WriterAgent:
                 # This allows English dubbing mode (language='english') to work correctly
                 f"Translate the following movie dialogues into natural colloquial {self.language.title()} for professional dubbing:\n"
                 f"{json.dumps(batch, ensure_ascii=False, indent=2)}\n\n"
-                f"Output a JSON array where each object has: id, narration, start_sec, end_sec, emotion."
+                f"Output a JSON array where each object has: id, narration, start_sec, end_sec, emotion, character, gender (\"male\" or \"female\")."
             )
 
             batch_translated = None
@@ -102,7 +102,8 @@ class WriterAgent:
                         gemini_key,
                         model_workhorse,
                         temperature=0.3,
-                        max_tokens=4096
+                        max_tokens=4096,
+                        response_mime_type="application/json"
                     )
                     batch_translated = self._parse_script(raw_res)
                 except Exception as e:
@@ -138,20 +139,17 @@ class WriterAgent:
                     if gemini_key:
                         try:
                             line_res, _ = call_gemini(
-                                FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT,
-                                f"Translate this single dialogue to colloquial {self.language.title()}: '{seg['text']}'",
+                                f"You are a professional movie dubbing translator into natural colloquial {self.language.title()}.",
+                                f"Translate this dialogue into natural colloquial {self.language.title()}:\n'{seg['text']}'\nReturn ONLY the translation as plain text, without quotes or meta explanation.",
                                 gemini_key,
                                 model_workhorse,
                                 temperature=0.3,
-                                max_tokens=256
+                                max_tokens=512,
+                                response_mime_type="text/plain"
                             )
-                            line_parsed = self._parse_script(line_res)
-                            if line_parsed and isinstance(line_parsed, list) and line_parsed[0].get("narration"):
-                                narration = line_parsed[0]["narration"]
-                                gender = str(line_parsed[0].get("gender", "male")).strip().lower()
-                                character = str(line_parsed[0].get("character", "Narrator")).strip()
-                            elif line_res and "{" not in line_res and "[" not in line_res:
-                                narration = line_res.strip().strip('"').strip("'")
+                            clean_line = line_res.strip().strip('"').strip("'").strip()
+                            if clean_line and not any(bad in clean_line.lower() for bad in ["json", "```", "here is", "here's"]):
+                                narration = clean_line
                         except Exception:
                             pass
 
@@ -338,17 +336,23 @@ class WriterAgent:
                     except json.JSONDecodeError:
                         break
 
-        # Strategy 6: Plain paragraphs → blocks
-        paragraphs = [p.strip() for p in raw.split('\n\n') if len(p.strip()) > 20]
-        if paragraphs:
-            print(f"[*] WriterAgent: Extracted {len(paragraphs)} paragraphs from plain text.")
+        # Strategy 6: Plain paragraphs → blocks (rejecting JSON artifacts or meta chatter)
+        raw_paragraphs = [p.strip() for p in raw.split('\n\n') if len(p.strip()) > 10]
+        valid_paragraphs = []
+        for p in raw_paragraphs:
+            p_lower = p.lower()
+            if any(bad in p_lower for bad in ["```", "json", "here is", "here's", "i have", "translate"]):
+                continue
+            valid_paragraphs.append(p)
+        if valid_paragraphs:
+            print(f"[*] WriterAgent: Extracted {len(valid_paragraphs)} paragraphs from plain text.")
             return [
                 {
                     "scene_id":   str(i + 1),
                     "narration":  p,
                     "visual_cue": "Continue narration",
                 }
-                for i, p in enumerate(paragraphs)
+                for i, p in enumerate(valid_paragraphs)
             ]
 
         return None

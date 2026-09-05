@@ -42,7 +42,7 @@ class QAAgent:
         if not api_key:
             return state
             
-        model = config_data.get("gemini", {}).get("models", {}).get("workhorse", "gemini-3.5-flash-lite")
+        model = config_data.get("gemini", {}).get("models", {}).get("workhorse", "gemini-3.5-flash")
         blocks_to_rewrite = []
         chars_per_sec = 9.5  # Burmese Edge-TTS reading speed (~9.5 characters/sec)
         max_stretch = 1.25  # Allows audio to be up to 1.25x target duration
@@ -134,6 +134,33 @@ class QAAgent:
         print(f"[OK] QAAgent (Auto-Rewrite): Successfully shortened {rewritten_count}/{len(blocks_to_rewrite)} over-length script blocks.")
         return state
 
+    def review_and_rewrite_script(self, state: MovieState) -> MovieState:
+        """
+        Runs language quality check on narration script BEFORE voice generation (Phase 4.1c).
+        Rewrites awkward or unnatural Burmese phrasing so VoiceAgent synthesizes natural audio.
+        """
+        import brain.config as cfg
+        config_data = cfg.load_config()
+        qa_cfg = config_data.get("qa", {})
+        if not qa_cfg.get("enabled", False) or not qa_cfg.get("language_check", True):
+            return state
+
+        api_key = config_data.get("gemini", {}).get("api_keys") or os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            return state
+
+        model_workhorse = config_data.get("gemini", {}).get("models", {}).get("workhorse", "gemini-3.5-flash")
+        print("[*] QAAgent: Reviewing script Burmese colloquialism before TTS synthesis...")
+        lang_result = self._run_language_check(state, api_key, model_workhorse)
+        if lang_result:
+            rewrite_threshold = qa_cfg.get("auto_rewrite_threshold", self.auto_rewrite_threshold)
+            if rewrite_threshold > 0:
+                state = self._apply_rewrites(state, lang_result, rewrite_threshold)
+            if not getattr(state, "qa_results", None):
+                state.qa_results = {}
+            state.qa_results["language"] = lang_result
+        return state
+
     def review(self, state: MovieState, original_video_path: str, recap_video_path: str) -> MovieState:
         print("\n--- [Phase 7: QA Review --- Gemini Video Analysis] ---")
 
@@ -146,8 +173,8 @@ class QAAgent:
             return state
 
         models_dict = gemini_cfg.get("models", {})
-        model_heavy = models_dict.get("heavy", "gemini-3.5-flash-lite")
-        model_workhorse = models_dict.get("workhorse", "gemini-3.5-flash-lite")
+        model_heavy = models_dict.get("heavy", "gemini-3.5-flash")
+        model_workhorse = models_dict.get("workhorse", "gemini-3.5-flash")
         qa_cfg = config_data.get("qa", {})
         do_sync_check = qa_cfg.get("sync_check", True)
         do_language_check = qa_cfg.get("language_check", True)
@@ -195,11 +222,15 @@ class QAAgent:
                     pass
 
         if do_language_check and state.generated_script:
-            print(f"[*] QAAgent: Reviewing Myanmar narration language quality...")
-            lang_result = self._run_language_check(state, api_key, model_workhorse)
-            if lang_result:
-                qa_results["language"] = lang_result
-                print(f"[OK] QAAgent: Language naturalness score = {lang_result.get('overall_language_score', 'N/A')}/10")
+            if getattr(state, "qa_results", None) and state.qa_results.get("language"):
+                qa_results["language"] = state.qa_results["language"]
+                print(f"[OK] QAAgent: Reusing pre-TTS language QA results.")
+            else:
+                print(f"[*] QAAgent: Reviewing Myanmar narration language quality...")
+                lang_result = self._run_language_check(state, api_key, model_workhorse)
+                if lang_result:
+                    qa_results["language"] = lang_result
+                    print(f"[OK] QAAgent: Language naturalness score = {lang_result.get('overall_language_score', 'N/A')}/10")
 
         project_output_dir = os.path.join(self.output_dir, state.project_dir)
         self._save_reports(qa_results, project_output_dir)

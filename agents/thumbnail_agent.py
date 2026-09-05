@@ -112,7 +112,7 @@ class ThumbnailAgent:
                 user_text=prompt,
                 image_path=temp_thumb,
                 api_key=api_keys,
-                model=gemini_cfg.get('models', {}).get('workhorse', 'gemini-3.5-flash-lite'),
+                model=gemini_cfg.get('models', {}).get('workhorse', 'gemini-3.5-flash'),
                 temperature=0.05
             )
             
