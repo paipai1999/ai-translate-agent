@@ -250,6 +250,13 @@ def main():
         help="Disable 3-second thumbnail intro at start of video"
     )
     parser.add_argument(
+        "--source-lang", "--source-language",
+        dest="source_lang",
+        choices=["auto", "zh", "en", "th", "ko", "ja"],
+        default="auto",
+        help="Source movie audio language for Whisper STT (default: auto, or 'zh', 'en', 'th', 'ko', 'ja')"
+    )
+    parser.add_argument(
         "--clean",
         action="store_true",
         help="Interactive cleanup menu to delete old source videos or generated outputs"
@@ -335,6 +342,7 @@ def main():
                 watermark_text=args.watermark_text,
                 video_format=chosen_format,
                 thumbnail_intro=thumb_intro,
+                source_language=args.source_lang,
             )
             master.run_pipeline()
         except Exception as e:
@@ -363,6 +371,7 @@ def main():
             watermark_text=args.watermark_text,
             video_format=chosen_format,
             thumbnail_intro=thumb_intro,
+            source_language=args.source_lang,
         ).process_all()
 
     # Batch: URL list
@@ -385,6 +394,7 @@ def main():
             watermark_text=args.watermark_text,
             video_format=chosen_format,
             thumbnail_intro=thumb_intro,
+            source_language=args.source_lang,
         ).process_all(url_list=args.urls, local_paths=[])
     else:
         parser.print_help()

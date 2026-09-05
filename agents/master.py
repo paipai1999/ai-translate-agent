@@ -79,6 +79,7 @@ class MasterAgent:
         video_format: str = None,
         subtitle_style: str = None,
         thumbnail_intro: bool = None,
+        source_language: str = "auto",
     ):
         self.movie_path = movie_path
         movie_name = os.path.splitext(os.path.basename(movie_path))[0]
@@ -102,6 +103,7 @@ class MasterAgent:
         self.state.subtitle_style_preset = self.subtitle_style
         self.state.resolution = self.resolution
         self.state.video_format = self.video_format
+        self.state.source_language = str(source_language or "auto").lower().strip()
         if thumbnail_intro is not None:
             self.state.thumbnail_intro_enabled = bool(thumbnail_intro)
         else:

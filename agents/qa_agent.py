@@ -235,10 +235,8 @@ class QAAgent:
         project_output_dir = os.path.join(self.output_dir, state.project_dir)
         self._save_reports(qa_results, project_output_dir)
 
-        rewrite_threshold = qa_cfg.get("auto_rewrite_threshold", self.auto_rewrite_threshold)
-        if qa_results["language"] and rewrite_threshold > 0:
-            state = self._apply_rewrites(state, qa_results["language"], rewrite_threshold)
-
+        # Note: Script rewriting is handled in Phase 4.1c before TTS synthesis.
+        # In Phase 7 (post-render), we do not mutate state.generated_script to prevent desync with rendered audio.
         state.qa_results = qa_results
         return state
 

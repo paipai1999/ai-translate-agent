@@ -1,0 +1,10 @@
+# Netscape HTTP Cookie File
+# http://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file! Do not edit.
+#
+# To export your YouTube cookies:
+# 1. Install 'Get cookies.txt LOCALLY' Chrome/Edge extension.
+# 2. Go to YouTube while signed in.
+# 3. Export cookies as cookies.txt and place in this directory or drag-and-drop into Web UI.
+#
+# .youtube.com	TRUE	/	TRUE	1800000000	SID	EXAMPLE_COOKIE_VALUE

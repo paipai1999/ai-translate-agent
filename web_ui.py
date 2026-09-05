@@ -192,6 +192,7 @@ def pipeline_worker(
     video_format="both",
     subtitle_style="box_black",
     thumbnail_intro=False,
+    source_language="auto",
 ):
     current_job_id.set(job_id)
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
@@ -266,6 +267,7 @@ def pipeline_worker(
             watermark_opacity=watermark_opacity,
             video_format=video_format,
             thumbnail_intro=thumbnail_intro,
+            source_language=source_language,
         )
         master.run_pipeline()
         
@@ -331,6 +333,7 @@ def batch_worker(
     video_format="both",
     subtitle_style="box_black",
     thumbnail_intro=False,
+    source_language="auto",
 ):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
@@ -393,6 +396,7 @@ def batch_worker(
             watermark_opacity=watermark_opacity,
             video_format=video_format,
             thumbnail_intro=thumbnail_intro,
+            source_language=source_language,
         )
         print(f"[*] Batch Mode: Starting batch run for {len(inputs_list)} item(s)...")
         processor.process_all(url_list=urls, local_paths=local_paths)
@@ -459,6 +463,7 @@ class StartRequest(BaseModel):
     video_format: Optional[str] = "both"
     subtitle_style: Optional[str] = "box_black"
     thumbnail_intro: Optional[bool] = False
+    source_language: Optional[str] = "auto"
 
 class BatchStartRequest(BaseModel):
     inputs: List[str]
@@ -474,6 +479,7 @@ class BatchStartRequest(BaseModel):
     video_format: Optional[str] = "both"
     subtitle_style: Optional[str] = "box_black"
     thumbnail_intro: Optional[bool] = False
+    source_language: Optional[str] = "auto"
 
 class SubtitleConfigRequest(BaseModel):
     preset: str = "box_black"
@@ -620,6 +626,7 @@ async def start_pipeline(req: StartRequest):
             video_format,
             subtitle_style,
             req.thumbnail_intro,
+            req.source_language or "auto",
         ),
         daemon=True,
     )
@@ -672,6 +679,7 @@ async def start_batch_pipeline(req: BatchStartRequest):
             video_format,
             subtitle_style,
             req.thumbnail_intro,
+            req.source_language or "auto",
         ),
         daemon=True,
     )

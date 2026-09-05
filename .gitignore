@@ -15,5 +15,7 @@ voiceover/
 config.json
 config.json.tmp
 .env
+cookies.txt
+assets/cookies.txt
 
 .tmp.driveupload/
