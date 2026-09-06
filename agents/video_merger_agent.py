@@ -645,163 +645,12 @@ class VideoMergerAgent:
                 print("[WARN] VideoMerger: No voiceover audio files found. Exporting original video.")
                 final_clip = main_video
 
-            # --- WATERMARK / BRAND OVERLAY ---
-            wm_cfg = config_data.get("watermark", {})
-            wm_override = getattr(state, "watermark_override", {}) or {}
-            wm_enabled = wm_override.get("enabled", wm_cfg.get("enabled", False))
-            is_reels_only = getattr(state, "video_format", "16:9") == "9:16"
-            if wm_enabled and not is_reels_only:
-                wm_text = wm_override.get("text") or wm_cfg.get("text", "PAI AI Movie Translate")
-                wm_opacity = float(wm_override.get("opacity") if wm_override.get("opacity") is not None else wm_cfg.get("opacity", 0.85))
-                wm_font_size = int(wm_override.get("font_size") or wm_cfg.get("font_size", 28))
-                wm_margin = int(wm_override.get("margin") or wm_cfg.get("margin", 25))
-                wm_pos = str(wm_override.get("position") or wm_cfg.get("position", "bottom_left")).lower()
-                wm_style = str(wm_override.get("style") or wm_cfg.get("style", "badge")).lower()
-                wm_logo_path = wm_override.get("logo_path") or wm_cfg.get("logo_path", "")
-                
-                try:
-                    wm_png = self._create_watermark_image(
-                        text=wm_text,
-                        font_size=wm_font_size,
-                        opacity=wm_opacity,
-                        style=wm_style,
-                        logo_path=wm_logo_path
-                    )
-                    if os.path.exists(wm_png):
-                        print(f"[*] VideoMerger: Applying Channel Brand Overlay '{wm_text}' (Position: {wm_pos}, Style: {wm_style})")
-                        try:
-                            from moviepy import ImageClip, CompositeVideoClip
-                        except ImportError:
-                            from moviepy.editor import ImageClip, CompositeVideoClip
-                            
-                        wm_clip = ImageClip(wm_png)
-                        if hasattr(wm_clip, "with_duration"):
-                            wm_clip = wm_clip.with_duration(final_clip.duration)
-                        else:
-                            wm_clip = wm_clip.set_duration(final_clip.duration)
-                            
-                        vid_w, vid_h = final_clip.size
-                        wm_w, wm_h = wm_clip.size
-                        
-                        if wm_pos == "bottom_left":
-                            x_pos = wm_margin
-                            y_pos = max(0, vid_h - wm_h - wm_margin)
-                        elif wm_pos == "bottom_right":
-                            x_pos = max(0, vid_w - wm_w - wm_margin)
-                            y_pos = max(0, vid_h - wm_h - wm_margin)
-                        elif wm_pos == "top_left":
-                            x_pos = wm_margin
-                            y_pos = wm_margin
-                        elif wm_pos == "top_center":
-                            x_pos = max(0, (vid_w - wm_w) // 2)
-                            y_pos = wm_margin
-                        else: # top_right (default)
-                            x_pos = max(0, vid_w - wm_w - wm_margin)
-                            y_pos = wm_margin
-                        
-                        if hasattr(wm_clip, "with_position"):
-                            wm_clip = wm_clip.with_position((x_pos, y_pos))
-                        else:
-                            wm_clip = wm_clip.set_position((x_pos, y_pos))
-                            
-                        final_clip = CompositeVideoClip([final_clip, wm_clip])
-                except Exception as e:
-                    print(f"[WARN] VideoMerger: Failed to apply watermark: {e}")
-
-            # --- THUMBNAIL INTRO STITCH (OPTIONAL / TOGGLEABLE) ---
-            # NOTE: output_dir already includes the project subdirectory path
-            thumb_intro_cfg = config_data.get("thumbnail_intro", {})
-            thumb_intro_enabled = getattr(state, "thumbnail_intro_enabled", None)
-            if thumb_intro_enabled is None:
-                thumb_intro_enabled = thumb_intro_cfg.get("enabled", False)
-            thumb_duration = float(thumb_intro_cfg.get("duration_sec", 3.0))
-
-            thumbnail_path = os.path.join(output_dir, "thumbnail.jpg")
-            if thumb_intro_enabled and os.path.exists(thumbnail_path):
-                print(f"[*] VideoMerger: Stitching Thumbnail as a {thumb_duration}-second Intro...")
-                try:
-                    try:
-                        from moviepy.editor import ImageClip, concatenate_videoclips
-                    except ImportError:
-                        from moviepy import ImageClip, concatenate_videoclips
-                        
-                    intro_clip = ImageClip(thumbnail_path)
-                    if hasattr(intro_clip, "with_duration"):
-                        intro_clip = intro_clip.with_duration(thumb_duration)
-                    else:
-                        intro_clip = intro_clip.set_duration(thumb_duration)
-                        
-                    # Match FPS
-                    if hasattr(intro_clip, "with_fps"):
-                         intro_clip = intro_clip.with_fps(final_clip.fps if final_clip.fps else 24)
-                    else:
-                         intro_clip.fps = final_clip.fps if final_clip.fps else 24
-                         
-                    w, h = intro_clip.size
-                    new_w, new_h = final_clip.size
-                    if (w, h) != (new_w, new_h):
-                        try:
-                            try:
-                                from moviepy.video.fx.Resize import Resize
-                                intro_clip = intro_clip.with_effects([Resize((new_w, new_h))])
-                            except ImportError:
-                                import moviepy.video.fx.all as vfx
-                                intro_clip = intro_clip.fx(vfx.resize, (new_w, new_h))
-                        except Exception as e:
-                            print(f"[WARN] Failed to resize intro image: {e}")
-
-                    final_clip = concatenate_videoclips([intro_clip, final_clip], method="compose")
-                    
-                    # CRITICAL: Shift subtitle timings so Myanmar ASS subtitles stay perfectly synced!
-                    if subtitle_timings:
-                        subtitle_timings = [(start + thumb_duration, dur, txt) for (start, dur, txt) in subtitle_timings]
-                        state.subtitle_timings = subtitle_timings
-                except Exception as e:
-                    print(f"[WARN] VideoMerger: Failed to stitch thumbnail intro: {e}")
-            else:
-                print(f"[*] VideoMerger: Thumbnail Intro skipped (enabled={thumb_intro_enabled})")
-
-            enc_info = detect_hardware_encoder()
-            print(f"[*] VideoMerger (Hardware Acceleration): Exporting video using {enc_info['label']} [{enc_info['codec']}]...")
-            try:
-                final_clip.write_videofile(
-                    final_output,
-                    codec=enc_info["codec"],
-                    audio_codec='aac',
-                    bitrate='4500k',
-                    preset=enc_info.get("preset", "faster"),
-                    threads=4,
-                    ffmpeg_params=["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-pix_fmt", "yuv420p", "-movflags", "+faststart"],
-                    logger='bar'
-                )
-            except Exception as enc_err:
-                print(f"[WARN] Hardware encoder '{enc_info['codec']}' failed: {enc_err}. Falling back to CPU libx264...")
-                final_clip.write_videofile(
-                    final_output,
-                    codec='libx264',
-                    audio_codec='aac',
-                    bitrate='4500k',
-                    preset='superfast',
-                    threads=4,
-                    ffmpeg_params=["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-pix_fmt", "yuv420p", "-movflags", "+faststart"],
-                    logger='bar'
-                )
-            print("[OK] VideoMerger: Video merge complete! Original video untouched with cohesive story recap.")
-
-            # ── Cache Clean Video for Reels Canvas ─────────────────────────────
-            # Save a clean (un-subtitled) video copy for Facebook Reels 9:16 Canvas
-            # so Reels can display clean 16:9 middle frame with dedicated bottom subtitles!
             temp_dir = os.path.abspath("temp")
             os.makedirs(temp_dir, exist_ok=True)
-            clean_video_path = os.path.join(temp_dir, f"{os.path.splitext(os.path.basename(final_output))[0]}_clean.mp4")
+            import re
+            safe_id = re.sub(r'[^\w\-]', '_', os.path.splitext(os.path.basename(movie_path))[0])
             persistent_clean_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(final_output))[0]}_clean.mp4")
-            try:
-                shutil.copy2(final_output, clean_video_path)
-                shutil.copy2(final_output, persistent_clean_path)
-                state.clean_video_path = persistent_clean_path
-            except Exception as ce:
-                print(f"[WARN] VideoMerger: Could not cache clean video copy: {ce}")
-                state.clean_video_path = clean_video_path
+            clean_video_path = os.path.join(temp_dir, f"{safe_id}_clean.mp4")
 
             # ── Subtitles Preparation ──────────────────────────────────────────
             sub_cfg = config_data.get("subtitle_overlay", {})
@@ -817,8 +666,6 @@ class VideoMergerAgent:
                 self._export_standalone_srt(subtitle_timings, output_dir)
 
                 if burn_subs:
-                    import re
-                    safe_id = re.sub(r'[^\w\-]', '_', os.path.splitext(os.path.basename(final_output))[0])
                     target_ass_path = os.path.join(temp_dir, f"myanmar_subs_{safe_id}.ass")
                     sub_preset = getattr(state, "subtitle_style_preset", None) or sub_cfg.get("style_preset", "box_black")
                     font_name = (sub_cfg.get("font_name") or "Myanmar Text") if sys.platform == "win32" else "Padauk"
@@ -838,23 +685,312 @@ class VideoMergerAgent:
                 else:
                     print("[*] VideoMerger: Subtitle Mode is 'Voiceover Only' (Hardsub disabled). Exported standalone .srt subtitles.")
 
-            # ── Unified Single-Pass Post-Processing (FFmpeg) ───────────────────
-            # Combines Subtitle Blurring + Color Grading + Myanmar Subtitle Burn into a SINGLE hardware-accelerated pass.
-            need_post_pass = blur_enabled or color_enabled or (burn_subs and target_ass_path and os.path.exists(target_ass_path))
-            if need_post_pass:
-                print("[*] VideoMerger: Running Single-Pass Hardware-Accelerated Post-Processing...")
-                self._blur_subtitle_region(
-                    state,
-                    final_output,
-                    source_video_for_detection = movie_path,   # <-- Original movie to detect subtitles from
-                    region_pct    = blur_region_pct    if blur_enabled  else 0.0,
-                    blur_strength = blur_strength      if blur_enabled  else 0,
-                    color_enabled = color_enabled,
-                    brightness    = cg_brightness,
-                    contrast      = cg_contrast,
-                    saturation    = cg_saturation,
-                    ass_path      = target_ass_path    if (burn_subs and target_ass_path and os.path.exists(target_ass_path)) else None,
+            # --- WATERMARK / BRAND OVERLAY ---
+            wm_cfg = config_data.get("watermark", {})
+            wm_override = getattr(state, "watermark_override", {}) or {}
+            wm_enabled = wm_override.get("enabled", wm_cfg.get("enabled", False))
+            is_reels_only = getattr(state, "video_format", "16:9") == "9:16"
+            wm_png = None
+            wm_pos = "bottom_left"
+            wm_margin = 25
+            if wm_enabled and not is_reels_only:
+                wm_text = wm_override.get("text") or wm_cfg.get("text", "PAI AI Movie Translate")
+                wm_opacity = float(wm_override.get("opacity") if wm_override.get("opacity") is not None else wm_cfg.get("opacity", 0.85))
+                wm_font_size = int(wm_override.get("font_size") or wm_cfg.get("font_size", 28))
+                wm_margin = int(wm_override.get("margin") or wm_cfg.get("margin", 25))
+                wm_pos = str(wm_override.get("position") or wm_cfg.get("position", "bottom_left")).lower()
+                wm_style = str(wm_override.get("style") or wm_cfg.get("style", "badge")).lower()
+                wm_logo_path = wm_override.get("logo_path") or wm_cfg.get("logo_path", "")
+                try:
+                    wm_png = self._create_watermark_image(
+                        text=wm_text,
+                        font_size=wm_font_size,
+                        opacity=wm_opacity,
+                        style=wm_style,
+                        logo_path=wm_logo_path
+                    )
+                    if not (wm_png and os.path.exists(wm_png)):
+                        wm_png = None
+                except Exception as e:
+                    print(f"[WARN] VideoMerger: Failed to apply watermark: {e}")
+                    wm_png = None
+
+            # --- THUMBNAIL INTRO CONFIG ---
+            thumb_intro_cfg = config_data.get("thumbnail_intro", {})
+            thumb_intro_enabled = getattr(state, "thumbnail_intro_enabled", None)
+            if thumb_intro_enabled is None:
+                thumb_intro_enabled = thumb_intro_cfg.get("enabled", False)
+            thumb_duration = float(thumb_intro_cfg.get("duration_sec", 3.0))
+            thumbnail_path = os.path.join(output_dir, "thumbnail.jpg")
+            has_thumb_intro = thumb_intro_enabled and os.path.exists(thumbnail_path)
+
+            # --- SUBTITLE BLUR REGION DETECTION ---
+            user_sub_mode = getattr(state, "subtitle_mode", "auto") if state is not None else "auto"
+            user_sub_mode = user_sub_mode or "auto"
+            do_blur = blur_enabled and (blur_strength > 0) and (user_sub_mode != "no")
+            start_y_pct, height_pct = 0.82, 0.18
+            subtitle_found = False
+            if do_blur:
+                if user_sub_mode == "yes":
+                    y, h, found = self._detect_subtitle_region_with_vision(movie_path, state=state)
+                    start_y_pct = y if found else 0.82
+                    height_pct = h if found else 0.18
+                    subtitle_found = True
+                else:
+                    cache = getattr(state, "subtitle_detection", None) if state is not None else None
+                    if cache and cache.get("video_path") == os.path.abspath(movie_path) and cache.get("has_subtitles", False) is True:
+                        start_y_pct = float(cache.get("start_y_pct", start_y_pct))
+                        height_pct = float(cache.get("height_pct", height_pct))
+                        subtitle_found = True
+                    else:
+                        start_y_pct, height_pct, subtitle_found = self._detect_subtitle_region_with_vision(movie_path, state=state)
+                    if state is not None:
+                        state.subtitle_detection = {
+                            "video_path": os.path.abspath(movie_path),
+                            "has_subtitles": subtitle_found,
+                            "start_y_pct": start_y_pct,
+                            "height_pct": height_pct,
+                        }
+                if not subtitle_found:
+                    do_blur = False
+
+            # --- FAST MASTER AUDIO COMPOSITING ---
+            master_audio_path = os.path.join(temp_dir, f"{safe_id}_master_audio.wav")
+            print(f"[*] VideoMerger: Fast-compositing master audio track to '{os.path.basename(master_audio_path)}'...")
+            try:
+                final_audio.write_audiofile(
+                    master_audio_path,
+                    fps=44100,
+                    nbytes=2,
+                    codec='pcm_s16le',
+                    logger=None
                 )
+                print("[OK] VideoMerger: Master audio track composited successfully.")
+            except Exception as ae:
+                print(f"[WARN] VideoMerger: Master audio compositing notice: {ae}")
+                master_audio_path = None
+
+            # --- UNIFIED SINGLE-PASS FFMPEG FILTERGRAPH (5x-8x FASTER) ---
+            single_pass_success = False
+            ffmpeg_bin = _get_ffmpeg_bin()
+
+            if ffmpeg_bin and master_audio_path and os.path.exists(master_audio_path) and not has_thumb_intro:
+                enc_info = detect_hardware_encoder()
+                codec = enc_info.get("codec", "libx264")
+                preset = enc_info.get("preset", "faster")
+                quality_args = ["-b:v", "6M", "-maxrate", "9M", "-bufsize", "12M"] if enc_info.get("type") == "gpu" else ["-crf", "20"]
+                print(f"[*] VideoMerger (Single-Pass Engine): Assembling unified Filtergraph using {enc_info.get('label', codec)} [{codec}]...")
+
+                flt_parts = [
+                    "[0:v]crop=w='trunc(iw/2)*2':h='trunc(ih/2)*2'[v_base]"
+                ]
+                last_v = "[v_base]"
+
+                if copyright_enabled:
+                    mirror_enabled = copyright_cfg.get("mirror_video", False)
+                    if mirror_enabled:
+                        flt_parts.append(f"{last_v}hflip[v_flipped]")
+                        last_v = "[v_flipped]"
+                    resize_factor = float(copyright_cfg.get("resize_factor", 1.02))
+                    if resize_factor != 1.0:
+                        flt_parts.append(f"{last_v}scale=iw*{resize_factor}:ih*{resize_factor},crop=iw/{resize_factor}:ih/{resize_factor}[v_resized]")
+                        last_v = "[v_resized]"
+
+                if do_blur and subtitle_found:
+                    r = blur_strength
+                    blur_seg = (
+                        f"{last_v}split=2[v_orig][v_sub_crop];"
+                        f"[v_sub_crop]crop=iw:'trunc(ih*{height_pct:.3f}/2)*2':0:'trunc(ih*{start_y_pct:.3f}/2)*2',"
+                        f"boxblur=luma_radius={r}:luma_power=2:chroma_radius={max(1,r//2)}:chroma_power=2[v_blurred_sub];"
+                        f"[v_orig][v_blurred_sub]overlay=0:'trunc(H*{start_y_pct:.3f}/2)*2'[v_blended]"
+                    )
+                    flt_parts.append(blur_seg)
+                    last_v = "[v_blended]"
+
+                if color_enabled:
+                    cg_str = (
+                        f"{last_v}eq=brightness={cg_brightness:.3f}:contrast={cg_contrast:.3f}:saturation={cg_saturation:.3f},"
+                        f"noise=alls=2:allf=t,vignette=PI/4[v_graded]"
+                    )
+                    flt_parts.append(cg_str)
+                    last_v = "[v_graded]"
+
+                wm_input_args = []
+                if wm_png and os.path.exists(wm_png):
+                    wm_input_idx = 2
+                    wm_input_args = ["-i", os.path.abspath(wm_png)]
+                    if wm_pos == "bottom_left":
+                        pos_str = f"{wm_margin}:main_h-overlay_h-{wm_margin}"
+                    elif wm_pos == "bottom_right":
+                        pos_str = f"main_w-overlay_w-{wm_margin}:main_h-overlay_h-{wm_margin}"
+                    elif wm_pos == "top_left":
+                        pos_str = f"{wm_margin}:{wm_margin}"
+                    elif wm_pos == "top_center":
+                        pos_str = f"(main_w-overlay_w)/2:{wm_margin}"
+                    else:
+                        pos_str = f"main_w-overlay_w-{wm_margin}:{wm_margin}"
+                    flt_parts.append(f"{last_v}[{wm_input_idx}:v]overlay={pos_str}[v_clean]")
+                    last_v = "[v_clean]"
+
+                flt_parts.append(f"{last_v}split=2[v_for_sub][v_for_clean]")
+
+                has_ass = bool(burn_subs and target_ass_path and os.path.exists(target_ass_path))
+                ass_dir = None
+                if has_ass:
+                    ass_basename = os.path.basename(target_ass_path)
+                    ass_dir = os.path.dirname(os.path.abspath(target_ass_path))
+                    flt_parts.append(f"[v_for_sub]ass={ass_basename}[v_subbed]")
+                    recap_v_stream = "[v_subbed]"
+                else:
+                    recap_v_stream = "[v_for_sub]"
+
+                filter_complex_str = ";".join(flt_parts)
+
+                dur_sec = getattr(state, "duration_sec", 0.0) if state else 0.0
+                if not dur_sec and state and getattr(state, "duration", None):
+                    try:
+                        parts = str(state.duration).split(":")
+                        if len(parts) == 3:
+                            dur_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+                    except Exception:
+                        dur_sec = 600.0
+                dyn_timeout = max(1200, int((dur_sec or 600.0) * 2.5))
+
+                sp_cmd = [
+                    ffmpeg_bin, "-y",
+                    "-i", os.path.abspath(movie_path),
+                    "-i", os.path.abspath(master_audio_path),
+                    *wm_input_args,
+                    "-filter_complex", filter_complex_str,
+                    "-map", recap_v_stream, "-map", "1:a",
+                    "-c:v", codec, "-preset", preset, *quality_args,
+                    "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                    "-c:a", "aac", "-b:a", "192k",
+                    os.path.abspath(final_output),
+                    "-map", "[v_for_clean]", "-map", "1:a",
+                    "-c:v", codec, "-preset", preset, *quality_args,
+                    "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                    "-c:a", "aac", "-b:a", "192k",
+                    os.path.abspath(persistent_clean_path),
+                ]
+
+                print(f"[*] VideoMerger (Single-Pass Engine): Rendering both Recap & Clean Canvas simultaneously...")
+                try:
+                    res = subprocess.run(sp_cmd, cwd=ass_dir, capture_output=True, text=True, timeout=dyn_timeout)
+                    if res.returncode == 0 and os.path.exists(final_output) and os.path.getsize(final_output) > 1000:
+                        single_pass_success = True
+                        try:
+                            shutil.copy2(persistent_clean_path, clean_video_path)
+                        except Exception:
+                            pass
+                        state.clean_video_path = persistent_clean_path
+                        print("🚀 [OK] VideoMerger: Single-Pass Hardware-Accelerated Video Merge & Subtitle Burn COMPLETE!")
+                    else:
+                        err_snippet = res.stderr[-500:] if res.stderr else "Unknown error"
+                        print(f"[WARN] VideoMerger: Single-pass hardware render failed ({err_snippet}). Retrying with CPU libx264...")
+                        if codec != "libx264":
+                            fb_cmd = list(sp_cmd)
+                            fb_cmd = [c.replace(codec, "libx264") if c == codec else c for c in fb_cmd]
+                            fb_cmd = [c.replace(preset, "superfast") if c == preset else c for c in fb_cmd]
+                            if "-b:v" in fb_cmd:
+                                b_idx = fb_cmd.index("-b:v")
+                                fb_cmd = fb_cmd[:b_idx] + ["-crf", "20"] + fb_cmd[b_idx+6:]
+                            res_cpu = subprocess.run(fb_cmd, cwd=ass_dir, capture_output=True, text=True, timeout=dyn_timeout)
+                            if res_cpu.returncode == 0 and os.path.exists(final_output) and os.path.getsize(final_output) > 1000:
+                                single_pass_success = True
+                                try:
+                                    shutil.copy2(persistent_clean_path, clean_video_path)
+                                except Exception:
+                                    pass
+                                state.clean_video_path = persistent_clean_path
+                                print("🚀 [OK] VideoMerger: Single-Pass CPU Video Merge & Subtitle Burn COMPLETE!")
+                except Exception as spe:
+                    print(f"[WARN] Single-pass execution exception: {spe}")
+
+            # ── Fallback Legacy Path (Only if Single-Pass failed or Thumbnail Intro active) ──
+            if not single_pass_success:
+                print("[*] VideoMerger: Falling back to Legacy Multi-Pass Export...")
+                if has_thumb_intro:
+                    print(f"[*] VideoMerger: Stitching Thumbnail as a {thumb_duration}-second Intro...")
+                    try:
+                        try:
+                            from moviepy.editor import ImageClip, concatenate_videoclips
+                        except ImportError:
+                            from moviepy import ImageClip, concatenate_videoclips
+                        intro_clip = ImageClip(thumbnail_path)
+                        if hasattr(intro_clip, "with_duration"):
+                            intro_clip = intro_clip.with_duration(thumb_duration)
+                        else:
+                            intro_clip = intro_clip.set_duration(thumb_duration)
+                        if hasattr(intro_clip, "with_fps"):
+                            intro_clip = intro_clip.with_fps(final_clip.fps if final_clip.fps else 24)
+                        else:
+                            intro_clip.fps = final_clip.fps if final_clip.fps else 24
+                        w, h = intro_clip.size
+                        new_w, new_h = final_clip.size
+                        if (w, h) != (new_w, new_h):
+                            try:
+                                from moviepy.video.fx.Resize import Resize
+                                intro_clip = intro_clip.with_effects([Resize((new_w, new_h))])
+                            except Exception:
+                                pass
+                        final_clip = concatenate_videoclips([intro_clip, final_clip], method="compose")
+                        if subtitle_timings:
+                            subtitle_timings = [(start + thumb_duration, dur, txt) for (start, dur, txt) in subtitle_timings]
+                            state.subtitle_timings = subtitle_timings
+                    except Exception as e:
+                        print(f"[WARN] VideoMerger: Failed to stitch thumbnail intro: {e}")
+
+                enc_info = detect_hardware_encoder()
+                print(f"[*] VideoMerger (Hardware Acceleration): Exporting video using {enc_info['label']} [{enc_info['codec']}]...")
+                try:
+                    final_clip.write_videofile(
+                        final_output,
+                        codec=enc_info["codec"],
+                        audio_codec='aac',
+                        bitrate='4500k',
+                        preset=enc_info.get("preset", "faster"),
+                        threads=4,
+                        ffmpeg_params=["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-pix_fmt", "yuv420p", "-movflags", "+faststart"],
+                        logger='bar'
+                    )
+                except Exception as enc_err:
+                    print(f"[WARN] Hardware encoder '{enc_info['codec']}' failed: {enc_err}. Falling back to CPU libx264...")
+                    final_clip.write_videofile(
+                        final_output,
+                        codec='libx264',
+                        audio_codec='aac',
+                        bitrate='4500k',
+                        preset='superfast',
+                        threads=4,
+                        ffmpeg_params=["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-pix_fmt", "yuv420p", "-movflags", "+faststart"],
+                        logger='bar'
+                    )
+                print("[OK] VideoMerger: Video merge complete! Original video untouched with cohesive story recap.")
+
+                try:
+                    shutil.copy2(final_output, clean_video_path)
+                    shutil.copy2(final_output, persistent_clean_path)
+                    state.clean_video_path = persistent_clean_path
+                except Exception as ce:
+                    print(f"[WARN] VideoMerger: Could not cache clean video copy: {ce}")
+                    state.clean_video_path = clean_video_path
+
+                need_post_pass = blur_enabled or color_enabled or (burn_subs and target_ass_path and os.path.exists(target_ass_path))
+                if need_post_pass:
+                    print("[*] VideoMerger: Running Single-Pass Hardware-Accelerated Post-Processing...")
+                    self._blur_subtitle_region(
+                        state,
+                        final_output,
+                        source_video_for_detection = movie_path,
+                        region_pct    = blur_region_pct    if blur_enabled  else 0.0,
+                        blur_strength = blur_strength      if blur_enabled  else 0,
+                        color_enabled = color_enabled,
+                        brightness    = cg_brightness,
+                        contrast      = cg_contrast,
+                        saturation    = cg_saturation,
+                        ass_path      = target_ass_path    if (burn_subs and target_ass_path and os.path.exists(target_ass_path)) else None,
+                    )
 
             # Thumbnail is now stitched as a video intro, skipping cover art embedding.
                     

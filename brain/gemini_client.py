@@ -49,12 +49,22 @@ def _extract_text_from_gemini_response(res_data: dict) -> str:
     
     text_chunks = []
     for p in parts:
-        if isinstance(p, dict) and p.get("text"):
-            text_chunks.append(p["text"])
+        if isinstance(p, dict):
+            # FIX: Gemini 2.5/3.x models output Chain-of-Thought reasoning with 'thought': True
+            # Filtering these parts out prevents internal reasoning from corrupting JSON payloads.
+            if p.get("thought"):
+                continue
+            if p.get("text"):
+                text_chunks.append(p["text"])
         elif isinstance(p, str):
             text_chunks.append(p)
 
     final_text = "".join(text_chunks).strip()
+    
+    # Strip any inline thinking tags if present (e.g. <thought>...</thought>)
+    import re
+    final_text = re.sub(r'<thought>.*?</thought>', '', final_text, flags=re.DOTALL).strip()
+
     if not final_text:
         finish_reason = cand.get("finishReason", "EMPTY_RESPONSE")
         raise Exception(f"Gemini returned empty text response (finishReason={finish_reason})")
