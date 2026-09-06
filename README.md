@@ -9,19 +9,38 @@ An autonomous, end-to-end AI agentic pipeline designed to automatically translat
 ### 🥇 Option A: Google Colab (Free T4 GPU + Google Drive Sync)
 👉 **[Open AI_Movie_Translate_Colab.ipynb in Google Colab](https://colab.research.google.com/github/paipai1999/ai-translate-agent/blob/main/AI_Movie_Translate_Colab.ipynb)**
 * **Highlights:** 1-Click Web UI Dashboard, Permanent Google Drive Sync for videos/cookies/db, 60s Auto Keep-Alive Heartbeat, and Fast Socket Health-Check.
+* **Public & Private Editions:** 
+  - `AI_Movie_Translate_Colab.ipynb` (Public Edition on GitHub - clean template for community sharing).
+  - `AI_Movie_Translate_Colab_PRIVATE.ipynb` (Personal VIP Edition - pre-loaded with your 4 Gemini keys & YouTube cookies for instant 1-click execution without typing).
 
 ### 🥈 Option B: Kaggle Notebooks (Free Dual T4 30GB VRAM / 30h Weekly Quota)
 👉 **[View AI_Movie_Translate_Kaggle.ipynb](https://github.com/paipai1999/ai-translate-agent/blob/main/AI_Movie_Translate_Kaggle.ipynb)**
 * **Highlights:** 2x NVIDIA T4 GPUs (30GB VRAM) or P100 GPU, 30 Hours/Week Free GPU Quota, 12-Hour Continuous Sessions, Cloudflare Tunnel Web UI, and 30GB System RAM.
+* **Public & Private Editions:**
+  - `AI_Movie_Translate_Kaggle.ipynb` (Public Edition on GitHub).
+  - `AI_Movie_Translate_Kaggle_PRIVATE.ipynb` (Personal VIP Edition - pre-embedded keys & cookies, zero setup).
 * **Kaggle Quickstart:**
   1. Create a new Notebook on [kaggle.com](https://www.kaggle.com).
-  2. Click `File` > `Import Notebook` and upload `AI_Movie_Translate_Kaggle.ipynb` (or paste from GitHub).
+  2. Click `File` > `Import Notebook` and upload `AI_Movie_Translate_Kaggle.ipynb` (or private version).
   3. In right sidebar `Notebook Settings`: Set **Accelerator = GPU T4 x2** and turn **Internet = On**.
   4. Run Cell 1 to launch the Web UI Dashboard!
 
 ---
 
-## 🌟 Key Features (v2.2)
+## 🌟 Key Features (v2.2 Architecture)
+
+### 🎯 1. Frame-Accurate Multi-Track Audio Engine (Zero Cumulative Drift)
+* **Zero Delay Drift:** Replaces sequential concatenation with a **Sample-Accurate Multi-Track Positioning Canvas (`44.1kHz Stereo PCM`)**.
+* **Absolute Timestamp Anchoring:** Each discrete sentence is mapped directly to its exact original timestamp (`start_sample = int(start_sec * 44100)`).
+* **Zero Cumulative Delay:** Prevents speech delay compounding over hundreds of sentences (guaranteeing exact **0.000s synchronization** even across 20–120 minute feature movies).
+
+### 🎙️ 2. Natural Human Voice Sweet Spot (`+18%`) & Zero Robotic Distortion
+* **Natural Recapitulation Pacing:** Configured to the optimal human storytelling rate of **`+18%`** using neural edge voices (`my-MM-ThihaNeural` & `my-MM-NilarNeural`).
+* **Anti-Robotic Flanging:** Eliminates harsh time-stretching by restricting `atempo` to a max of 1.18x and relying on **LLM Concise Dubbing Phrasing** to naturally adapt Burmese sentence lengths to dialogue slots.
+
+### 🔇 3. 100% Muted Original English Dialogue on `--skip-demucs` + Looped BGM
+* **Zero English Speech Bleed:** Completely mutes original dialogue when `--skip-demucs` is active, avoiding muddy overlapping speech.
+* **Cinematic Tension BGM:** Automatically loops and mixes atmospheric tension soundscapes (`assets/bgm/scifi_tension.wav`) at calibrated background volume.
 
 ### 🍪 1. Multi-Platform Auto Downloader (Mobile API & Anti-Bot Bypass)
 * **YouTube:** Negotiates pure mobile streaming APIs (`android`, `mweb`, `android_vr`, `ios`) with automatic cookie stripping on bot challenges to 100% bypass datacenter IP blocks (`Sign in to confirm you're not a bot`).

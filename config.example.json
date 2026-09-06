@@ -8,7 +8,7 @@
       "workhorse": "gemini-3.5-flash-lite",
       "polish": "gemini-3.1-flash-lite"
     },
-    "daily_limit_per_key": 50,
+    "daily_limit_per_key": 1500,
     "model_limits": {
       "gemini-3.5-flash-lite": 15,
       "gemini-flash-latest": 15,
@@ -36,7 +36,7 @@
     "tts_voice_mm": "my-MM-ThihaNeural",
     "tts_voice_en": "en-US-GuyNeural",
     "tts_voice": "my-MM-ThihaNeural",
-    "tts_rate_mm": "+8%",
+    "tts_rate_mm": "+18%",
     "tts_rate_en": "+15%",
     "f5_tts": {
       "model_type": "F5-TTS",
