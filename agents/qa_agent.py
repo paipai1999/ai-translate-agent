@@ -116,21 +116,57 @@ class QAAgent:
                     parsed = parsed["blocks"]
                     
                 if isinstance(parsed, list):
-                    rewrite_map = {str(item.get("scene_id")): item.get("rewritten_narration") for item in parsed if isinstance(item, dict)}
-                    
-                    for b in batch:
+                    rewrite_map = {}
+                    for item_idx, item in enumerate(parsed):
+                        if not isinstance(item, dict):
+                            continue
+                        narration = (
+                            item.get("rewritten_narration")
+                            or item.get("narration")
+                            or item.get("text")
+                            or ""
+                        )
+                        if not narration:
+                            continue
+
+                        cand_id = None
+                        for k in ["scene_id", "id", "block", "scene"]:
+                            val = item.get(k)
+                            if val is not None:
+                                m = re.search(r'\d+', str(val))
+                                if m:
+                                    cand_id = m.group(0)
+                                    break
+
+                        if cand_id:
+                            rewrite_map[cand_id] = narration
+                        elif item_idx < len(batch):
+                            b_id = str(batch[item_idx]["scene_id"])
+                            b_m = re.search(r'\d+', b_id)
+                            k = b_m.group(0) if b_m else b_id
+                            rewrite_map[k] = narration
+
+                    for b_pos, b in enumerate(batch):
                         idx = b["index"]
-                        scene_id = str(b["scene_id"])
-                        if scene_id in rewrite_map and rewrite_map[scene_id]:
-                            old_len = len(state.generated_script[idx]["narration"])
-                            new_text = str(rewrite_map[scene_id]).strip()
-                            if new_text:
-                                new_text = replace_numbers_with_burmese(new_text)
-                                new_text = transliterate_english_acronyms(new_text)
-                                new_len = len(new_text)
-                                state.generated_script[idx]["narration"] = new_text
-                                state.generated_script[idx]["qa_rewritten_for_length"] = True
-                                rewritten_count += 1
+                        scene_id_raw = str(b["scene_id"])
+                        m = re.search(r'\d+', scene_id_raw)
+                        clean_id = m.group(0) if m else scene_id_raw
+
+                        new_text = rewrite_map.get(clean_id)
+                        if not new_text and b_pos < len(parsed) and isinstance(parsed[b_pos], dict):
+                            new_text = (
+                                parsed[b_pos].get("rewritten_narration")
+                                or parsed[b_pos].get("narration")
+                                or parsed[b_pos].get("text")
+                            )
+
+                        if new_text and str(new_text).strip():
+                            new_text = str(new_text).strip()
+                            new_text = replace_numbers_with_burmese(new_text)
+                            new_text = transliterate_english_acronyms(new_text)
+                            state.generated_script[idx]["narration"] = new_text
+                            state.generated_script[idx]["qa_rewritten_for_length"] = True
+                            rewritten_count += 1
             except Exception as e:
                 print(f"[WARN] QAAgent (Auto-Rewrite): Batch {batch_num} failed: {e}")
 

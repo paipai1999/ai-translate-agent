@@ -453,7 +453,7 @@ class VoiceAgent:
 
                 if raw_dur > 0:
                     stretch_ratio = target_dur / raw_dur
-                    effective_ratio = min(1.10, max(0.85, stretch_ratio))
+                    effective_ratio = min(1.15, max(0.78, stretch_ratio))
 
                     if abs(effective_ratio - 1.0) > 0.05:
                         base, ext = os.path.splitext(output_file)
