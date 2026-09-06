@@ -39,7 +39,7 @@ class WriterAgent:
         gemini_cfg = config_data.get("gemini", {})
         gemini_key = gemini_cfg.get("api_keys") or os.getenv("GEMINI_API_KEY") or ""
         models_dict = gemini_cfg.get("models", {})
-        model_workhorse = models_dict.get("workhorse", "gemini-3.5-flash")
+        model_workhorse = models_dict.get("workhorse", "gemini-3.5-flash-lite")
 
         # 1. Extract, clean, and smooth Whisper dialogue segments
         # Ensures 100% full coverage while eliminating micro-fragments, repetitive stutters, and unnatural breaks

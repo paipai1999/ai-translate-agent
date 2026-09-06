@@ -1474,7 +1474,7 @@ class VideoMergerAgent:
             config_data = cfg.load_config()
             gemini_cfg = config_data.get("gemini", {})
             api_keys = gemini_cfg.get("api_keys", [])
-            model = gemini_cfg.get("model", "gemini-3.5-flash")
+            model = gemini_cfg.get("model", "gemini-3.5-flash-lite")
 
             prompt = (
                 "Analyze this video frame carefully. Look at the lower half of the frame (bottom 50%). "

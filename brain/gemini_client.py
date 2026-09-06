@@ -52,7 +52,7 @@ def _extract_text_from_gemini_response(res_data: dict) -> str:
         if isinstance(p, dict):
             # FIX: Gemini 2.5/3.x models output Chain-of-Thought reasoning with 'thought': True
             # Filtering these parts out prevents internal reasoning from corrupting JSON payloads.
-            if p.get("thought"):
+            if p.get("thought") or p.get("role") == "thought" or p.get("type") == "thought":
                 continue
             if p.get("text"):
                 text_chunks.append(p["text"])
@@ -61,9 +61,10 @@ def _extract_text_from_gemini_response(res_data: dict) -> str:
 
     final_text = "".join(text_chunks).strip()
     
-    # Strip any inline thinking tags if present (e.g. <thought>...</thought>)
+    # Strip any inline thinking tags if present (e.g. <thought>...</thought>, <think>...</think>)
     import re
-    final_text = re.sub(r'<thought>.*?</thought>', '', final_text, flags=re.DOTALL).strip()
+    final_text = re.sub(r'<thought>.*?</thought>', '', final_text, flags=re.DOTALL | re.IGNORECASE).strip()
+    final_text = re.sub(r'<think>.*?</think>', '', final_text, flags=re.DOTALL | re.IGNORECASE).strip()
 
     if not final_text:
         finish_reason = cand.get("finishReason", "EMPTY_RESPONSE")
@@ -365,11 +366,12 @@ def _normalize_keys(api_key: Union[str, List[str]]) -> List[str]:
 
 
 def _build_model_list(requested_model: str) -> List[str]:
-    """De-duplicated list: requested model first, then standard fallbacks."""
+    """De-duplicated list: requested model first (defaulting to gemini-3.5-flash-lite), then standard fallbacks."""
     seen = set()
     result = []
-    for m in [requested_model] + _FALLBACK_MODELS:
-        if m not in seen:
+    primary = requested_model.strip() if (isinstance(requested_model, str) and requested_model.strip()) else "gemini-3.5-flash-lite"
+    for m in [primary] + _FALLBACK_MODELS:
+        if m and m not in seen:
             seen.add(m)
             result.append(m)
     return result

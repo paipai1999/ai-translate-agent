@@ -108,7 +108,20 @@ This major release eliminates cumulative audio drift, guarantees complete spoken
 - **Problem:** Gemini 2.5 and 3.x Flash/Pro models include internal Chain-of-Thought reasoning parts (`{"thought": true, "text": "..."}`) in API responses. In `QAAgent`, when Gemini counted syllables or contemplated alternative translations before outputting JSON, these thought chunks leaked into the text string, causing `json.loads` to fail with:
   `[!] QAAgent: Could not parse JSON: (3) ပ(1)်(1) က(1)မ(1)်(1)း(1)... oops 46 chars! Let's shorten:`
 - **Solution:** Updated `_extract_text_from_gemini_response` in [brain/gemini_client.py](brain/gemini_client.py):
-  - Filters out any candidate response part with `p.get("thought") == True`.
-  - Applies regex `re.sub(r'<thought>.*?</thought>', '', final_text, flags=re.DOTALL)` to strip any inline thinking tags.
+  - Filters out any candidate response part with `p.get("thought")`, `p.get("role") == "thought"`, or `p.get("type") == "thought"`.
+  - Applies regex `re.sub(r'<thought>.*?</thought>', '', final_text, flags=re.DOTALL | re.IGNORECASE)` and `re.sub(r'<think>.*?</think>', '', final_text, flags=re.DOTALL | re.IGNORECASE)` to strip any inline thinking tags.
   - Guarantees 100% clean JSON payloads returned to all agents (`QAAgent`, `WriterAgent`, `DirectorAgent`).
+
+---
+
+### 12. ⚡ Enforce Model Priority: `gemini-3.5-flash-lite`
+- **Workhorse Engine:** Firmly established `gemini-3.5-flash-lite` as the primary default across all pipeline components:
+  - `brain/gemini_client.py`: `_build_model_list()` defaults strictly to `gemini-3.5-flash-lite` (15 RPM high-throughput tier) before falling back through `_FALLBACK_MODELS`.
+  - `agents/writer_agent.py`: `model_workhorse` defaults to `gemini-3.5-flash-lite`.
+  - `agents/qa_agent.py`: `model_workhorse` in both duration constraint enforcement and script colloquial review defaults to `gemini-3.5-flash-lite`.
+  - `agents/seo_agent.py`: `gemini_model` defaults to `gemini-3.5-flash-lite`.
+  - `agents/thumbnail_agent.py`: Vision AI model defaults to `gemini-3.5-flash-lite`.
+  - `agents/audio_agent.py` & `agents/video_merger_agent.py`: AI assist and subtitle detection models default to `gemini-3.5-flash-lite`.
+- **Benefit:** Maximizes API throughput (15 RPM vs 5 RPM), prevents 429 quota exhaustion, and provides sub-second latency for real-time video recap generation.
+
 

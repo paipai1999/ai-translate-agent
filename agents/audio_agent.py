@@ -415,7 +415,7 @@ print(f"[Whisper] Transcribed {{len(results)}} segments in language: {{detected_
                 f"{full_text}"
             )
             
-            raw, _ = call_gemini(sys_prompt, user_prompt, api_key, model=gemini_cfg.get("model", "gemini-3.5-flash"), temperature=0.1)
+            raw, _ = call_gemini(sys_prompt, user_prompt, api_key, model=gemini_cfg.get("model", "gemini-3.5-flash-lite"), temperature=0.1)
 
             import re, json
             corrected_segments = []

@@ -43,7 +43,7 @@ class QAAgent:
         if not api_key:
             return state
             
-        model = config_data.get("gemini", {}).get("models", {}).get("workhorse", "gemini-3.5-flash")
+        model = config_data.get("gemini", {}).get("models", {}).get("workhorse", "gemini-3.5-flash-lite")
         blocks_to_rewrite = []
         chars_per_sec = 11.5  # Burmese Edge-TTS reading speed (~11.5 characters/sec for natural conversational flow)
         max_stretch = 1.35  # Allows audio to fit naturally without dropping sentences
@@ -188,7 +188,7 @@ class QAAgent:
         if not api_key:
             return state
 
-        model_workhorse = config_data.get("gemini", {}).get("models", {}).get("workhorse", "gemini-3.5-flash")
+        model_workhorse = config_data.get("gemini", {}).get("models", {}).get("workhorse", "gemini-3.5-flash-lite")
         print("[*] QAAgent: Reviewing script Burmese colloquialism before TTS synthesis...")
         lang_result = self._run_language_check(state, api_key, model_workhorse)
         if lang_result:
@@ -213,7 +213,7 @@ class QAAgent:
 
         models_dict = gemini_cfg.get("models", {})
         model_heavy = models_dict.get("heavy", "gemini-3.5-flash")
-        model_workhorse = models_dict.get("workhorse", "gemini-3.5-flash")
+        model_workhorse = models_dict.get("workhorse", "gemini-3.5-flash-lite")
         qa_cfg = config_data.get("qa", {})
         do_sync_check = qa_cfg.get("sync_check", True)
         do_language_check = qa_cfg.get("language_check", True)
