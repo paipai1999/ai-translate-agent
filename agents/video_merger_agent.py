@@ -10,6 +10,62 @@ if sys.platform == "win32":
 
 _DETECTED_ENCODER = None
 
+def _auto_setup_nvenc_linux() -> str:
+    """If running on Linux with an NVIDIA GPU, auto-downloads BtbN NVENC static build if missing."""
+    import subprocess
+    import shutil
+    
+    if not sys.platform.startswith("linux"):
+        return None
+
+    # Check if NVIDIA GPU is available
+    has_nvidia = False
+    try:
+        chk = subprocess.run(["nvidia-smi"], capture_output=True, timeout=3)
+        if chk.returncode == 0:
+            has_nvidia = True
+    except Exception:
+        pass
+    if not has_nvidia:
+        try:
+            import torch
+            has_nvidia = torch.cuda.is_available()
+        except Exception:
+            pass
+
+    if not has_nvidia:
+        return None
+
+    target = "/usr/local/bin/ffmpeg"
+    if os.path.exists(target) and os.path.getsize(target) > 10000000:
+        try:
+            chk = subprocess.run([target, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True, timeout=4)
+            if chk.returncode == 0:
+                os.environ["IMAGEIO_FFMPEG_EXE"] = target
+                return target
+        except Exception:
+            pass
+
+    print("[*] Hardware Detection: NVIDIA GPU detected! Auto-fetching static NVENC FFmpeg build...")
+    try:
+        os.makedirs("/tmp/ff_build", exist_ok=True)
+        subprocess.run("curl -L -f -s https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz -o /tmp/ff_build/ffmpeg.tar.xz", shell=True, check=True, timeout=90)
+        subprocess.run("tar -xf /tmp/ff_build/ffmpeg.tar.xz -C /tmp/ff_build", shell=True, check=True, timeout=45)
+        subprocess.run("find /tmp/ff_build -type f -name ffmpeg -exec cp -f {} /usr/local/bin/ffmpeg \\;", shell=True, check=True)
+        subprocess.run("find /tmp/ff_build -type f -name ffprobe -exec cp -f {} /usr/local/bin/ffprobe \\;", shell=True, check=True)
+        subprocess.run("chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe", shell=True, check=True)
+        subprocess.run("rm -rf /tmp/ff_build", shell=True)
+        os.environ["PATH"] = "/usr/local/bin:" + os.environ.get("PATH", "")
+        os.environ["IMAGEIO_FFMPEG_EXE"] = target
+        
+        chk = subprocess.run([target, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True, timeout=4)
+        if chk.returncode == 0:
+            print("🚀 [OK] NVIDIA NVENC GPU Encoder ready and active (/usr/local/bin/ffmpeg)!")
+            return target
+    except Exception as e:
+        print(f"[!] Auto NVENC FFmpeg install notice: {e}")
+    return None
+
 def _get_ffmpeg_bin() -> str:
     import shutil
     import subprocess
@@ -31,6 +87,11 @@ def _get_ffmpeg_bin() -> str:
                 return p
         except Exception:
             pass
+
+    # Priority 1.5: If on Linux with NVIDIA GPU, auto-setup NVENC build if not found
+    nvenc_p = _auto_setup_nvenc_linux()
+    if nvenc_p:
+        return nvenc_p
 
     # Priority 2: Pick any binary that supports Intel QSV
     for p in existing:
