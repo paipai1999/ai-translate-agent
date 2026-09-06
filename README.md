@@ -130,8 +130,8 @@ In many automated dubbing systems, sentences that slightly exceed scene duration
 * **Zero English Speech Bleed:** Completely mutes original dialogue when `--skip-demucs` is active, avoiding muddy overlapping speech.
 * **Cinematic Tension BGM:** Automatically loops and mixes atmospheric tension soundscapes (`assets/bgm/scifi_tension.wav`) at calibrated background volume.
 
-### 🍪 5. Multi-Platform Auto Downloader (Mobile API & Anti-Bot Bypass)
-* **YouTube:** Negotiates pure mobile streaming APIs (`android`, `mweb`, `android_vr`, `ios`) with automatic cookie stripping on bot challenges to 100% bypass datacenter IP blocks (`Sign in to confirm you're not a bot`).
+### 🍪 5. Multi-Platform Auto Downloader (Apple VisionOS & Anti-Bot Resilient Matrix)
+* **YouTube:** Powered by Apple VisionOS (`visionos`) 1080p HLS m3u8 streaming and Android native API fallbacks with Node.js runtime integration. 100% immune to Google Play Integrity checks and Cloud Datacenter IP challenges (`Sign in to confirm you're not a bot`), working seamlessly with or without browser cookies.
 * **DramaBox (`dramaboxdb.com`):** Direct web & HLS streaming download with VIP authentication.
 * **ReelShort (`reelshort.com`):** Direct short drama download with session cookies.
 * **Local Upload:** Direct Drag & Drop upload of MP4, MKV, WebM files in the Web UI.
