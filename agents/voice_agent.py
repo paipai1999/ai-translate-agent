@@ -247,6 +247,12 @@ class VoiceAgent:
             clean_narration = self._prepare_tts_text(narration)
             out_file = os.path.join(audio_out_dir, f"scene_{(idx+1):04d}.mp3")
 
+            # Granular Checkpoint Resume: If clip already synthesized and valid, skip
+            if os.path.exists(out_file) and os.path.getsize(out_file) > 1000:
+                print(f"    ⏩ [Resume]: Block {idx+1} ({os.path.basename(out_file)}) already synthesized ({os.path.getsize(out_file)} bytes), skipping F5-TTS.")
+                audio_files.append(out_file)
+                continue
+
             # Determine best reference audio for this speaker
             ref_info = char_clips.get(speaker)
             if not ref_info and "narrator" in char_clips:
@@ -349,45 +355,56 @@ class VoiceAgent:
             
             clean_narration = self._prepare_tts_text(narration)
             out_file = os.path.join(audio_out_dir, f"scene_{(idx+1):04d}.mp3")
+
+            # Granular Checkpoint Resume: If clip already synthesized and valid (>1000 bytes), skip TTS
+            if os.path.exists(out_file) and os.path.getsize(out_file) > 1000:
+                print(f"    ⏩ [Resume]: Block {idx+1} ({os.path.basename(out_file)}) already synthesized ({os.path.getsize(out_file)} bytes), skipping Edge-TTS.")
+                audio_files.append(out_file)
+                continue
+
             print(f"[*] VoiceAgent: Generating audio block {idx+1} (Scene {scene_id}) voice={voice_override} target_dur={target_dur:.1f}s...")
             
             tasks.append(self._speak_with_retry(clean_narration, out_file, scene_id, emotion, rate=selected_rate, target_dur=target_dur, voice_override=voice_override))
             output_files.append(out_file)
 
-        # FIX-W1: In Kaggle/Colab Jupyter, asyncio.run() raises RuntimeError("This event loop
-        # is already running") because Jupyter runs its own persistent event loop.
-        # Use nest_asyncio.apply() if available, otherwise create a new thread with its own loop.
-        try:
-            results = asyncio.run(_run_all(tasks))
-        except RuntimeError as _loop_err:
-            if "event loop is already running" in str(_loop_err).lower():
-                try:
-                    import nest_asyncio
-                    nest_asyncio.apply()
-                    results = asyncio.get_event_loop().run_until_complete(_run_all(tasks))
-                    print("[*] VoiceAgent: Used nest_asyncio for Jupyter/Colab compatibility.")
-                except ImportError:
-                    # nest_asyncio not installed → run in a separate thread with its own loop
-                    import concurrent.futures as _cf
-                    def _run_in_new_loop():
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        try:
-                            return loop.run_until_complete(_run_all(tasks))
-                        finally:
-                            loop.close()
-                    with _cf.ThreadPoolExecutor(max_workers=1) as _exe:
-                        results = _exe.submit(_run_in_new_loop).result()
-                    print("[*] VoiceAgent: Used ThreadPoolExecutor for Jupyter/Colab compatibility.")
-            else:
-                raise
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                print(f"[WARN] VoiceAgent: Block {i} TTS failed: {result}")
-            elif result:
-                audio_files.append(output_files[i])
+        if tasks:
+            # FIX-W1: In Kaggle/Colab Jupyter, asyncio.run() raises RuntimeError("This event loop
+            # is already running") because Jupyter runs its own persistent event loop.
+            # Use nest_asyncio.apply() if available, otherwise create a new thread with its own loop.
+            try:
+                results = asyncio.run(_run_all(tasks))
+            except RuntimeError as _loop_err:
+                if "event loop is already running" in str(_loop_err).lower():
+                    try:
+                        import nest_asyncio
+                        nest_asyncio.apply()
+                        results = asyncio.get_event_loop().run_until_complete(_run_all(tasks))
+                        print("[*] VoiceAgent: Used nest_asyncio for Jupyter/Colab compatibility.")
+                    except ImportError:
+                        # nest_asyncio not installed → run in a separate thread with its own loop
+                        import concurrent.futures as _cf
+                        def _run_in_new_loop():
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            try:
+                                return loop.run_until_complete(_run_all(tasks))
+                            finally:
+                                loop.close()
+                        with _cf.ThreadPoolExecutor(max_workers=1) as _exe:
+                            results = _exe.submit(_run_in_new_loop).result()
+                        print("[*] VoiceAgent: Used ThreadPoolExecutor for Jupyter/Colab compatibility.")
+                else:
+                    raise
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    print(f"[WARN] VoiceAgent: Block {i} TTS failed: {result}")
+                elif result:
+                    audio_files.append(output_files[i])
+        else:
+            print(f"[*] VoiceAgent: All {len(audio_files)} audio blocks were already synthesized. Resuming without re-generating.")
 
-        print(f"[OK] VoiceAgent: Generated {len(audio_files)} audio segments in -> {audio_out_dir}")
+        audio_files.sort()
+        print(f"[OK] VoiceAgent: Generated/reused {len(audio_files)} audio segments in -> {audio_out_dir}")
         return state
 
     async def _speak_with_retry(self, text: str, output_file: str, scene_id, emotion: str = "normal", rate: str = "+15%", target_dur: float = None, voice_override: str = None) -> bool:
@@ -399,9 +416,16 @@ class VoiceAgent:
         except ImportError:
             from moviepy.editor import AudioFileClip
 
-        # Lock parameters to a consistent professional tone
+        # Emotion-driven dynamic voice modulation
         pitch = "+2Hz"
         volume = "+30%"
+        em_lower = str(emotion).lower().strip()
+        if em_lower in ("excited", "angry", "intense", "scared", "urgent"):
+            pitch = "+5Hz"
+            volume = "+35%"
+        elif em_lower in ("sad", "whisper", "somber", "melancholy"):
+            pitch = "-2Hz"
+            volume = "+20%"
 
         success = False
         voice_to_use = voice_override if voice_override else self.voice

@@ -81,12 +81,15 @@ def call_gemini(
     temperature: float = 0.7,
     max_tokens: int = 4096,
     response_mime_type: str = "application/json",  # FIX-BUG3: allow "text/plain" for non-JSON callers
+    images: List[Union[str, dict]] = None,
 ) -> tuple:
     """Shared Gemini API client with automatic model fallback and API key rotation.
 
     Args:
         response_mime_type: "application/json" (default) or "text/plain" for plain-text prompts.
             Use "text/plain" when the prompt asks Gemini to return raw text (not JSON).
+        images: Optional list of base64 JPEG strings or dicts with {"mimeType": ..., "data": ...}
+            for multimodal visual reasoning.
 
     Returns:
         (text, used_model) tuple on success.
@@ -133,9 +136,27 @@ def call_gemini(
                 if response_mime_type:
                     gen_config["responseMimeType"] = response_mime_type
 
+                user_parts = [{"text": user_prompt}]
+                if images:
+                    for img in images:
+                        if isinstance(img, dict) and "data" in img:
+                            user_parts.append({
+                                "inlineData": {
+                                    "mimeType": img.get("mimeType", "image/jpeg"),
+                                    "data": img["data"]
+                                }
+                            })
+                        elif isinstance(img, str) and img:
+                            user_parts.append({
+                                "inlineData": {
+                                    "mimeType": "image/jpeg",
+                                    "data": img
+                                }
+                            })
+
                 payload = {
                     "system_instruction": {"parts": [{"text": system_prompt}]},
-                    "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+                    "contents": [{"role": "user", "parts": user_parts}],
                     "generationConfig": gen_config,
                 }
 

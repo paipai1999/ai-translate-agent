@@ -454,3 +454,71 @@ print(f"[Whisper] Transcribed {{len(results)}} segments in language: {{detected_
             print(f"[!] AudioAgent: Transcript correction failed: {e}")
             
         return state
+
+    @staticmethod
+    def detect_pitch_gender(audio_path: str, start_sec: float, end_sec: float) -> str:
+        return detect_pitch_gender(audio_path, start_sec, end_sec)
+
+
+def detect_pitch_gender(audio_path: str, start_sec: float, end_sec: float) -> str:
+    """
+    Estimates speaker biological gender (male vs female) using fundamental pitch (F0)
+    analysis via normalized autocorrelation across speech frames.
+    Male speech F0: typically 85 Hz - 165 Hz
+    Female speech F0: typically 165 Hz - 275 Hz
+    Returns: 'female', 'male', or 'unknown'
+    """
+    if not audio_path or not os.path.exists(audio_path) or end_sec <= start_sec:
+        return "unknown"
+    try:
+        import soundfile as sf
+        import numpy as np
+
+        info = sf.info(audio_path)
+        sr = info.samplerate
+        total_frames = info.frames
+
+        s_frame = max(0, int(start_sec * sr))
+        e_frame = min(total_frames, int(end_sec * sr))
+        if e_frame - s_frame < int(0.2 * sr):
+            return "unknown"
+
+        data, _ = sf.read(audio_path, start=s_frame, stop=e_frame, dtype='float32')
+        if data.ndim > 1:
+            data = np.mean(data, axis=1)
+
+        win_size = int(0.04 * sr)  # 40ms window
+        hop_size = int(0.02 * sr)  # 20ms hop
+        f0_candidates = []
+
+        min_lag = int(sr / 350)  # 350 Hz max human vocal fundamental
+        max_lag = int(sr / 70)   # 70 Hz min human vocal fundamental
+
+        for i in range(0, len(data) - win_size, hop_size):
+            frame = data[i:i + win_size]
+            energy = np.sum(frame ** 2)
+            if energy < 1e-4:
+                continue
+            frame = frame - np.mean(frame)
+            corr = np.correlate(frame, frame, mode='full')
+            corr = corr[len(corr) // 2:]
+            if max_lag >= len(corr) or corr[0] <= 1e-6:
+                continue
+            peak_offset = np.argmax(corr[min_lag:max_lag])
+            peak_lag = min_lag + peak_offset
+            norm_peak = corr[peak_lag] / corr[0]
+            if norm_peak > 0.32:
+                f0 = sr / peak_lag
+                if 70.0 <= f0 <= 350.0:
+                    f0_candidates.append(f0)
+
+        if len(f0_candidates) >= 3:
+            median_f0 = float(np.median(f0_candidates))
+            if median_f0 >= 165.0:
+                return "female"
+            else:
+                return "male"
+    except Exception:
+        pass
+    return "unknown"
+

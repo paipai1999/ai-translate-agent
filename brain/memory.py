@@ -69,14 +69,41 @@ class MovieState(BaseModel):
     end_time: Optional[str] = None  # ISO completion timestamp
     current_phase: str = "Initializing..."
     progress: int = 0
+    completed_phases: List[str] = Field(default_factory=list)  # Tracks successfully completed pipeline phase IDs
+    phase_checkpoints: Dict[str, Any] = Field(default_factory=dict)  # Metadata & artifact paths per completed phase
+    speaker_profiles: Dict[str, Dict[str, Any]] = Field(default_factory=dict)  # Multimodal speaker diarization profile
+
+    def mark_phase_completed(self, phase_name: str, details: Dict[str, Any] = None):
+        """Marks a pipeline phase as successfully completed with optional checkpoint metadata."""
+        if phase_name not in self.completed_phases:
+            self.completed_phases.append(phase_name)
+        if details is not None:
+            self.phase_checkpoints[phase_name] = details
+
+    def is_phase_completed(self, phase_name: str) -> bool:
+        """Checks whether a pipeline phase is recorded as completed."""
+        return phase_name in self.completed_phases
+
+    def get_last_completed_phase(self) -> Optional[str]:
+        """Returns the ID of the latest completed phase, or None if pipeline hasn't run."""
+        return self.completed_phases[-1] if self.completed_phases else None
+
+    def reset_from_phase(self, phase_name: str):
+        """Removes the given phase and any subsequent phases to allow targeted restart."""
+        if phase_name in self.completed_phases:
+            idx = self.completed_phases.index(phase_name)
+            to_remove = self.completed_phases[idx:]
+            self.completed_phases = self.completed_phases[:idx]
+            for p in to_remove:
+                self.phase_checkpoints.pop(p, None)
 
     @property
     def duration_sec(self) -> float:
         """Returns video duration as float seconds, parsed from HH:MM:SS duration string."""
         if not self.duration:
-            return 9999.0
+            return 0.0
         try:
-            parts = self.duration.split(':')
+            parts = str(self.duration).split(':')
             if len(parts) == 3:
                 return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
             elif len(parts) == 2:
@@ -84,7 +111,19 @@ class MovieState(BaseModel):
             else:
                 return float(self.duration)
         except Exception:
-            return 9999.0
+            return 0.0
+
+    @duration_sec.setter
+    def duration_sec(self, val: float):
+        """Sets duration string from float seconds."""
+        if val is None or float(val) <= 0.0:
+            self.duration = None
+            return
+        total_sec = float(val)
+        h = int(total_sec // 3600)
+        m = int((total_sec % 3600) // 60)
+        s = total_sec % 60
+        self.duration = f"{h:02d}:{m:02d}:{s:05.2f}"
     
     @staticmethod
     def _slugify_path_component(value: str) -> str:

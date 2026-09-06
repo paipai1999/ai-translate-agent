@@ -135,5 +135,35 @@ This major release eliminates cumulative audio drift, guarantees complete spoken
   - **RAM & CPU Efficiency:** Eliminates MoviePy execution in 100% of standard runs, reducing RAM usage from >2 GB to ~70 MB and avoiding Python GIL bottlenecks.
   - **Robust Fallback Safety Net:** MoviePy loading is preserved inside an isolated `_legacy_moviepy_merge()` method as a safety net in case of missing binary components or thumbnail intro stitching.
 
+---
+
+### 14. 🎙️ Acoustic Pitch & Multimodal Vision Diarization (Multi-Voice Dubbing)
+- **Problem:** When dubbing full movies into Burmese, all characters (male leads, female heroines, villains, narrators) were voiced by a single narrator voice, flattening dramatic tension and dialogue clarity.
+- **Solution:** Implemented **Hybrid Acoustic & Multimodal Vision Speaker Diarization**:
+  - **Acoustic Fundamental Frequency ($F_0$) Estimation:** In [agents/audio_agent.py](agents/audio_agent.py), implemented normalized autocorrelation across 40ms overlapping frames within the human vocal range ($70\text{ Hz} \le F_0 \le 350\text{ Hz}$). Accurately determines acoustic gender (`male` if $F_0 \le 165\text{ Hz}$, `female` if $F_0 > 165\text{ Hz}$, or `unknown`) directly from Demucs-isolated vocals.
+  - **Multimodal Video Keyframe Context:** In [agents/writer_agent.py](agents/writer_agent.py) and [brain/gemini_client.py](brain/gemini_client.py), extracts lightweight base64 JPEG keyframes at dialogue scene timestamps and feeds them alongside acoustic pitch hints into Gemini Vision translation prompts.
+  - **Character & Gender Profile Registry:** `MovieState.speaker_profiles` dynamically tracks characters, genders, and emotions.
+  - **Intelligent Multi-Voice Synthesis:** In [agents/voice_agent.py](agents/voice_agent.py), automatically routes female dialogue to `my-MM-NilarNeural` and male/narrator dialogue to `my-MM-ThihaNeural`, applying emotion-driven dynamic pitch (`+5Hz` / `-2Hz`) and volume modulation.
+
+---
+
+### 15. 💾 Deterministic Phase-by-Phase Checkpoint Resume Engine
+- **Problem:** If a pipeline run was interrupted by network drops, notebook runtime disconnects, or system restarts during a long movie, users had to restart from Phase 1, repeating time-consuming audio extraction, Demucs vocal separation, Whisper transcription, and TTS synthesis.
+- **Solution:** Implemented a **Deterministic Checkpoint & Granular Resume Engine**:
+  - **7-Phase State Tracking:** Formally defined pipeline phase boundaries in [brain/memory.py](brain/memory.py) and [agents/master.py](agents/master.py):
+    1. `phase_1_video_analysis`
+    2. `phase_2_audio_stt`
+    3. `phase_3_scene_detection`
+    4. `phase_4_script_seo_thumbnail`
+    5. `phase_5_voice_generation`
+    6. `phase_6_video_merge`
+    7. `phase_7_qa`
+  - **On-Disk Physical Artifact Validation:** `MasterAgent._validate_artifacts` never relies on state flags alone. A phase is only skipped if its verified outputs exist on disk (valid duration, non-empty transcript, non-corrupt `thumbnail.jpg`, complete `voiceover/` files, or non-corrupt `final_recap.mp4` > 50KB).
+  - **Granular Clip-Level TTS Resume:** In [agents/voice_agent.py](agents/voice_agent.py), Edge-TTS and F5-TTS check whether `scene_{(idx+1):04d}.mp3` already exists with valid data (> 1000 bytes). Already generated clips are appended directly, avoiding duplicate API calls and network latency.
+  - **Atomic Checkpoint Serialization:** Saves `checkpoint.json` atomically via temporary file replacement (`.tmp` -> `.json`) at each phase boundary.
+  - **Full CLI & Web UI Integration:**
+    - CLI: Added `--resume` (enabled by default) and `--fresh` / `--force-restart` flags in [main.py](main.py) and [brain/planner.py](brain/planner.py).
+    - Web UI: Added `resume: bool` parameter to `/api/start` and `/api/batch/start` in [web_ui.py](web_ui.py).
+
 
 

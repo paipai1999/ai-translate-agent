@@ -199,6 +199,17 @@ Choose from 5 professionally designed subtitle styles with real-time live previe
 * **Thinking-Safe Parser:** Automatically filters out Gemini 2.5 / 3.x internal Chain-of-Thought reasoning blocks (`p.get("thought")`) and strips `<thought>` tags before JSON parsing.
 * Eliminates JSON syntax errors in `QAAgent` when Gemini models deliberate on character counts or syllable budgets, guaranteeing 100% automated script rewrite success.
 
+### 🎙️ 14. Acoustic Pitch & Multimodal Vision Diarization (Multi-Voice Dubbing)
+* **Hybrid $F_0$ Autocorrelation:** Evaluates acoustic pitch ($70\text{ Hz} \le F_0 \le 350\text{ Hz}$) on vocal audio slices to classify gender (`male` vs `female`) with sub-millisecond precision.
+* **Multimodal Visual Keyframes:** Injects lightweight video frame captures at dialogue cuts into Gemini Vision prompts to identify character identity, emotion, and gender.
+* **Dynamic Multi-Voice Dubbing:** Automatically switches between `my-MM-NilarNeural` (female characters) and `my-MM-ThihaNeural` (male characters/narrator), applying emotion-driven pitch (`+5Hz` / `-2Hz`) and volume modulation.
+
+### 💾 15. Deterministic Phase-by-Phase Checkpoint Resume Engine
+* **7-Phase State Tracking:** Robust state boundaries across Analysis, Audio STT, Scene Detection, Scripting/SEO, Voice Generation, Video Merge, and QA.
+* **Physical Artifact Verification:** Validates actual on-disk files before skipping any completed phase, preventing corrupted or incomplete runs.
+* **Granular Clip-Level Voiceover Skipping:** Reuses already synthesized `scene_*.mp3` files without duplicate TTS network calls.
+* **Atomic `checkpoint.json`:** Crash-resilient progress checkpointing allows instantaneous resume via CLI (`--resume` / `--fresh`) and Web UI.
+
 ---
 
 
@@ -293,6 +304,12 @@ python main.py --input "movies/my_movie.mp4" --format 9:16 --sub-style yellow_po
 
 # Run batch processing with Netflix cinema box subtitles
 python main.py --batch --sub-style box_black --format both
+
+# Resume interrupted pipeline from last saved checkpoint (default)
+python main.py --input "movies/my_movie.mp4" --resume
+
+# Force a fresh run, ignoring previous checkpoints
+python main.py --input "movies/my_movie.mp4" --fresh
 ```
 
 ---

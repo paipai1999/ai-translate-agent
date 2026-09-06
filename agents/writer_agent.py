@@ -23,7 +23,7 @@ class WriterAgent:
     # ─────────────────────────────────────────────────────
     # PUBLIC: generate_script (Full Movie Dialogue Translation)
     # ─────────────────────────────────────────────────────
-    def generate_script(self, state: MovieState) -> MovieState:
+    def generate_script(self, state: MovieState, movie_path: str = "") -> MovieState:
         """
         Full Movie Dialogue Translation & Dubbing Engine.
         Translates EVERY spoken dialogue line from Whisper STT into natural, colloquial speech in the target language.
@@ -163,16 +163,58 @@ class WriterAgent:
             merged_segments.append(curr)
             s_i += 1
 
+        audio_source = getattr(state, "vocals_path", "") or getattr(state, "audio_path", "")
+        if audio_source and not os.path.exists(audio_source):
+            audio_source = ""
+        vid_path = movie_path or getattr(state, "movie_path", "")
+        if vid_path and not os.path.exists(vid_path):
+            vid_path = ""
+
+        def _extract_keyframe_b64(vpath: str, t_sec: float, max_dim: int = 480):
+            if not vpath or not os.path.exists(vpath):
+                return None
+            try:
+                import cv2
+                import base64
+                cap = cv2.VideoCapture(vpath)
+                if not cap.isOpened():
+                    return None
+                fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+                cap.set(cv2.CAP_PROP_POS_FRAMES, int(t_sec * fps))
+                ret, frame = cap.read()
+                cap.release()
+                if not ret or frame is None:
+                    return None
+                h, w = frame.shape[:2]
+                if max(h, w) > max_dim:
+                    scale = max_dim / max(h, w)
+                    frame = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+                ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
+                if ret:
+                    return base64.b64encode(buffer).decode('utf-8')
+            except Exception:
+                pass
+            return None
+
         raw_segments = []
         for idx, seg in enumerate(merged_segments):
             dur = round(max(MIN_DUR, seg["end_sec"] - seg["start_sec"]), 2)
             max_chars = max(24, int(dur * 11.0))
+            acoustic_gender = "unknown"
+            if audio_source and os.path.exists(audio_source):
+                try:
+                    from agents.audio_agent import AudioAgent
+                    acoustic_gender = AudioAgent.detect_pitch_gender(audio_source, seg["start_sec"], seg["end_sec"])
+                except Exception:
+                    acoustic_gender = "unknown"
+
             raw_segments.append({
                 "id": idx + 1,
                 "start_sec": seg["start_sec"],
                 "end_sec": seg["end_sec"],
                 "duration_sec": dur,
                 "max_chars": max_chars,
+                "acoustic_gender": acoustic_gender,
                 "text": seg["text"]
             })
 
@@ -198,6 +240,16 @@ class WriterAgent:
             total_batches = math.ceil(total_count / BATCH_SIZE)
             print(f"[*] WriterAgent: Translating Batch {batch_num}/{total_batches} ({len(batch)} dialogues)...")
 
+            # Extract 1-2 representative keyframes per batch for visual diarization & context
+            batch_images = []
+            if vid_path and os.path.exists(vid_path):
+                sample_indices = [len(batch) // 2] if len(batch) <= 5 else [0, len(batch) // 2]
+                for s_i in sample_indices:
+                    mid_t = (batch[s_i]["start_sec"] + batch[s_i]["end_sec"]) / 2.0
+                    b64_frame = _extract_keyframe_b64(vid_path, mid_t)
+                    if b64_frame:
+                        batch_images.append(b64_frame)
+
             batch_prompt = (
                 f"Target Language: {self.language.upper()}\n"
                 f"Movie Title: {state.movie_name}\n"
@@ -206,7 +258,8 @@ class WriterAgent:
                 f"1. STRICT 1:1 TRANSLATION: Translate every single item completely. DO NOT summarize, merge, or drop any sentence.\n"
                 f"2. Translate all character names, places, events, and plot points accurately without leaving anything out.\n"
                 f"3. STRICT CHARACTER BUDGET & DURATION MATCH: Each translation's `narration` MUST STRICTLY STAY UNDER its given `max_chars` limit (Burmese TTS rate is ~11 chars/sec). Keep sentences punchy, concise, and direct so the spoken narration finishes precisely within `duration_sec` seconds! NEVER write long verbose sentences that exceed `max_chars`!\n"
-                f"4. NATURAL CINEMATIC FLOW: Avoid repetitive sentence endings (do NOT repeat identical words like 'ပေါ့', 'ပါ', 'တယ်' in consecutive lines). Write natural storytelling movie recap dialogue.\n\n"
+                f"4. MULTIMODAL SPEAKER DIARIZATION & GENDER ACCURACY: Observe the visual frame context and 'acoustic_gender' hint ('male', 'female', or 'unknown') for each dialogue. Determine the speaker's true 'gender' ('male' or 'female'), 'character' name/role, and 'emotion' ('normal', 'excited', 'angry', 'sad', 'scared', 'intense'). If 'acoustic_gender' is 'female' or the visual frame shows a female speaking, mark gender as 'female'!\n"
+                f"5. NATURAL CINEMATIC FLOW: Avoid repetitive sentence endings (do NOT repeat identical words like 'ပေါ့', 'ပါ', 'တယ်' in consecutive lines). Write natural storytelling movie recap dialogue.\n\n"
                 f"{json.dumps(batch, ensure_ascii=False, indent=2)}\n\n"
                 f"Output a JSON array where each object has: id, narration, start_sec, end_sec, emotion, character, gender (\"male\" or \"female\")."
             )
@@ -221,7 +274,8 @@ class WriterAgent:
                         model_workhorse,
                         temperature=0.3,
                         max_tokens=4096,
-                        response_mime_type="application/json"
+                        response_mime_type="application/json",
+                        images=batch_images if batch_images else None,
                     )
                     batch_translated = self._parse_script(raw_res)
                 except Exception as e:
@@ -258,7 +312,7 @@ class WriterAgent:
                     # Individual line fallback if dropped by Gemini
                     narration = seg["text"]
                     emotion = "normal"
-                    gender = "male"
+                    gender = seg.get("acoustic_gender") if seg.get("acoustic_gender") in ("male", "female") else "male"
                     character = "Narrator"
                     if gemini_key:
                         try:
@@ -282,6 +336,15 @@ class WriterAgent:
                                 narration = clean_line
                         except Exception:
                             pass
+
+                # Record character profile in state for downstream multi-voice & SEO consistency
+                if character and character not in state.speaker_profiles:
+                    state.speaker_profiles[character] = {
+                        "gender": gender,
+                        "emotions": [emotion]
+                    }
+                elif character and emotion not in state.speaker_profiles[character].get("emotions", []):
+                    state.speaker_profiles[character]["emotions"].append(emotion)
 
                 all_translated.append({
                     "scene_id": str(s_id),

@@ -267,6 +267,19 @@ def main():
         help="Source movie audio language for Whisper STT (default: auto, or 'zh', 'en', 'th', 'ko', 'ja')"
     )
     parser.add_argument(
+        "--resume",
+        action="store_true",
+        default=True,
+        help="Resume pipeline execution from the last completed phase checkpoint (default: True)"
+    )
+    parser.add_argument(
+        "--fresh", "--force-restart",
+        dest="fresh",
+        action="store_true",
+        default=False,
+        help="Ignore existing checkpoints and restart the pipeline from Phase 1"
+    )
+    parser.add_argument(
         "--clean",
         action="store_true",
         help="Interactive cleanup menu to delete old source videos or generated outputs"
@@ -323,6 +336,7 @@ def main():
 
     watermark_enabled = False if args.no_watermark else None
     thumb_intro = True if args.thumbnail_intro else (False if args.no_thumbnail_intro else None)
+    should_resume = not args.fresh
 
     # Single video or URL
     chosen_input = (args.input_flag or args.input_source or "").strip()
@@ -360,6 +374,7 @@ def main():
                 video_format=chosen_format,
                 thumbnail_intro=thumb_intro,
                 source_language=args.source_lang,
+                resume=should_resume,
             )
             master.run_pipeline()
         except Exception as e:
@@ -389,6 +404,7 @@ def main():
             video_format=chosen_format,
             thumbnail_intro=thumb_intro,
             source_language=args.source_lang,
+            resume=should_resume,
         ).process_all()
 
     # Batch: URL list
@@ -412,6 +428,7 @@ def main():
             video_format=chosen_format,
             thumbnail_intro=thumb_intro,
             source_language=args.source_lang,
+            resume=should_resume,
         ).process_all(url_list=args.urls, local_paths=[])
     else:
         parser.print_help()

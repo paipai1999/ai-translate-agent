@@ -198,6 +198,7 @@ def pipeline_worker(
     source_language="auto",
     skip_demucs=False,
     detect_scenes=False,
+    resume=True,
 ):
     current_job_id.set(job_id)
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
@@ -283,6 +284,7 @@ def pipeline_worker(
             video_format=video_format,
             thumbnail_intro=thumbnail_intro,
             source_language=source_language,
+            resume=resume,
         )
         master.run_pipeline()
         
@@ -351,6 +353,7 @@ def batch_worker(
     source_language="auto",
     skip_demucs=False,
     detect_scenes=False,
+    resume=True,
 ):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
@@ -424,6 +427,7 @@ def batch_worker(
             video_format=video_format,
             thumbnail_intro=thumbnail_intro,
             source_language=source_language,
+            resume=resume,
         )
         print(f"[*] Batch Mode: Starting batch run for {len(inputs_list)} item(s)...")
         processor.process_all(url_list=urls, local_paths=local_paths)
@@ -493,6 +497,7 @@ class StartRequest(BaseModel):
     source_language: Optional[str] = "auto"
     skip_demucs: Optional[bool] = False
     detect_scenes: Optional[bool] = False
+    resume: Optional[bool] = True
 
 class BatchStartRequest(BaseModel):
     inputs: List[str]
@@ -511,6 +516,7 @@ class BatchStartRequest(BaseModel):
     source_language: Optional[str] = "auto"
     skip_demucs: Optional[bool] = False
     detect_scenes: Optional[bool] = False
+    resume: Optional[bool] = True
 
 class SubtitleConfigRequest(BaseModel):
     preset: str = "box_black"
@@ -660,6 +666,7 @@ async def start_pipeline(req: StartRequest):
             req.source_language or "auto",
             req.skip_demucs or False,
             req.detect_scenes or False,
+            req.resume if req.resume is not None else True,
         ),
         daemon=True,
     )
@@ -715,6 +722,7 @@ async def start_batch_pipeline(req: BatchStartRequest):
             req.source_language or "auto",
             req.skip_demucs or False,
             req.detect_scenes or False,
+            req.resume if req.resume is not None else True,
         ),
         daemon=True,
     )

@@ -25,9 +25,11 @@ class BatchProcessor:
         subtitle_style: str = None,
         thumbnail_intro: bool = None,
         source_language: str = "auto",
+        resume: bool = True,
     ):
         self.movies_folder = movies_folder
         self.skip_completed = skip_completed
+        self.resume = bool(resume)
         self.language = language
         self.source_language = source_language or "auto"
         self.subtitle_mode = subtitle_mode
@@ -133,6 +135,7 @@ class BatchProcessor:
                     subtitle_style=self.subtitle_style,
                     thumbnail_intro=self.thumbnail_intro,
                     source_language=self.source_language,
+                    resume=self.resume,
                 )
                 master.run_pipeline()
                 self.results.append({"movie": movie_name, "status": "SUCCESS"})
