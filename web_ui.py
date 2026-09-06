@@ -28,6 +28,8 @@ from main import check_dependencies
 # Setup FFmpeg path at startup
 try:
     check_dependencies()
+    _enc = detect_hardware_encoder()
+    print(f"🚀 [WebUI Hardware Acceleration] Active Video Encoder: {_enc.get('label', 'Default')} [{_enc.get('codec', 'libx264')}]")
 except Exception as e:
     print(f"[WARN] check_dependencies failed: {e}")
 
