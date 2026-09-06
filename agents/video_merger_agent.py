@@ -385,6 +385,7 @@ class VideoMergerAgent:
                         speed_factor = min(c.duration / available_gap, 1.18)
                         if speed_factor > 1.03:
                             try:
+                                orig_clip_dur = getattr(c, "duration", None)
                                 try:
                                     from moviepy.audio.fx.MultiplySpeed import MultiplySpeed
                                     c = c.with_effects([MultiplySpeed(speed_factor)])
@@ -395,8 +396,10 @@ class VideoMergerAgent:
                                     except Exception:
                                         import moviepy.audio.fx.all as afx
                                         c = afx.speedx(c, speed_factor)
-                                if hasattr(c, "duration") and c.duration:
-                                    c.duration = c.duration / speed_factor
+                                # Ensure duration is only adjusted once (MoviePy usually updates it automatically)
+                                new_clip_dur = getattr(c, "duration", None)
+                                if orig_clip_dur and new_clip_dur and abs(new_clip_dur - orig_clip_dur) < 0.01:
+                                    c.duration = orig_clip_dur / speed_factor
                             except Exception:
                                 pass
 
