@@ -105,20 +105,31 @@ class DownloaderAgent:
 
         ydl_opts['progress_hooks'] = [_dl_progress]
 
-        max_attempts = 3
+        max_attempts = 4
         last_error = None
         for attempt in range(1, max_attempts + 1):
             try:
-                if attempt == 2:
-                    print("[*] DownloaderAgent: Retrying with Pure Mobile Android & mWeb client (Cookies bypassed)...", flush=True)
+                if attempt == 1:
+                    # Attempt 1: Prioritize iOS and Web client with cookies if available
+                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['ios', 'web']}}
+                elif attempt == 2:
+                    # Attempt 2: Pure iOS client without cookies (iOS client bypasses Google Play bot integrity checks)
+                    print("[*] DownloaderAgent: Retrying with Apple iOS client (Bypasses Google Play Bot Integrity checks)...", flush=True)
                     ydl_opts.pop('cookiefile', None)
                     ydl_opts['format'] = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best/18/22'
-                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['android', 'mweb', 'android_vr']}}
+                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['ios']}}
                 elif attempt == 3:
-                    print("[*] DownloaderAgent: Retrying with TV Embedded & Mobile fallback...", flush=True)
+                    # Attempt 3: Web Creator and Mobile Web fallback
+                    print("[*] DownloaderAgent: Retrying with Web Creator & mWeb client...", flush=True)
+                    ydl_opts.pop('cookiefile', None)
+                    ydl_opts['format'] = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best/18/22'
+                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['web_creator', 'mweb', 'android']}}
+                elif attempt == 4:
+                    # Attempt 4: TV Embedded fallback
+                    print("[*] DownloaderAgent: Retrying with TV Embedded fallback...", flush=True)
                     ydl_opts.pop('cookiefile', None)
                     ydl_opts['format'] = 'best/18/22'
-                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['tv_embedded', 'mweb', 'android']}}
+                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['tv_embedded', 'android_vr']}}
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     print(f"[*] DownloaderAgent: Fetching video stream (Attempt {attempt}/{max_attempts})...", flush=True)
