@@ -2,6 +2,8 @@
 
 An autonomous, end-to-end AI agentic pipeline designed to automatically translate movies, short dramas, and anime clips line-by-line into natural **Colloquial Burmese** (or English), synthesize lifelike **Multi-Voice Dubbing (Male/Female)**, and produce viral, ready-to-publish videos equipped with **9:16 Facebook Reels Canvas**, **Burned Myanmar ASS Subtitles**, **Subtitle Blur Protection**, **Custom Watermark Branding**, and **High-CTR Thumbnails**.
 
+> 📖 **v2.2 Detailed Release Notes & Changelog:** View complete architecture updates and benchmark records in [CHANGELOG.md](CHANGELOG.md).
+
 ---
 
 ## ⚡ Cloud GPU One-Click Setup (100% Free Cloud Options)
