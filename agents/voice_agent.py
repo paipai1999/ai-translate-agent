@@ -433,13 +433,19 @@ class VoiceAgent:
                     success = True
                 else:
                     try:
-                        from moviepy.audio.AudioClip import AudioClip
-                    except ImportError:
-                        from moviepy.editor import AudioClip
-                    make_frame = lambda t: [0, 0]
-                    silent_clip = AudioClip(make_frame, duration=dur, fps=44100)
-                    silent_clip.write_audiofile(output_file, fps=44100, logger=None)
-                    success = True
+                        import soundfile as sf
+                        import numpy as np
+                        sf.write(output_file, np.zeros(int(dur * 44100), dtype=np.float32), 44100)
+                        success = True
+                    except Exception:
+                        try:
+                            from moviepy.audio.AudioClip import AudioClip
+                        except ImportError:
+                            from moviepy.editor import AudioClip
+                        make_frame = lambda t: [0, 0]
+                        silent_clip = AudioClip(make_frame, duration=dur, fps=44100)
+                        silent_clip.write_audiofile(output_file, fps=44100, logger=None)
+                        success = True
             except Exception as e:
                 print(f"[ERROR] VoiceAgent: Fallback silent audio failed: {e}")
                 return False
@@ -447,9 +453,23 @@ class VoiceAgent:
         # --- EXACT SYNC: Pitch-Preserving FFmpeg atempo Stretch ---
         if target_dur is not None and os.path.exists(output_file):
             try:
-                clip = AudioFileClip(output_file)
-                raw_dur = clip.duration
-                clip.close()
+                raw_dur = 0.0
+                try:
+                    import soundfile as sf
+                    raw_dur = float(sf.info(output_file).duration)
+                except Exception:
+                    try:
+                        import wave
+                        with wave.open(output_file, 'rb') as wf:
+                            raw_dur = float(wf.getnframes()) / float(wf.getframerate())
+                    except Exception:
+                        try:
+                            from moviepy.editor import AudioFileClip
+                            clip = AudioFileClip(output_file)
+                            raw_dur = clip.duration
+                            clip.close()
+                        except Exception:
+                            raw_dur = 0.0
 
                 if raw_dur > 0:
                     stretch_ratio = target_dur / raw_dur

@@ -1,6 +1,7 @@
 import os
 import sys
 import shutil
+import subprocess
 from brain.memory import MovieState
 import brain.config as cfg
 
@@ -144,6 +145,127 @@ def detect_hardware_encoder() -> dict:
     _DETECTED_ENCODER = chosen
     return chosen
 
+def _get_audio_duration(file_path: str) -> float:
+    """Fast sub-millisecond audio duration check using soundfile, wave, or ffprobe (bypasses MoviePy)."""
+    if not file_path or not os.path.exists(file_path):
+        return 0.0
+    try:
+        import soundfile as sf
+        return float(sf.info(file_path).duration)
+    except Exception:
+        pass
+    if file_path.lower().endswith('.wav'):
+        try:
+            import wave
+            with wave.open(file_path, 'rb') as wf:
+                return float(wf.getnframes()) / float(wf.getframerate())
+        except Exception:
+            pass
+    try:
+        ffmpeg_bin = _get_ffmpeg_bin()
+        res = subprocess.run(
+            [ffmpeg_bin, "-i", file_path, "-f", "null", "-"],
+            capture_output=True, text=True, timeout=5
+        )
+        import re
+        m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", res.stderr or "")
+        if m:
+            return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+    except Exception:
+        pass
+    return 0.0
+
+def _get_video_info(video_path: str) -> dict:
+    """Fast video metadata extraction using OpenCV or FFprobe in 10ms without MoviePy."""
+    info = {"duration": 0.0, "width": 1920, "height": 1080, "fps": 24.0}
+    if not video_path or not os.path.exists(video_path):
+        return info
+    try:
+        import cv2
+        cap = cv2.VideoCapture(video_path)
+        if cap.isOpened():
+            fps = float(cap.get(cv2.CAP_PROP_FPS) or 24.0)
+            fc = float(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0.0)
+            dur = fc / fps if fps > 0 else 0.0
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 1920)
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 1080)
+            cap.release()
+            info["duration"] = max(0.0, dur)
+            info["width"] = w
+            info["height"] = h
+            info["fps"] = fps
+            return info
+    except Exception:
+        pass
+    try:
+        ffmpeg_bin = _get_ffmpeg_bin()
+        res = subprocess.run(
+            [ffmpeg_bin, "-i", video_path, "-f", "null", "-"],
+            capture_output=True, text=True, timeout=5
+        )
+        import re
+        m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", res.stderr or "")
+        if m:
+            info["duration"] = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
+        dim = re.search(r",\s*(\d{3,4})x(\d{3,4})", res.stderr or "")
+        if dim:
+            info["width"] = int(dim.group(1))
+            info["height"] = int(dim.group(2))
+    except Exception:
+        pass
+    return info
+
+def _has_audio_stream(video_path: str) -> bool:
+    """Checks if a video file contains an audio stream using FFmpeg."""
+    if not video_path or not os.path.exists(video_path):
+        return False
+    try:
+        ffmpeg_bin = _get_ffmpeg_bin()
+        res = subprocess.run(
+            [ffmpeg_bin, "-i", video_path],
+            capture_output=True, text=True, timeout=5
+        )
+        return "Audio:" in (res.stderr or "")
+    except Exception:
+        return False
+
+def _assemble_voiceover_track(clips_with_timing: list, total_duration: float, output_path: str, target_sr: int = 44100) -> str:
+    """Stitches discrete speech clips into a contiguous PCM WAV buffer at C-speed in ~2 seconds."""
+    import math
+    import numpy as np
+    total_samples = max(int(math.ceil(total_duration * target_sr)), target_sr)
+    vo_buffer = np.zeros(total_samples, dtype=np.float32)
+
+    for fpath, place_time, dur in clips_with_timing:
+        if not fpath or not os.path.exists(fpath):
+            continue
+        try:
+            import soundfile as sf
+            data, c_sr = sf.read(fpath)
+        except Exception:
+            continue
+
+        if data.ndim > 1:
+            data = np.mean(data, axis=1)
+
+        if c_sr != target_sr and len(data) > 0:
+            try:
+                import scipy.signal
+                num_target = int(round(len(data) * float(target_sr) / float(c_sr)))
+                data = scipy.signal.resample(data, num_target).astype(np.float32)
+            except Exception:
+                pass
+
+        start_idx = int(place_time * target_sr)
+        end_idx = min(start_idx + len(data), total_samples)
+        if start_idx < total_samples and end_idx > start_idx:
+            vo_buffer[start_idx:end_idx] = data[:end_idx - start_idx]
+
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    import soundfile as sf
+    sf.write(output_path, vo_buffer, target_sr, subtype='PCM_16')
+    return output_path
+
 class VideoMergerAgent:
     def __init__(
         self,
@@ -158,16 +280,6 @@ class VideoMergerAgent:
         self.resolution = str(resolution or "1080p").lower()
 
     def merge_video(self, state, movie_path: str):
-        # Lazy import moviepy so the module can still be loaded even if moviepy is missing
-        try:
-            from moviepy.editor import VideoFileClip, AudioFileClip
-        except ImportError:
-            try:
-                from moviepy import VideoFileClip, AudioFileClip
-            except ImportError:
-                print("[ERROR] VideoMerger: moviepy is not installed. Run: pip install moviepy")
-                return state
-
         output_dir = os.path.join(self.output_dir, state.project_dir)
         os.makedirs(output_dir, exist_ok=True)
         final_output = os.path.join(output_dir, "final_recap.mp4")
@@ -189,27 +301,27 @@ class VideoMergerAgent:
 
         print(f"[*] VideoMerger: Starting video merge process (Copyright-Safe Mode: {copyright_enabled})...")
 
-        # --- LOAD AUDIO FIRST TO CALCULATE DURATION ---
-        audio_clips = []
+        # ── 1. Fast Video Metadata Extraction (10ms, Zero RAM) ───────────────
+        v_info = _get_video_info(movie_path)
+        video_dur = v_info.get("duration", 0.0)
+        video_w = v_info.get("width", 1920)
+        video_h = v_info.get("height", 1080)
+        video_fps = v_info.get("fps", 24.0)
+        print(f"[*] VideoMerger: Loaded video stream metadata ({video_dur:.1f}s, size: {video_w}x{video_h}, fps: {video_fps:.1f}).")
+
+        # ── 2. Discover Speech Clips & Fast Duration Extraction ───────────────
+        audio_items = []
         script_blocks = getattr(state, "generated_script", []) or []
-        script_blocks_with_audio = []
-        
         voiceover_dir = os.path.join(output_dir, "voiceover")
         if os.path.exists(voiceover_dir):
-            # Sort script blocks chronologically first to ensure correct scene flow
             try:
                 script_blocks.sort(key=lambda x: float(x.get("start_sec") or 0.0) if isinstance(x, dict) else 0.0)
             except Exception as e:
                 print(f"[WARN] Failed to sort script blocks: {e}")
 
-            # BUG-H1 Fix: Use enumerate instead of list.index(b) to avoid O(n²) and
-            # wrong index on duplicate-content dict blocks.
             for sorted_idx, b in enumerate(script_blocks):
                 if not isinstance(b, dict):
                     continue
-                # VoiceAgent saves audio files using enumerate index (0,1,2...) of generated_script
-                # generated_script is already sorted chronologically before VoiceAgent runs
-                # So we MUST use the same chronological enumerate index here to match filenames
                 fname = f"scene_{(sorted_idx+1):04d}.mp3"
                 fpath = os.path.join(voiceover_dir, fname)
                 if not os.path.exists(fpath):
@@ -218,24 +330,490 @@ class VideoMergerAgent:
                             fpath = os.path.join(root, fname)
                             break
                 if os.path.exists(fpath):
-                    try:
-                        audio_clips.append(AudioFileClip(fpath))
-                        script_blocks_with_audio.append(b)
-                    except Exception as e:
-                        print(f"[WARN] VideoMerger: Failed to load voiceover {fname}: {e}")
+                    dur = _get_audio_duration(fpath)
+                    if dur > 0:
+                        audio_items.append((sorted_idx, fpath, dur, b))
+                    else:
+                        print(f"[WARN] VideoMerger: Audio file {fname} is empty or unreadable.")
                 else:
                     print(f"[WARN] VideoMerger: Missing audio file {fname} for script block.")
 
-                    
-        # Update script_blocks to only include those that have successful audio
-        script_blocks = script_blocks_with_audio
+        # ── 3. Absolute Scene-Anchor Sync Engine ──────────────────────────────
+        subtitle_timings = []
+        clips_with_timing = []
+        n_blocks = len(audio_items)
+        curr_t = 0.0
+        if n_blocks > 0:
+            print(f"[*] VideoMerger: Laying out {n_blocks} audio blocks across synced {video_dur:.1f}s video...")
+            has_exact_timestamps = (
+                len(script_blocks) > 0
+                and isinstance(script_blocks[0], dict)
+                and "start_sec" in script_blocks[0]
+            )
+            starts = []
+            if has_exact_timestamps:
+                print("[*] VideoMerger: Using EXACT Gemini timestamps for perfect audio sync.")
+                for _, _, _, b in audio_items:
+                    s = float(b.get("start_sec", 0.0))
+                    if video_dur > 0 and s > video_dur - 1.0:
+                        s = max(0.0, video_dur - 2.0)
+                    starts.append(s)
+            else:
+                print("[WARN] No exact timestamps. Falling back to proportional dubbing mode.")
+                starts = [0.2 + (idx / max(n_blocks - 1, 1)) * max(1.0, video_dur - 0.4) for idx in range(n_blocks)]
+
+            for idx, (s_idx, fpath, dur, b) in enumerate(audio_items):
+                orig_start = starts[idx]
+                place_time = max(curr_t, orig_start)
+                if video_dur > 0 and place_time >= video_dur:
+                    print(f"[*] VideoMerger: Audio clip {idx+1} falls past video duration ({video_dur:.1f}s), trimming remaining clips.")
+                    break
+
+                clips_with_timing.append((fpath, place_time, dur))
+                curr_t = place_time + dur
+
+                narration_text = b.get("narration", "").strip() if isinstance(b, dict) else ""
+                subtitle_timings.append((place_time, dur, narration_text))
+
+        state.subtitle_timings = subtitle_timings
+
+        # ── 4. Linear PCM Voiceover Track Assembly in C-speed (~2s) ───────────
+        temp_dir = os.path.abspath("temp")
+        os.makedirs(temp_dir, exist_ok=True)
+        import re
+        safe_id = re.sub(r'[^\w\-]', '_', os.path.splitext(os.path.basename(movie_path))[0])
+        persistent_clean_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(final_output))[0]}_clean.mp4")
+        clean_video_path = os.path.join(temp_dir, f"{safe_id}_clean.mp4")
+
+        assembled_vo_path = os.path.join(temp_dir, f"{safe_id}_vo_track.wav")
+        has_voiceover = False
+        if clips_with_timing:
+            print(f"[*] VideoMerger: Fast-assembling linear voiceover PCM track ({len(clips_with_timing)} clips) across {video_dur:.1f}s in C-memory...")
+            try:
+                target_len = max(video_dur, curr_t)
+                _assemble_voiceover_track(clips_with_timing, target_len, assembled_vo_path)
+                if os.path.exists(assembled_vo_path) and os.path.getsize(assembled_vo_path) > 1000:
+                    has_voiceover = True
+                    print("[OK] VideoMerger: Voiceover linear PCM track assembled in ~2 seconds.")
+            except Exception as vo_err:
+                print(f"[WARN] VideoMerger: Voiceover assembly notice: {vo_err}")
+
+        # ── 5. Background Audio Source Determination ──────────────────────────
+        has_no_vocals = False
+        base_candidates = [
+            getattr(state, "movie_name", None),
+            os.path.splitext(os.path.basename(movie_path))[0],
+        ]
+        no_vocals_path = None
+        for b_name in base_candidates:
+            if not b_name:
+                continue
+            cand_path = os.path.join("temp", state.project_dir, "audio", "htdemucs", b_name, "no_vocals.wav")
+            if os.path.exists(cand_path):
+                no_vocals_path = cand_path
+                has_no_vocals = True
+                break
+
+        bg_source_type = "none"
+        bg_audio_file = None
+
+        if has_no_vocals and not getattr(state, "skip_demucs", False):
+            bg_source_type = "demucs"
+            bg_audio_file = os.path.abspath(no_vocals_path)
+            print(f"[*] VideoMerger: Found Demucs no_vocals.wav (SFX Only). Using as background audio.")
+        elif getattr(state, "skip_demucs", False) or not has_no_vocals:
+            print("[*] VideoMerger: Vocal separation bypassed / skip-demucs -> Muting original audio (zero English voice bleed).")
+            bgm_cfg = config_data.get("bgm", {})
+            bgm_folder = bgm_cfg.get("folder", "assets/bgm")
+            bgm_track = None
+            if os.path.exists(bgm_folder):
+                candidates = [f for f in os.listdir(bgm_folder) if f.endswith(('.wav', '.mp3'))]
+                for preferred in ["scifi_tension.wav", "dark_suspense.wav", "action_pulse.wav"]:
+                    if preferred in candidates:
+                        bgm_track = os.path.join(bgm_folder, preferred)
+                        break
+                if not bgm_track and candidates:
+                    bgm_track = os.path.join(bgm_folder, candidates[0])
+
+            if bgm_track and os.path.exists(bgm_track):
+                bg_source_type = "bgm"
+                bg_audio_file = os.path.abspath(bgm_track)
+                print(f"[*] VideoMerger: Adding cinematic BGM -> {os.path.basename(bgm_track)}")
+            else:
+                bg_source_type = "none"
+        else:
+            if _has_audio_stream(movie_path):
+                bg_source_type = "orig"
+            else:
+                bg_source_type = "none"
+
+        # ── 6. Subtitles Preparation ──────────────────────────────────────────
+        sub_cfg = config_data.get("subtitle_overlay", {})
+        burn_subs = True
+        if self.subtitle_mode in ["none", "off", "no"]:
+            burn_subs = False
+        elif self.subtitle_mode in ["burn", "hardsub", "both", "auto"]:
+            burn_subs = True
+
+        target_ass_path = None
+        if subtitle_timings:
+            self._export_standalone_srt(subtitle_timings, output_dir)
+            if burn_subs:
+                target_ass_path = os.path.join(temp_dir, f"myanmar_subs_{safe_id}.ass")
+                sub_preset = getattr(state, "subtitle_style_preset", None) or sub_cfg.get("style_preset", "box_black")
+                font_name = (sub_cfg.get("font_name") or "Myanmar Text") if sys.platform == "win32" else "Padauk"
+                print(f"[*] VideoMerger: Preparing Myanmar ASS Subtitles (Style Preset: {sub_preset})...")
+                self._write_ass(
+                    timings       = subtitle_timings,
+                    ass_path      = target_ass_path,
+                    font_name     = font_name,
+                    font_size     = int(sub_cfg.get("font_size", 40)),
+                    bold          = bool(sub_cfg.get("bold", True)),
+                    border_style  = int(sub_cfg.get("border_style", 3)),
+                    outline_width = int(sub_cfg.get("outline_width", 3)),
+                    margin_bottom = int(sub_cfg.get("margin_bottom", 50)),
+                    max_chars     = int(sub_cfg.get("max_chars_per_line", 28)),
+                    preset        = sub_preset,
+                )
+            else:
+                print("[*] VideoMerger: Subtitle Mode is 'Voiceover Only' (Hardsub disabled). Exported standalone .srt subtitles.")
+
+        # ── 7. Watermark / Brand Overlay ──────────────────────────────────────
+        wm_cfg = config_data.get("watermark", {})
+        wm_override = getattr(state, "watermark_override", {}) or {}
+        wm_enabled = wm_override.get("enabled", wm_cfg.get("enabled", False))
+        is_reels_only = getattr(state, "video_format", "16:9") == "9:16"
+        wm_png = None
+        wm_pos = "bottom_left"
+        wm_margin = 25
+        if wm_enabled and not is_reels_only:
+            wm_text = wm_override.get("text") or wm_cfg.get("text", "PAI AI Movie Translate")
+            wm_opacity = float(wm_override.get("opacity") if wm_override.get("opacity") is not None else wm_cfg.get("opacity", 0.85))
+            wm_font_size = int(wm_override.get("font_size") or wm_cfg.get("font_size", 28))
+            wm_margin = int(wm_override.get("margin") or wm_cfg.get("margin", 25))
+            wm_pos = str(wm_override.get("position") or wm_cfg.get("position", "bottom_left")).lower()
+            wm_style = str(wm_override.get("style") or wm_cfg.get("style", "badge")).lower()
+            wm_logo_path = wm_override.get("logo_path") or wm_cfg.get("logo_path", "")
+            try:
+                wm_png = self._create_watermark_image(
+                    text=wm_text,
+                    font_size=wm_font_size,
+                    opacity=wm_opacity,
+                    style=wm_style,
+                    logo_path=wm_logo_path
+                )
+                if not (wm_png and os.path.exists(wm_png)):
+                    wm_png = None
+            except Exception as e:
+                print(f"[WARN] VideoMerger: Failed to apply watermark: {e}")
+                wm_png = None
+
+        # ── 8. Thumbnail Intro & Vision Subtitle Blur ─────────────────────────
+        thumb_intro_cfg = config_data.get("thumbnail_intro", {})
+        thumb_intro_enabled = getattr(state, "thumbnail_intro_enabled", None)
+        if thumb_intro_enabled is None:
+            thumb_intro_enabled = thumb_intro_cfg.get("enabled", False)
+        thumb_duration = float(thumb_intro_cfg.get("duration_sec", 3.0))
+        thumbnail_path = os.path.join(output_dir, "thumbnail.jpg")
+        has_thumb_intro = thumb_intro_enabled and os.path.exists(thumbnail_path)
+
+        user_sub_mode = getattr(state, "subtitle_mode", "auto") if state is not None else "auto"
+        user_sub_mode = user_sub_mode or "auto"
+        do_blur = blur_enabled and (blur_strength > 0) and (user_sub_mode != "no")
+        start_y_pct, height_pct = 0.82, 0.18
+        subtitle_found = False
+        if do_blur:
+            if user_sub_mode == "yes":
+                y, h, found = self._detect_subtitle_region_with_vision(movie_path, state=state)
+                start_y_pct = y if found else 0.82
+                height_pct = h if found else 0.18
+                subtitle_found = True
+            else:
+                cache = getattr(state, "subtitle_detection", None) if state is not None else None
+                if cache and cache.get("video_path") == os.path.abspath(movie_path):
+                    start_y_pct = float(cache.get("start_y_pct", start_y_pct))
+                    height_pct = float(cache.get("height_pct", height_pct))
+                    subtitle_found = bool(cache.get("has_subtitles", False))
+                else:
+                    start_y_pct, height_pct, subtitle_found = self._detect_subtitle_region_with_vision(movie_path, state=state)
+                if state is not None:
+                    state.subtitle_detection = {
+                        "video_path": os.path.abspath(movie_path),
+                        "has_subtitles": subtitle_found,
+                        "start_y_pct": start_y_pct,
+                        "height_pct": height_pct,
+                    }
+            if not subtitle_found:
+                do_blur = False
+
+        # ── 9. Pure FFmpeg Single-Pass Video & Audio Compositing ──────────────
+        single_pass_success = False
+        ffmpeg_bin = _get_ffmpeg_bin()
+
+        if ffmpeg_bin and not has_thumb_intro:
+            enc_info = detect_hardware_encoder()
+            codec = enc_info.get("codec", "libx264")
+            preset = enc_info.get("preset", "faster")
+            quality_args = ["-b:v", "6M", "-maxrate", "9M", "-bufsize", "12M"] if enc_info.get("type") == "gpu" else ["-crf", "20"]
+            print(f"[*] VideoMerger (Single-Pass Engine): Assembling unified Filtergraph using {enc_info.get('label', codec)} [{codec}]...")
+
+            sp_inputs = ["-i", os.path.abspath(movie_path)]
+            next_idx = 1
+
+            vo_input_idx = None
+            if has_voiceover:
+                sp_inputs.extend(["-i", os.path.abspath(assembled_vo_path)])
+                vo_input_idx = next_idx
+                next_idx += 1
+
+            bg_input_idx = None
+            if bg_source_type in ["demucs", "bgm"] and bg_audio_file and os.path.exists(bg_audio_file):
+                sp_inputs.extend(["-i", os.path.abspath(bg_audio_file)])
+                bg_input_idx = next_idx
+                next_idx += 1
+
+            wm_input_idx = None
+            if wm_png and os.path.exists(wm_png):
+                sp_inputs.extend(["-i", os.path.abspath(wm_png)])
+                wm_input_idx = next_idx
+                next_idx += 1
+
+            # --- VIDEO FILTERGRAPH ---
+            flt_parts = [
+                "[0:v]crop=w='trunc(iw/2)*2':h='trunc(ih/2)*2'[v_base]"
+            ]
+            last_v = "[v_base]"
+
+            if copyright_enabled:
+                mirror_enabled = copyright_cfg.get("mirror_video", False)
+                if mirror_enabled:
+                    flt_parts.append(f"{last_v}hflip[v_flipped]")
+                    last_v = "[v_flipped]"
+                resize_factor = float(copyright_cfg.get("resize_factor", 1.02))
+                if resize_factor != 1.0:
+                    flt_parts.append(f"{last_v}scale=iw*{resize_factor}:ih*{resize_factor},crop=iw/{resize_factor}:ih/{resize_factor}[v_resized]")
+                    last_v = "[v_resized]"
+
+            if do_blur and subtitle_found:
+                r = blur_strength
+                blur_seg = (
+                    f"{last_v}split=2[v_orig][v_sub_crop];"
+                    f"[v_sub_crop]crop=iw:'trunc(ih*{height_pct:.3f}/2)*2':0:'trunc(ih*{start_y_pct:.3f}/2)*2',"
+                    f"boxblur=luma_radius={r}:luma_power=2:chroma_radius={max(1,r//2)}:chroma_power=2[v_blurred_sub];"
+                    f"[v_orig][v_blurred_sub]overlay=0:'trunc(H*{start_y_pct:.3f}/2)*2'[v_blended]"
+                )
+                flt_parts.append(blur_seg)
+                last_v = "[v_blended]"
+
+            if color_enabled:
+                cg_str = (
+                    f"{last_v}eq=brightness={cg_brightness:.3f}:contrast={cg_contrast:.3f}:saturation={cg_saturation:.3f},"
+                    f"noise=alls=2:allf=t,vignette=PI/4[v_graded]"
+                )
+                flt_parts.append(cg_str)
+                last_v = "[v_graded]"
+
+            if wm_input_idx is not None:
+                if wm_pos == "bottom_left":
+                    pos_str = f"{wm_margin}:main_h-overlay_h-{wm_margin}"
+                elif wm_pos == "bottom_right":
+                    pos_str = f"main_w-overlay_w-{wm_margin}:main_h-overlay_h-{wm_margin}"
+                elif wm_pos == "top_left":
+                    pos_str = f"{wm_margin}:{wm_margin}"
+                elif wm_pos == "top_center":
+                    pos_str = f"(main_w-overlay_w)/2:{wm_margin}"
+                else:
+                    pos_str = f"main_w-overlay_w-{wm_margin}:{wm_margin}"
+                flt_parts.append(f"{last_v}[{wm_input_idx}:v]overlay={pos_str}[v_clean]")
+                last_v = "[v_clean]"
+
+            flt_parts.append(f"{last_v}split=2[v_for_sub][v_for_clean]")
+
+            has_ass = bool(burn_subs and target_ass_path and os.path.exists(target_ass_path))
+            ass_dir = None
+            if has_ass:
+                ass_basename = os.path.basename(target_ass_path)
+                ass_dir = os.path.dirname(os.path.abspath(target_ass_path))
+                flt_parts.append(f"[v_for_sub]ass={ass_basename}[v_subbed]")
+                recap_v_stream = "[v_subbed]"
+            else:
+                recap_v_stream = "[v_for_sub]"
+
+            # --- AUDIO FILTERGRAPH (Dynamic Audio Ducking & Compositing) ---
+            duck_cfg = config_data.get("audio_ducking", {})
+            duck_enabled = duck_cfg.get("enabled", True)
+            ambient_vol = float(duck_cfg.get("ambient_volume", 0.35))
+            target_dur_str = f"{video_dur:.2f}" if video_dur > 0 else "600.00"
+
+            if vo_input_idx is not None and (bg_input_idx is not None or bg_source_type == "orig"):
+                if bg_source_type == "bgm":
+                    flt_parts.append(f"[{bg_input_idx}:a]aloop=loop=-1:size=2e+09,atrim=0:{target_dur_str},volume={ambient_vol:.2f}[bg_raw]")
+                elif bg_source_type == "demucs":
+                    flt_parts.append(f"[{bg_input_idx}:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f}[bg_raw]")
+                else:
+                    flt_parts.append(f"[0:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f}[bg_raw]")
+
+                if duck_enabled:
+                    flt_parts.append(
+                        f"[bg_raw][{vo_input_idx}:a]sidechaincompress=threshold=0.08:ratio=8:attack=100:release=400[ducked_bg]"
+                    )
+                    flt_parts.append(
+                        f"[ducked_bg][{vo_input_idx}:a]amix=inputs=2:duration=first:dropout_transition=0,asplit=2[a_master1][a_master2]"
+                    )
+                else:
+                    flt_parts.append(
+                        f"[bg_raw][{vo_input_idx}:a]amix=inputs=2:duration=first:dropout_transition=0,asplit=2[a_master1][a_master2]"
+                    )
+            elif vo_input_idx is not None:
+                flt_parts.append(f"[{vo_input_idx}:a]asplit=2[a_master1][a_master2]")
+            elif bg_input_idx is not None or bg_source_type == "orig":
+                if bg_source_type == "bgm":
+                    flt_parts.append(f"[{bg_input_idx}:a]aloop=loop=-1:size=2e+09,atrim=0:{target_dur_str},volume={ambient_vol:.2f},asplit=2[a_master1][a_master2]")
+                elif bg_source_type == "demucs":
+                    flt_parts.append(f"[{bg_input_idx}:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f},asplit=2[a_master1][a_master2]")
+                else:
+                    flt_parts.append(f"[0:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f},asplit=2[a_master1][a_master2]")
+            else:
+                flt_parts.append(f"aevalsrc=0:d={target_dur_str},asplit=2[a_master1][a_master2]")
+
+            filter_complex_str = ";".join(flt_parts)
+
+            dur_sec = video_dur if video_dur > 0 else (getattr(state, "duration_sec", 0.0) if state else 0.0)
+            dyn_timeout = max(1200, int((dur_sec or 600.0) * 2.5))
+
+            sp_cmd = [
+                ffmpeg_bin, "-y",
+                *sp_inputs,
+                "-filter_complex", filter_complex_str,
+                "-map", recap_v_stream, "-map", "[a_master1]",
+                "-c:v", codec, "-preset", preset, *quality_args,
+                "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                "-c:a", "aac", "-b:a", "192k",
+                os.path.abspath(final_output),
+                "-map", "[v_for_clean]", "-map", "[a_master2]",
+                "-c:v", codec, "-preset", preset, *quality_args,
+                "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                "-c:a", "aac", "-b:a", "192k",
+                os.path.abspath(persistent_clean_path),
+            ]
+
+            print(f"[*] VideoMerger (Single-Pass Engine): Rendering both Recap & Clean Canvas simultaneously...")
+            try:
+                res = subprocess.run(sp_cmd, cwd=ass_dir, capture_output=True, text=True, timeout=dyn_timeout)
+                if res.returncode == 0 and os.path.exists(final_output) and os.path.getsize(final_output) > 1000:
+                    single_pass_success = True
+                    try:
+                        shutil.copy2(persistent_clean_path, clean_video_path)
+                    except Exception:
+                        pass
+                    state.clean_video_path = persistent_clean_path
+                    print("🚀 [OK] VideoMerger: Pure FFmpeg Single-Pass Video & Audio Compositing COMPLETE!")
+                else:
+                    err_snippet = res.stderr[-500:] if res.stderr else "Unknown error"
+                    print(f"[WARN] VideoMerger: Single-pass hardware render failed ({err_snippet}). Retrying with CPU libx264...")
+                    if codec != "libx264":
+                        fb_cmd = list(sp_cmd)
+                        fb_cmd = [c.replace(codec, "libx264") if c == codec else c for c in fb_cmd]
+                        fb_cmd = [c.replace(preset, "superfast") if c == preset else c for c in fb_cmd]
+                        if "-b:v" in fb_cmd:
+                            b_idx = fb_cmd.index("-b:v")
+                            fb_cmd = fb_cmd[:b_idx] + ["-crf", "20"] + fb_cmd[b_idx+6:]
+                        res_cpu = subprocess.run(fb_cmd, cwd=ass_dir, capture_output=True, text=True, timeout=dyn_timeout)
+                        if res_cpu.returncode == 0 and os.path.exists(final_output) and os.path.getsize(final_output) > 1000:
+                            single_pass_success = True
+                            try:
+                                shutil.copy2(persistent_clean_path, clean_video_path)
+                            except Exception:
+                                pass
+                            state.clean_video_path = persistent_clean_path
+                            print("🚀 [OK] VideoMerger: Pure FFmpeg Single-Pass CPU Video & Audio Compositing COMPLETE!")
+            except Exception as spe:
+                print(f"[WARN] Single-pass execution exception: {spe}")
+
+        # ── 10. Fallback Legacy Path (Only if Single-Pass failed or Thumbnail Intro active) ──
+        if not single_pass_success:
+            return self._legacy_moviepy_merge(
+                state, movie_path, output_dir, final_output, persistent_clean_path, clean_video_path,
+                config_data, burn_subs, target_ass_path, subtitle_timings
+            )
+
+        return state
+
+    def _legacy_moviepy_merge(
+        self,
+        state,
+        movie_path: str,
+        output_dir: str,
+        final_output: str,
+        persistent_clean_path: str,
+        clean_video_path: str,
+        config_data: dict,
+        burn_subs: bool = True,
+        target_ass_path: str = None,
+        subtitle_timings: list = None,
+    ):
+        """Legacy MoviePy Multi-Pass merge safety net (used only if FFmpeg Single-Pass fails)."""
+        print("[*] VideoMerger: Falling back to Legacy Multi-Pass Export...")
+        try:
+            from moviepy.editor import VideoFileClip, AudioFileClip, CompositeAudioClip
+        except ImportError:
+            try:
+                from moviepy import VideoFileClip, AudioFileClip, CompositeAudioClip
+            except ImportError:
+                print("[ERROR] VideoMerger: moviepy is not installed for legacy fallback. Run: pip install moviepy")
+                return state
+
+        main_video = None
+        sfx_only_audio = None
+        intro_clip = None
+        final_clip = None
+        audio_clips = []
+        positioned_clips = []
 
         try:
-            # Load original video stream
-            main_video = VideoFileClip(movie_path)
-            print(f"[*] VideoMerger: Loaded original video stream untouched ({main_video.duration:.1f}s, size: {main_video.w}x{main_video.h}).")
+            copyright_cfg   = config_data.get("copyright_protection", {})
+            copyright_enabled = copyright_cfg.get("enabled", True)
+            blur_cfg        = config_data.get("subtitle_blur", {})
+            blur_enabled    = blur_cfg.get("enabled", True)
+            if self.subtitle_blur_override:
+                blur_enabled = True
+            blur_region_pct = float(blur_cfg.get("region_height_pct", 0.18))
+            blur_strength   = int(blur_cfg.get("blur_strength", 18))
+            color_cfg       = config_data.get("color_grading", {})
+            color_enabled   = color_cfg.get("enabled", True)
+            cg_brightness   = float(color_cfg.get("brightness", 0.03))
+            cg_contrast     = float(color_cfg.get("contrast", 1.02))
+            cg_saturation   = float(color_cfg.get("saturation", 1.08))
 
-            # --- REPLACE ORIGINAL AUDIO WITH NO_VOCALS (SFX ONLY) IF AVAILABLE ---
+            voiceover_dir = os.path.join(output_dir, "voiceover")
+            script_blocks = getattr(state, "generated_script", []) or []
+            script_blocks_with_audio = []
+            if os.path.exists(voiceover_dir):
+                try:
+                    script_blocks.sort(key=lambda x: float(x.get("start_sec") or 0.0) if isinstance(x, dict) else 0.0)
+                except Exception as e:
+                    print(f"[WARN] Failed to sort script blocks: {e}")
+
+                for sorted_idx, b in enumerate(script_blocks):
+                    if not isinstance(b, dict):
+                        continue
+                    fname = f"scene_{(sorted_idx+1):04d}.mp3"
+                    fpath = os.path.join(voiceover_dir, fname)
+                    if not os.path.exists(fpath):
+                        for root, _, files in os.walk(voiceover_dir):
+                            if fname in files:
+                                fpath = os.path.join(root, fname)
+                                break
+                    if os.path.exists(fpath):
+                        try:
+                            audio_clips.append(AudioFileClip(fpath))
+                            script_blocks_with_audio.append(b)
+                        except Exception as e:
+                            print(f"[WARN] VideoMerger: Failed to load voiceover {fname}: {e}")
+
+            script_blocks = script_blocks_with_audio
+            main_video = VideoFileClip(movie_path)
+
             has_no_vocals = False
             base_candidates = [
                 getattr(state, "movie_name", None),
@@ -252,7 +830,6 @@ class VideoMergerAgent:
 
             if no_vocals_path and os.path.exists(no_vocals_path):
                 has_no_vocals = True
-                print(f"[*] VideoMerger: Found Demucs no_vocals.wav (SFX Only). Replacing original audio to remove dialogue...")
                 try:
                     sfx_only_audio = AudioFileClip(no_vocals_path)
                     if hasattr(main_video, "with_audio"):
@@ -261,74 +838,47 @@ class VideoMergerAgent:
                         main_video = main_video.set_audio(sfx_only_audio)
                 except Exception as e:
                     print(f"[WARN] VideoMerger: Failed to load no_vocals.wav: {e}")
-            else:
-                print(f"[WARN] VideoMerger: no_vocals.wav not found in Demucs cache. Will use original mixed audio.")
 
-            # H.264 requires width and height to be divisible by 2 (even numbers)
             w, h = main_video.size
             new_w = w if w % 2 == 0 else w - 1
             new_h = h if h % 2 == 0 else h - 1
             if (new_w, new_h) != (w, h):
-                print(f"[*] VideoMerger: Fixing odd video dimensions ({w}x{h} -> {new_w}x{new_h}) for H.264 encoder compatibility...")
                 try:
                     try:
-                        # MoviePy v2
                         from moviepy.video.fx.Crop import Crop
                         main_video = main_video.with_effects([Crop(x1=0, y1=0, x2=new_w, y2=new_h)])
                     except ImportError:
-                        # MoviePy v1
                         import moviepy.video.fx.all as vfx
                         main_video = main_video.fx(vfx.crop, x1=0, y1=0, x2=new_w, y2=new_h)
                 except Exception as e:
                     print(f"[WARN] Failed to crop odd dimensions: {e}")
 
-            # 1. Video remains UNTOUCHED
-            # We strictly keep the source video duration and speed identical to original
-            # No MultiplySpeed applied.
-            if not audio_clips:
-                print("[WARN] VideoMerger: No audio found.")
-
             if copyright_enabled:
-                print("[*] VideoMerger (Copyright-Safe): Applying Fair Use anti-copyright visual transformations...")
                 effects = []
-
-                # Default to False to preserve natural movie orientation (subtitles & signage legible)
                 mirror_enabled = copyright_cfg.get("mirror_video", False)
                 if mirror_enabled:
-                    print("[*] -> Applying horizontal mirror/flip effect for max anti-copyright protection...")
                     try:
                         try:
                             from moviepy.video.fx.MirrorX import MirrorX
                             effects.append(MirrorX())
                         except Exception:
-                            try:
-                                from moviepy.video.fx.mirror_x import mirror_x
-                                effects.append(mirror_x())
-                            except Exception:
-                                import moviepy.video.fx.all as vfx
-                                main_video = main_video.fx(vfx.mirror_x)
+                            import moviepy.video.fx.all as vfx
+                            main_video = main_video.fx(vfx.mirror_x)
                     except Exception as e:
                         print(f"[WARN] Failed to apply mirror effect: {e}")
 
                 resize_factor = float(copyright_cfg.get("resize_factor", 1.02))
                 if resize_factor != 1.0:
-                    print(f"[*] -> Applying subtle scale/resize ({resize_factor}x) to modify pixel boundaries...")
                     try:
                         try:
                             from moviepy.video.fx.Resize import Resize
                             effects.append(Resize(resize_factor))
                         except Exception:
-                            try:
-                                from moviepy.video.fx.resize import resize
-                                effects.append(resize(resize_factor))
-                            except Exception:
-                                import moviepy.video.fx.all as vfx
-                                main_video = main_video.fx(vfx.resize, resize_factor)
+                            import moviepy.video.fx.all as vfx
+                            main_video = main_video.fx(vfx.resize, resize_factor)
                     except Exception as e:
                         print(f"[WARN] Failed to apply resize: {e}")
-                
-                # Apply elegant cinematic transitions (fade-in & fade-out)
-                print("[*] -> Applying cinematic FadeIn and FadeOut transitions (1 second)...")
+
                 try:
                     try:
                         from moviepy.video.fx.FadeIn import FadeIn
@@ -336,386 +886,144 @@ class VideoMergerAgent:
                         effects.append(FadeIn(1.0))
                         effects.append(FadeOut(1.0))
                     except Exception:
-                        try:
-                            from moviepy.video.fx.fadein import fadein
-                            from moviepy.video.fx.fadeout import fadeout
-                            effects.append(fadein(1.0))
-                            effects.append(fadeout(1.0))
-                        except Exception:
-                            import moviepy.video.fx.all as vfx
-                            main_video = main_video.fx(vfx.fadein, 1.0).fx(vfx.fadeout, 1.0)
+                        import moviepy.video.fx.all as vfx
+                        main_video = main_video.fx(vfx.fadein, 1.0).fx(vfx.fadeout, 1.0)
                 except Exception as e:
                     print(f"[WARN] Failed to apply fade transitions: {e}")
 
                 if effects and hasattr(main_video, "with_effects"):
                     try:
                         main_video = main_video.with_effects(effects)
-                    except Exception as e:
-                        print(f"[WARN] Failed to apply with_effects: {e}")
-        except Exception as e:
-            print(f"[ERROR] VideoMerger: Failed to load main video: {e}")
-            return state
-            
-        subtitle_timings = []
+                    except Exception:
+                        pass
 
-        try:
             if audio_clips:
-                total_speech = sum(c.duration for c in audio_clips)
-                video_dur    = main_video.duration
-                n_blocks     = len(audio_clips)
-                print(
-                    f"[*] VideoMerger: PASS 2 -> Laying out {n_blocks} audio blocks across synced {video_dur:.1f}s video..."
-                )
-
-                positioned_clips = []
-                total_orig_sec = state.timeline[-1].end_sec if (state.timeline and len(state.timeline) > 0) else 120.0
-
-                # ─────────────────────────────────────────────────────────────────
-                # RECAP MODE (Fast-Paced Cinematic Recap)
-                # Instead of keeping the original video untouched, we extract the action 
-                # scenes based on Gemini's timestamps, stretch/squeeze the video to match 
-                # the TTS audio length perfectly, and concatenate them back-to-back.
-                # ─────────────────────────────────────────────────────────────────
-                
+                video_dur = main_video.duration
+                n_blocks = len(audio_clips)
                 has_exact_timestamps = (
                     len(script_blocks) > 0
                     and isinstance(script_blocks[0], dict)
                     and "start_sec" in script_blocks[0]
                 )
-
-                print("[*] VideoMerger: CONTINUOUS MODE - Original video will play smoothly without jump cuts.")
-                
-                # Build positions based on exact timestamps if available, otherwise proportional
                 starts = []
                 if has_exact_timestamps:
-                    print("[*] VideoMerger: Using EXACT Gemini timestamps for perfect audio sync.")
                     for b in script_blocks:
                         s = float(b.get("start_sec", 0.0))
-                        # Prevent Gemini hallucination: ensure starts are within video bounds
                         if s > video_dur - 1.0:
                             s = max(0.0, video_dur - 2.0)
                         starts.append(s)
                 else:
-                    print("[WARN] No exact timestamps. Falling back to simple proportional dubbing mode.")
                     starts = [0.2 + (idx / max(n_blocks - 1, 1)) * (video_dur - 0.4) for idx in range(n_blocks)]
 
-                # --- NATURAL PACE MODE (1.0x Video Speed Preserved) ---
-                # Video is NEVER slowed down artificially. Dialogue timing is handled via hybrid audio placement.
-                sim_curr_t = 0.0
-                for idx, c in enumerate(audio_clips):
-                    place_time = max(sim_curr_t, starts[idx])
-                    sim_curr_t = place_time + c.duration + 0.05
-                
-                if video_dur > 0 and sim_curr_t > video_dur:
-                    print(f"[*] VideoMerger: Audio total ({sim_curr_t:.1f}s) exceeds video duration ({video_dur:.1f}s). Preserving 1.0x natural movie speed.")
-
-                # ─────────────────────────────────────────────────────────────────
-                # HYBRID APPROACH: STEP 3 — Region-Based Placement with Sequential Fallback
-                #
-                # Instead of pinning TTS to an EXACT timestamp (which fails when Gemini
-                # hallucinates), we treat each Gemini timestamp as the CENTER of a
-                # "preferred region window". The clip is placed at the BEST available
-                # position inside that window — or falls back to sequential placement
-                # if the window has already been passed by a previous clip.
-                #
-                # Rules:
-                #   1. Preferred position = start_sec from script
-                #   2. If preferred position < curr_t (already passed), use curr_t (sequential)
-                #   3. If TTS is longer than the remaining gap to next block, speed it up (max 1.35x)
-                #   4. Never place audio beyond video_dur
-                # Strict Zero-Overlap Rule:
-                # A single voiceover narration track can NEVER speak two sentences at once.
-                # If the previous sentence finished before orig_start, wait until orig_start.
-                # If the previous sentence ran past orig_start, start immediately at curr_t.
-                # Under NO circumstances can place_time ever be less than curr_t!
-                # Anchor-Based Absolute Scene Synchronization Engine (Zero Cumulative Drift)
-                # Each dialogue/narration segment is strictly anchored to its visual scene timestamp (starts[idx]).
-                # To prevent drift from cascading across subsequent scenes, each audio clip is dynamically fitted
-                # to its available scene window (via pitch-preserving speedup up to 1.25x and end-silence trimming).
-                # This guarantees 100% frame-accurate scene alignment from second 1 to the end of the movie!
                 curr_t = 0.0
+                legacy_subtitle_timings = []
                 for idx, c in enumerate(audio_clips):
                     orig_start = starts[idx]
-
-                    # Calculate available gap to next dialogue block
-                    if idx < n_blocks - 1:
-                        next_orig = starts[idx + 1]
-                        available_gap = max(0.5, next_orig - orig_start)
-                    else:
-                        available_gap = max(0.5, video_dur - orig_start)
-
-                    # Dynamic pitch-preserving speedup: capped at 1.25x max to strictly prevent robotic sound
-                    if available_gap > 0.5 and c.duration > available_gap:
-                        speed_factor = min(c.duration / available_gap, 1.25)
-                        if speed_factor > 1.02:
-                            try:
-                                orig_clip_dur = getattr(c, "duration", None)
-                                try:
-                                    from moviepy.audio.fx.MultiplySpeed import MultiplySpeed
-                                    c = c.with_effects([MultiplySpeed(speed_factor)])
-                                except Exception:
-                                    try:
-                                        from moviepy.video.fx.MultiplySpeed import MultiplySpeed
-                                        c = c.with_effects([MultiplySpeed(speed_factor)])
-                                    except Exception:
-                                        import moviepy.audio.fx.all as afx
-                                        c = afx.speedx(c, speed_factor)
-                                # Ensure duration is only adjusted once (MoviePy usually updates it automatically)
-                                new_clip_dur = getattr(c, "duration", None)
-                                if orig_clip_dur and new_clip_dur and abs(new_clip_dur - orig_clip_dur) < 0.01:
-                                    c.duration = orig_clip_dur / speed_factor
-                            except Exception:
-                                pass
-
-                    # Guaranteed Full Speech Delivery: Never truncate or hard-cut sentences mid-speech.
-                    # Each sentence plays completely to the last syllable with 100% natural pronunciation.
-
-                    # Place at exact scene anchor (or curr_t if tiny overlap)
                     place_time = max(curr_t, orig_start)
-
-                    # If place_time has reached or exceeded video duration, stop placing audio
                     if place_time >= video_dur:
-                        print(f"[*] VideoMerger: Audio clip {idx+1} falls past video duration ({video_dur:.1f}s), trimming remaining clips.")
                         break
-
                     if hasattr(c, "with_start"):
                         positioned_clips.append(c.with_start(place_time))
                     else:
                         positioned_clips.append(c.set_start(place_time))
-
-                    # Next clip can start immediately at next scene anchor
                     curr_t = place_time + c.duration
-
-                    # Store timings for subtitles in 100% lockstep with spoken audio
                     if idx < len(script_blocks):
                         b = script_blocks[idx]
                         narration_text = b.get("narration", "").strip() if isinstance(b, dict) else ""
-                        subtitle_timings.append((place_time, c.duration, narration_text))
+                        legacy_subtitle_timings.append((place_time, c.duration, narration_text))
 
+                if not subtitle_timings:
+                    subtitle_timings = legacy_subtitle_timings
                 state.subtitle_timings = subtitle_timings
 
-                    
-                sfx_cfg = config_data.get("sfx", {})
-                
-                # Dynamic Audio Ducking: lowers BGM/SFX when narrator speaks, swells during action pauses
                 duck_cfg = config_data.get("audio_ducking", {})
                 duck_enabled = duck_cfg.get("enabled", True)
                 duck_vol = float(duck_cfg.get("duck_volume", 0.12))
                 ambient_vol = float(duck_cfg.get("ambient_volume", 0.35))
-                
-                try:
-                    from moviepy import CompositeAudioClip
-                except ImportError:
-                    from moviepy.editor import CompositeAudioClip
 
-                try:
-                    orig_audio = main_video.audio
-                    duck_applied = False
-                    if orig_audio is not None:
-                        if duck_enabled and positioned_clips:
-                            import numpy as np
-                            # Pre-merge overlapping speech intervals for ultra-fast evaluation
-                            raw_intervals = [
-                                (max(0.0, float(getattr(c, "start", 0.0) or 0.0) - 0.25),
-                                 float(getattr(c, "start", 0.0) or 0.0) + float(getattr(c, "duration", 0.0) or 0.0) + 0.25)
-                                for c in positioned_clips
-                            ]
-                            raw_intervals.sort(key=lambda x: x[0])
-                            merged_intervals = []
-                            for s, e in raw_intervals:
-                                if not merged_intervals or merged_intervals[-1][1] < s:
-                                    merged_intervals.append([s, e])
-                                else:
-                                    merged_intervals[-1][1] = max(merged_intervals[-1][1], e)
+                orig_audio = main_video.audio
+                if orig_audio is not None and duck_enabled and positioned_clips:
+                    try:
+                        import numpy as np
+                        raw_intervals = [
+                            (max(0.0, float(getattr(c, "start", 0.0) or 0.0) - 0.25),
+                             float(getattr(c, "start", 0.0) or 0.0) + float(getattr(c, "duration", 0.0) or 0.0) + 0.25)
+                            for c in positioned_clips
+                        ]
+                        raw_intervals.sort(key=lambda x: x[0])
+                        merged_intervals = []
+                        for s, e in raw_intervals:
+                            if not merged_intervals or merged_intervals[-1][1] < s:
+                                merged_intervals.append([s, e])
+                            else:
+                                merged_intervals[-1][1] = max(merged_intervals[-1][1], e)
 
-                            print(f"[*] VideoMerger (Dynamic Audio Ducking): Ducking BGM to {duck_vol*100:.0f}% during speech, ambient swells to {ambient_vol*100:.0f}% across {len(merged_intervals)} merged intervals.")
+                        def duck_transform(get_frame, t):
+                            frame = get_frame(t)
+                            if np.isscalar(t):
+                                is_speech = any(s <= t <= e for s, e in merged_intervals)
+                                return (duck_vol if is_speech else ambient_vol) * frame
+                            else:
+                                t_min, t_max = t[0], t[-1]
+                                vol = np.full(t.shape[0], ambient_vol, dtype=np.float32)
+                                for s, e in merged_intervals:
+                                    if e < t_min: continue
+                                    if s > t_max: break
+                                    vol[(t >= s) & (t <= e)] = duck_vol
+                                if hasattr(frame, 'ndim') and frame.ndim == 2:
+                                    return vol[:, np.newaxis] * frame
+                                return vol * frame
+
+                        orig_audio = orig_audio.transform(duck_transform)
+                    except Exception:
+                        pass
+
+                bgm_clip = None
+                if not has_no_vocals or getattr(state, "skip_demucs", False):
+                    orig_audio = None
+                    bgm_cfg = config_data.get("bgm", {})
+                    bgm_folder = bgm_cfg.get("folder", "assets/bgm")
+                    bgm_track = None
+                    if os.path.exists(bgm_folder):
+                        candidates = [f for f in os.listdir(bgm_folder) if f.endswith(('.wav', '.mp3'))]
+                        for preferred in ["scifi_tension.wav", "dark_suspense.wav", "action_pulse.wav"]:
+                            if preferred in candidates:
+                                bgm_track = os.path.join(bgm_folder, preferred)
+                                break
+                        if not bgm_track and candidates:
+                            bgm_track = os.path.join(bgm_folder, candidates[0])
+
+                    if bgm_track and os.path.exists(bgm_track):
+                        try:
+                            raw_bgm = AudioFileClip(bgm_track)
                             try:
-                                def duck_transform(get_frame, t):
-                                    frame = get_frame(t)
-                                    if np.isscalar(t):
-                                        is_speech = any(s <= t <= e for s, e in merged_intervals)
-                                        return (duck_vol if is_speech else ambient_vol) * frame
-                                    else:
-                                        t_min = t[0]
-                                        t_max = t[-1]
-                                        vol = np.full(t.shape[0], ambient_vol, dtype=np.float32)
-                                        for s, e in merged_intervals:
-                                            if e < t_min:
-                                                continue
-                                            if s > t_max:
-                                                break
-                                            vol[(t >= s) & (t <= e)] = duck_vol
-                                        if hasattr(frame, 'ndim') and frame.ndim == 2:
-                                            return vol[:, np.newaxis] * frame
-                                        return vol * frame
-
-                                orig_audio = orig_audio.transform(duck_transform)
-                                duck_applied = True
-                            except Exception as duck_err:
-                                print(f"[WARN] VideoMerger: Dynamic ducking transform fallback: {duck_err}")
-                                try:
-                                    from moviepy.audio.fx.MultiplyVolume import MultiplyVolume
-                                    orig_audio = orig_audio.with_effects([MultiplyVolume(duck_vol)])
-                                    duck_applied = True
-                                except Exception:
-                                    try:
-                                        import moviepy.audio.fx.all as afx
-                                        orig_audio = afx.volumex(orig_audio, duck_vol)
-                                        duck_applied = True
-                                    except Exception:
-                                        pass
-                        else:
-                            try:
+                                from moviepy.audio.fx.AudioLoop import AudioLoop
                                 from moviepy.audio.fx.MultiplyVolume import MultiplyVolume
-                                orig_audio = orig_audio.with_effects([MultiplyVolume(duck_vol)])
+                                bgm_clip = raw_bgm.with_effects([AudioLoop(duration=main_video.duration), MultiplyVolume(0.18)])
                             except Exception:
-                                try:
-                                    import moviepy.audio.fx.all as afx
-                                    orig_audio = afx.volumex(orig_audio, duck_vol)
-                                except Exception:
-                                    pass
+                                import moviepy.audio.fx.all as afx
+                                bgm_clip = afx.audio_loop(raw_bgm, duration=main_video.duration)
+                                bgm_clip = afx.volumex(bgm_clip, 0.18)
+                        except Exception:
+                            pass
 
-                    # Mix original audio / BGM with positioned voiceover clips
-                    # Per user requirement: when vocal separation (Demucs) was skipped/bypassed (has_no_vocals is False),
-                    # completely MUTE original audio to guarantee zero English narrator voice bleed-through!
-                    bgm_clip = None
-                    if not has_no_vocals or getattr(state, "skip_demucs", False):
-                        print("[*] VideoMerger: Vocal separation bypassed / skip-demucs -> 100% MUTING original audio (zero English voice bleed).")
-                        orig_audio = None
+                audio_components = []
+                if orig_audio is not None:
+                    audio_components.append(orig_audio)
+                if bgm_clip is not None:
+                    audio_components.append(bgm_clip)
+                audio_components.extend(positioned_clips)
 
-                        # Add professional cinematic BGM from assets/bgm to replace the muted audio
-                        bgm_cfg = config_data.get("bgm", {})
-                        bgm_folder = bgm_cfg.get("folder", "assets/bgm")
-                        bgm_track = None
-                        if os.path.exists(bgm_folder):
-                            candidates = [f for f in os.listdir(bgm_folder) if f.endswith(('.wav', '.mp3'))]
-                            for preferred in ["scifi_tension.wav", "dark_suspense.wav", "action_pulse.wav"]:
-                                if preferred in candidates:
-                                    bgm_track = os.path.join(bgm_folder, preferred)
-                                    break
-                            if not bgm_track and candidates:
-                                bgm_track = os.path.join(bgm_folder, candidates[0])
-
-                        if bgm_track and os.path.exists(bgm_track):
-                            print(f"[*] VideoMerger: Adding cinematic BGM -> {os.path.basename(bgm_track)}")
-                            try:
-                                try:
-                                    from moviepy import AudioFileClip
-                                except ImportError:
-                                    from moviepy.editor import AudioFileClip
-                                raw_bgm = AudioFileClip(bgm_track)
-                                try:
-                                    from moviepy.audio.fx.AudioLoop import AudioLoop
-                                    from moviepy.audio.fx.MultiplyVolume import MultiplyVolume
-                                    bgm_clip = raw_bgm.with_effects([AudioLoop(duration=main_video.duration), MultiplyVolume(0.18)])
-                                except Exception:
-                                    try:
-                                        import moviepy.audio.fx.all as afx
-                                        bgm_clip = afx.audio_loop(raw_bgm, duration=main_video.duration)
-                                        bgm_clip = afx.volumex(bgm_clip, 0.18)
-                                    except Exception:
-                                        pass
-                            except Exception as b_err:
-                                print(f"[WARN] VideoMerger: Failed to load BGM loop: {b_err}")
-
-                    audio_components = []
-                    if orig_audio is not None:
-                        audio_components.append(orig_audio)
-                    if bgm_clip is not None:
-                        audio_components.append(bgm_clip)
-                    audio_components.extend(positioned_clips)
-
-                    final_audio = CompositeAudioClip(audio_components)
-                        
-                    if hasattr(main_video, "with_audio"):
-                        main_video = main_video.with_audio(final_audio)
-                    else:
-                        main_video = main_video.set_audio(final_audio)
-                except Exception as e:
-                    print(f"[ERROR] Failed to composite audio: {e}")
-
-
-                # --- SUBTITLE OVERLAY ---
-                subtitle_clips = []
-                if subtitle_timings:
-                    print(f"[*] VideoMerger: Gathered {len(subtitle_timings)} subtitle timings. Will apply via FFmpeg ASS pass.")
+                final_audio = CompositeAudioClip(audio_components)
+                if hasattr(main_video, "with_audio"):
+                    main_video = main_video.with_audio(final_audio)
+                else:
+                    main_video = main_video.set_audio(final_audio)
 
                 final_clip = main_video
             else:
-                print("[WARN] VideoMerger: No voiceover audio files found. Exporting original video.")
                 final_clip = main_video
 
-            temp_dir = os.path.abspath("temp")
-            os.makedirs(temp_dir, exist_ok=True)
-            import re
-            safe_id = re.sub(r'[^\w\-]', '_', os.path.splitext(os.path.basename(movie_path))[0])
-            persistent_clean_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(final_output))[0]}_clean.mp4")
-            clean_video_path = os.path.join(temp_dir, f"{safe_id}_clean.mp4")
-
-            # ── Subtitles Preparation ──────────────────────────────────────────
-            sub_cfg = config_data.get("subtitle_overlay", {})
-            burn_subs = True
-            if self.subtitle_mode in ["none", "off", "no"]:
-                burn_subs = False
-            elif self.subtitle_mode in ["burn", "hardsub", "both", "auto"]:
-                burn_subs = True
-
-            target_ass_path = None
-            if subtitle_timings:
-                # Always export standalone SRT for YouTube captions / VLC
-                self._export_standalone_srt(subtitle_timings, output_dir)
-
-                if burn_subs:
-                    target_ass_path = os.path.join(temp_dir, f"myanmar_subs_{safe_id}.ass")
-                    sub_preset = getattr(state, "subtitle_style_preset", None) or sub_cfg.get("style_preset", "box_black")
-                    font_name = (sub_cfg.get("font_name") or "Myanmar Text") if sys.platform == "win32" else "Padauk"
-                    print(f"[*] VideoMerger: Preparing Myanmar ASS Subtitles (Style Preset: {sub_preset})...")
-                    self._write_ass(
-                        timings       = subtitle_timings,
-                        ass_path      = target_ass_path,
-                        font_name     = font_name,
-                        font_size     = int(sub_cfg.get("font_size", 40)),
-                        bold          = bool(sub_cfg.get("bold", True)),
-                        border_style  = int(sub_cfg.get("border_style", 3)),
-                        outline_width = int(sub_cfg.get("outline_width", 3)),
-                        margin_bottom = int(sub_cfg.get("margin_bottom", 50)),
-                        max_chars     = int(sub_cfg.get("max_chars_per_line", 28)),
-                        preset        = sub_preset,
-                    )
-                else:
-                    print("[*] VideoMerger: Subtitle Mode is 'Voiceover Only' (Hardsub disabled). Exported standalone .srt subtitles.")
-
-            # --- WATERMARK / BRAND OVERLAY ---
-            wm_cfg = config_data.get("watermark", {})
-            wm_override = getattr(state, "watermark_override", {}) or {}
-            wm_enabled = wm_override.get("enabled", wm_cfg.get("enabled", False))
-            is_reels_only = getattr(state, "video_format", "16:9") == "9:16"
-            wm_png = None
-            wm_pos = "bottom_left"
-            wm_margin = 25
-            if wm_enabled and not is_reels_only:
-                wm_text = wm_override.get("text") or wm_cfg.get("text", "PAI AI Movie Translate")
-                wm_opacity = float(wm_override.get("opacity") if wm_override.get("opacity") is not None else wm_cfg.get("opacity", 0.85))
-                wm_font_size = int(wm_override.get("font_size") or wm_cfg.get("font_size", 28))
-                wm_margin = int(wm_override.get("margin") or wm_cfg.get("margin", 25))
-                wm_pos = str(wm_override.get("position") or wm_cfg.get("position", "bottom_left")).lower()
-                wm_style = str(wm_override.get("style") or wm_cfg.get("style", "badge")).lower()
-                wm_logo_path = wm_override.get("logo_path") or wm_cfg.get("logo_path", "")
-                try:
-                    wm_png = self._create_watermark_image(
-                        text=wm_text,
-                        font_size=wm_font_size,
-                        opacity=wm_opacity,
-                        style=wm_style,
-                        logo_path=wm_logo_path
-                    )
-                    if not (wm_png and os.path.exists(wm_png)):
-                        wm_png = None
-                except Exception as e:
-                    print(f"[WARN] VideoMerger: Failed to apply watermark: {e}")
-                    wm_png = None
-
-            # --- THUMBNAIL INTRO CONFIG ---
             thumb_intro_cfg = config_data.get("thumbnail_intro", {})
             thumb_intro_enabled = getattr(state, "thumbnail_intro_enabled", None)
             if thumb_intro_enabled is None:
@@ -724,290 +1032,94 @@ class VideoMergerAgent:
             thumbnail_path = os.path.join(output_dir, "thumbnail.jpg")
             has_thumb_intro = thumb_intro_enabled and os.path.exists(thumbnail_path)
 
-            # --- SUBTITLE BLUR REGION DETECTION ---
-            user_sub_mode = getattr(state, "subtitle_mode", "auto") if state is not None else "auto"
-            user_sub_mode = user_sub_mode or "auto"
-            do_blur = blur_enabled and (blur_strength > 0) and (user_sub_mode != "no")
-            start_y_pct, height_pct = 0.82, 0.18
-            subtitle_found = False
-            if do_blur:
-                if user_sub_mode == "yes":
-                    y, h, found = self._detect_subtitle_region_with_vision(movie_path, state=state)
-                    start_y_pct = y if found else 0.82
-                    height_pct = h if found else 0.18
-                    subtitle_found = True
-                else:
-                    cache = getattr(state, "subtitle_detection", None) if state is not None else None
-                    if cache and cache.get("video_path") == os.path.abspath(movie_path) and cache.get("has_subtitles", False) is True:
-                        start_y_pct = float(cache.get("start_y_pct", start_y_pct))
-                        height_pct = float(cache.get("height_pct", height_pct))
-                        subtitle_found = True
-                    else:
-                        start_y_pct, height_pct, subtitle_found = self._detect_subtitle_region_with_vision(movie_path, state=state)
-                    if state is not None:
-                        state.subtitle_detection = {
-                            "video_path": os.path.abspath(movie_path),
-                            "has_subtitles": subtitle_found,
-                            "start_y_pct": start_y_pct,
-                            "height_pct": height_pct,
-                        }
-                if not subtitle_found:
-                    do_blur = False
-
-            # --- FAST MASTER AUDIO COMPOSITING ---
-            master_audio_path = os.path.join(temp_dir, f"{safe_id}_master_audio.wav")
-            print(f"[*] VideoMerger: Fast-compositing master audio track to '{os.path.basename(master_audio_path)}'...")
-            try:
-                final_audio.write_audiofile(
-                    master_audio_path,
-                    fps=44100,
-                    nbytes=2,
-                    codec='pcm_s16le',
-                    logger=None
-                )
-                print("[OK] VideoMerger: Master audio track composited successfully.")
-            except Exception as ae:
-                print(f"[WARN] VideoMerger: Master audio compositing notice: {ae}")
-                master_audio_path = None
-
-            # --- UNIFIED SINGLE-PASS FFMPEG FILTERGRAPH (5x-8x FASTER) ---
-            single_pass_success = False
-            ffmpeg_bin = _get_ffmpeg_bin()
-
-            if ffmpeg_bin and master_audio_path and os.path.exists(master_audio_path) and not has_thumb_intro:
-                enc_info = detect_hardware_encoder()
-                codec = enc_info.get("codec", "libx264")
-                preset = enc_info.get("preset", "faster")
-                quality_args = ["-b:v", "6M", "-maxrate", "9M", "-bufsize", "12M"] if enc_info.get("type") == "gpu" else ["-crf", "20"]
-                print(f"[*] VideoMerger (Single-Pass Engine): Assembling unified Filtergraph using {enc_info.get('label', codec)} [{codec}]...")
-
-                flt_parts = [
-                    "[0:v]crop=w='trunc(iw/2)*2':h='trunc(ih/2)*2'[v_base]"
-                ]
-                last_v = "[v_base]"
-
-                if copyright_enabled:
-                    mirror_enabled = copyright_cfg.get("mirror_video", False)
-                    if mirror_enabled:
-                        flt_parts.append(f"{last_v}hflip[v_flipped]")
-                        last_v = "[v_flipped]"
-                    resize_factor = float(copyright_cfg.get("resize_factor", 1.02))
-                    if resize_factor != 1.0:
-                        flt_parts.append(f"{last_v}scale=iw*{resize_factor}:ih*{resize_factor},crop=iw/{resize_factor}:ih/{resize_factor}[v_resized]")
-                        last_v = "[v_resized]"
-
-                if do_blur and subtitle_found:
-                    r = blur_strength
-                    blur_seg = (
-                        f"{last_v}split=2[v_orig][v_sub_crop];"
-                        f"[v_sub_crop]crop=iw:'trunc(ih*{height_pct:.3f}/2)*2':0:'trunc(ih*{start_y_pct:.3f}/2)*2',"
-                        f"boxblur=luma_radius={r}:luma_power=2:chroma_radius={max(1,r//2)}:chroma_power=2[v_blurred_sub];"
-                        f"[v_orig][v_blurred_sub]overlay=0:'trunc(H*{start_y_pct:.3f}/2)*2'[v_blended]"
-                    )
-                    flt_parts.append(blur_seg)
-                    last_v = "[v_blended]"
-
-                if color_enabled:
-                    cg_str = (
-                        f"{last_v}eq=brightness={cg_brightness:.3f}:contrast={cg_contrast:.3f}:saturation={cg_saturation:.3f},"
-                        f"noise=alls=2:allf=t,vignette=PI/4[v_graded]"
-                    )
-                    flt_parts.append(cg_str)
-                    last_v = "[v_graded]"
-
-                wm_input_args = []
-                if wm_png and os.path.exists(wm_png):
-                    wm_input_idx = 2
-                    wm_input_args = ["-i", os.path.abspath(wm_png)]
-                    if wm_pos == "bottom_left":
-                        pos_str = f"{wm_margin}:main_h-overlay_h-{wm_margin}"
-                    elif wm_pos == "bottom_right":
-                        pos_str = f"main_w-overlay_w-{wm_margin}:main_h-overlay_h-{wm_margin}"
-                    elif wm_pos == "top_left":
-                        pos_str = f"{wm_margin}:{wm_margin}"
-                    elif wm_pos == "top_center":
-                        pos_str = f"(main_w-overlay_w)/2:{wm_margin}"
-                    else:
-                        pos_str = f"main_w-overlay_w-{wm_margin}:{wm_margin}"
-                    flt_parts.append(f"{last_v}[{wm_input_idx}:v]overlay={pos_str}[v_clean]")
-                    last_v = "[v_clean]"
-
-                flt_parts.append(f"{last_v}split=2[v_for_sub][v_for_clean]")
-
-                has_ass = bool(burn_subs and target_ass_path and os.path.exists(target_ass_path))
-                ass_dir = None
-                if has_ass:
-                    ass_basename = os.path.basename(target_ass_path)
-                    ass_dir = os.path.dirname(os.path.abspath(target_ass_path))
-                    flt_parts.append(f"[v_for_sub]ass={ass_basename}[v_subbed]")
-                    recap_v_stream = "[v_subbed]"
-                else:
-                    recap_v_stream = "[v_for_sub]"
-
-                filter_complex_str = ";".join(flt_parts)
-
-                dur_sec = getattr(state, "duration_sec", 0.0) if state else 0.0
-                if not dur_sec and state and getattr(state, "duration", None):
-                    try:
-                        parts = str(state.duration).split(":")
-                        if len(parts) == 3:
-                            dur_sec = int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
-                    except Exception:
-                        dur_sec = 600.0
-                dyn_timeout = max(1200, int((dur_sec or 600.0) * 2.5))
-
-                sp_cmd = [
-                    ffmpeg_bin, "-y",
-                    "-i", os.path.abspath(movie_path),
-                    "-i", os.path.abspath(master_audio_path),
-                    *wm_input_args,
-                    "-filter_complex", filter_complex_str,
-                    "-map", recap_v_stream, "-map", "1:a",
-                    "-c:v", codec, "-preset", preset, *quality_args,
-                    "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                    "-c:a", "aac", "-b:a", "192k",
-                    os.path.abspath(final_output),
-                    "-map", "[v_for_clean]", "-map", "1:a",
-                    "-c:v", codec, "-preset", preset, *quality_args,
-                    "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                    "-c:a", "aac", "-b:a", "192k",
-                    os.path.abspath(persistent_clean_path),
-                ]
-
-                print(f"[*] VideoMerger (Single-Pass Engine): Rendering both Recap & Clean Canvas simultaneously...")
+            if has_thumb_intro:
                 try:
-                    res = subprocess.run(sp_cmd, cwd=ass_dir, capture_output=True, text=True, timeout=dyn_timeout)
-                    if res.returncode == 0 and os.path.exists(final_output) and os.path.getsize(final_output) > 1000:
-                        single_pass_success = True
+                    from moviepy.editor import ImageClip, concatenate_videoclips
+                    intro_clip = ImageClip(thumbnail_path)
+                    if hasattr(intro_clip, "with_duration"):
+                        intro_clip = intro_clip.with_duration(thumb_duration)
+                    else:
+                        intro_clip = intro_clip.set_duration(thumb_duration)
+                    fps_val = final_clip.fps if final_clip.fps else 24
+                    if hasattr(intro_clip, "with_fps"):
+                        intro_clip = intro_clip.with_fps(fps_val)
+                    else:
+                        intro_clip.fps = fps_val
+                    w, h = intro_clip.size
+                    new_w, new_h = final_clip.size
+                    if (w, h) != (new_w, new_h):
                         try:
-                            shutil.copy2(persistent_clean_path, clean_video_path)
+                            from moviepy.video.fx.Resize import Resize
+                            intro_clip = intro_clip.with_effects([Resize((new_w, new_h))])
                         except Exception:
                             pass
-                        state.clean_video_path = persistent_clean_path
-                        print("🚀 [OK] VideoMerger: Single-Pass Hardware-Accelerated Video Merge & Subtitle Burn COMPLETE!")
-                    else:
-                        err_snippet = res.stderr[-500:] if res.stderr else "Unknown error"
-                        print(f"[WARN] VideoMerger: Single-pass hardware render failed ({err_snippet}). Retrying with CPU libx264...")
-                        if codec != "libx264":
-                            fb_cmd = list(sp_cmd)
-                            fb_cmd = [c.replace(codec, "libx264") if c == codec else c for c in fb_cmd]
-                            fb_cmd = [c.replace(preset, "superfast") if c == preset else c for c in fb_cmd]
-                            if "-b:v" in fb_cmd:
-                                b_idx = fb_cmd.index("-b:v")
-                                fb_cmd = fb_cmd[:b_idx] + ["-crf", "20"] + fb_cmd[b_idx+6:]
-                            res_cpu = subprocess.run(fb_cmd, cwd=ass_dir, capture_output=True, text=True, timeout=dyn_timeout)
-                            if res_cpu.returncode == 0 and os.path.exists(final_output) and os.path.getsize(final_output) > 1000:
-                                single_pass_success = True
-                                try:
-                                    shutil.copy2(persistent_clean_path, clean_video_path)
-                                except Exception:
-                                    pass
-                                state.clean_video_path = persistent_clean_path
-                                print("🚀 [OK] VideoMerger: Single-Pass CPU Video Merge & Subtitle Burn COMPLETE!")
-                except Exception as spe:
-                    print(f"[WARN] Single-pass execution exception: {spe}")
+                    final_clip = concatenate_videoclips([intro_clip, final_clip], method="compose")
+                    if subtitle_timings:
+                        subtitle_timings = [(start + thumb_duration, dur, txt) for (start, dur, txt) in subtitle_timings]
+                        state.subtitle_timings = subtitle_timings
+                except Exception as e:
+                    print(f"[WARN] VideoMerger: Failed to stitch thumbnail intro: {e}")
 
-            # ── Fallback Legacy Path (Only if Single-Pass failed or Thumbnail Intro active) ──
-            if not single_pass_success:
-                print("[*] VideoMerger: Falling back to Legacy Multi-Pass Export...")
-                if has_thumb_intro:
-                    print(f"[*] VideoMerger: Stitching Thumbnail as a {thumb_duration}-second Intro...")
-                    try:
-                        try:
-                            from moviepy.editor import ImageClip, concatenate_videoclips
-                        except ImportError:
-                            from moviepy import ImageClip, concatenate_videoclips
-                        intro_clip = ImageClip(thumbnail_path)
-                        if hasattr(intro_clip, "with_duration"):
-                            intro_clip = intro_clip.with_duration(thumb_duration)
-                        else:
-                            intro_clip = intro_clip.set_duration(thumb_duration)
-                        if hasattr(intro_clip, "with_fps"):
-                            intro_clip = intro_clip.with_fps(final_clip.fps if final_clip.fps else 24)
-                        else:
-                            intro_clip.fps = final_clip.fps if final_clip.fps else 24
-                        w, h = intro_clip.size
-                        new_w, new_h = final_clip.size
-                        if (w, h) != (new_w, new_h):
-                            try:
-                                from moviepy.video.fx.Resize import Resize
-                                intro_clip = intro_clip.with_effects([Resize((new_w, new_h))])
-                            except Exception:
-                                pass
-                        final_clip = concatenate_videoclips([intro_clip, final_clip], method="compose")
-                        if subtitle_timings:
-                            subtitle_timings = [(start + thumb_duration, dur, txt) for (start, dur, txt) in subtitle_timings]
-                            state.subtitle_timings = subtitle_timings
-                    except Exception as e:
-                        print(f"[WARN] VideoMerger: Failed to stitch thumbnail intro: {e}")
+            enc_info = detect_hardware_encoder()
+            print(f"[*] VideoMerger (Hardware Acceleration): Exporting legacy video using {enc_info['label']} [{enc_info['codec']}]...")
+            try:
+                final_clip.write_videofile(
+                    final_output,
+                    codec=enc_info["codec"],
+                    audio_codec='aac',
+                    bitrate='4500k',
+                    preset=enc_info.get("preset", "faster"),
+                    threads=4,
+                    ffmpeg_params=["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-pix_fmt", "yuv420p", "-movflags", "+faststart"],
+                    logger='bar'
+                )
+            except Exception as enc_err:
+                print(f"[WARN] Hardware encoder '{enc_info['codec']}' failed: {enc_err}. Falling back to CPU libx264...")
+                final_clip.write_videofile(
+                    final_output,
+                    codec='libx264',
+                    audio_codec='aac',
+                    bitrate='4500k',
+                    preset='superfast',
+                    threads=4,
+                    ffmpeg_params=["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-pix_fmt", "yuv420p", "-movflags", "+faststart"],
+                    logger='bar'
+                )
 
-                enc_info = detect_hardware_encoder()
-                print(f"[*] VideoMerger (Hardware Acceleration): Exporting video using {enc_info['label']} [{enc_info['codec']}]...")
-                try:
-                    final_clip.write_videofile(
-                        final_output,
-                        codec=enc_info["codec"],
-                        audio_codec='aac',
-                        bitrate='4500k',
-                        preset=enc_info.get("preset", "faster"),
-                        threads=4,
-                        ffmpeg_params=["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-pix_fmt", "yuv420p", "-movflags", "+faststart"],
-                        logger='bar'
-                    )
-                except Exception as enc_err:
-                    print(f"[WARN] Hardware encoder '{enc_info['codec']}' failed: {enc_err}. Falling back to CPU libx264...")
-                    final_clip.write_videofile(
-                        final_output,
-                        codec='libx264',
-                        audio_codec='aac',
-                        bitrate='4500k',
-                        preset='superfast',
-                        threads=4,
-                        ffmpeg_params=["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-pix_fmt", "yuv420p", "-movflags", "+faststart"],
-                        logger='bar'
-                    )
-                print("[OK] VideoMerger: Video merge complete! Original video untouched with cohesive story recap.")
+            try:
+                shutil.copy2(final_output, clean_video_path)
+                shutil.copy2(final_output, persistent_clean_path)
+                state.clean_video_path = persistent_clean_path
+            except Exception as ce:
+                print(f"[WARN] VideoMerger: Could not cache clean video copy: {ce}")
+                state.clean_video_path = clean_video_path
 
-                try:
-                    shutil.copy2(final_output, clean_video_path)
-                    shutil.copy2(final_output, persistent_clean_path)
-                    state.clean_video_path = persistent_clean_path
-                except Exception as ce:
-                    print(f"[WARN] VideoMerger: Could not cache clean video copy: {ce}")
-                    state.clean_video_path = clean_video_path
-
-                need_post_pass = blur_enabled or color_enabled or (burn_subs and target_ass_path and os.path.exists(target_ass_path))
-                if need_post_pass:
-                    print("[*] VideoMerger: Running Single-Pass Hardware-Accelerated Post-Processing...")
-                    self._blur_subtitle_region(
-                        state,
-                        final_output,
-                        source_video_for_detection = movie_path,
-                        region_pct    = blur_region_pct    if blur_enabled  else 0.0,
-                        blur_strength = blur_strength      if blur_enabled  else 0,
-                        color_enabled = color_enabled,
-                        brightness    = cg_brightness,
-                        contrast      = cg_contrast,
-                        saturation    = cg_saturation,
-                        ass_path      = target_ass_path    if (burn_subs and target_ass_path and os.path.exists(target_ass_path)) else None,
-                    )
-
-            # Thumbnail is now stitched as a video intro, skipping cover art embedding.
-                    
+            need_post_pass = blur_enabled or color_enabled or (burn_subs and target_ass_path and os.path.exists(target_ass_path))
+            if need_post_pass:
+                print("[*] VideoMerger: Running Single-Pass Hardware-Accelerated Post-Processing...")
+                self._blur_subtitle_region(
+                    state,
+                    final_output,
+                    source_video_for_detection = movie_path,
+                    region_pct    = blur_region_pct    if blur_enabled  else 0.0,
+                    blur_strength = blur_strength      if blur_enabled  else 0,
+                    color_enabled = color_enabled,
+                    brightness    = cg_brightness,
+                    contrast      = cg_contrast,
+                    saturation    = cg_saturation,
+                    ass_path      = target_ass_path    if (burn_subs and target_ass_path and os.path.exists(target_ass_path)) else None,
+                )
         except Exception as e:
-            print(f"[ERROR] VideoMerger: Failed during video merge/writing: {e}")
+            print(f"[ERROR] VideoMerger: Failed during legacy video merge/writing: {e}")
         finally:
-            # Safely close all opened clips to prevent memory leaks and FFmpeg zombie processes
-            for clip_obj in [locals().get('main_video'), locals().get('sfx_only_audio'),
-                             locals().get('intro_clip'), locals().get('final_clip')]:
+            for clip_obj in [main_video, sfx_only_audio, intro_clip, final_clip]:
                 if clip_obj is not None:
                     try: clip_obj.close()
                     except Exception: pass
             for ac in audio_clips:
                 try: ac.close()
                 except Exception: pass
-            # BUG-H6 Fix: Also close speed-adjusted positioned clips (orphaned from audio_clips after speed adjustment)
-            for pc in locals().get('positioned_clips', []):
+            for pc in positioned_clips:
                 try: pc.close()
                 except Exception: pass
 
