@@ -467,16 +467,8 @@ class VideoMergerAgent:
                             except Exception:
                                 pass
 
-                    # If clip still slightly exceeds available_gap (e.g. trailing pause/breath),
-                    # trim trailing silence so the next scene begins precisely on time without drift!
-                    if c.duration > available_gap:
-                        try:
-                            if hasattr(c, "subclipped"):
-                                c = c.subclipped(0, available_gap)
-                            elif hasattr(c, "subclip"):
-                                c = c.subclip(0, available_gap)
-                        except Exception:
-                            pass
+                    # Guaranteed Full Speech Delivery: Never truncate or hard-cut sentences mid-speech.
+                    # Each sentence plays completely to the last syllable with 100% natural pronunciation.
 
                     # Place at exact scene anchor (or curr_t if tiny overlap)
                     place_time = max(curr_t, orig_start)
