@@ -105,33 +105,42 @@ class DownloaderAgent:
 
         ydl_opts['progress_hooks'] = [_dl_progress]
 
+        import shutil
+        node_bin = shutil.which("node") or shutil.which("nodejs") or shutil.which("deno")
+        if node_bin:
+            ydl_opts['js_runtimes'] = {'node': {'path': node_bin} if 'node' in node_bin else {}}
+
         max_attempts = 4
         last_error = None
         for attempt in range(1, max_attempts + 1):
             try:
+                current_opts = dict(ydl_opts)
                 if attempt == 1:
-                    # Attempt 1: Prioritize iOS and Web client with cookies if available
-                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['ios', 'web']}}
+                    # Attempt 1: Apple VisionOS client (Apple Vision Pro HLS m3u8 stream, up to 1080p Full HD, bypasses Datacenter IP bot detection)
+                    print(f"[*] DownloaderAgent: Fetching 1080p stream with Apple VisionOS client (Attempt 1/{max_attempts})...", flush=True)
+                    current_opts['extractor_args'] = {'youtube': {'player_client': ['visionos']}}
+                    if active_cookie:
+                        current_opts['cookiefile'] = active_cookie
                 elif attempt == 2:
-                    # Attempt 2: Pure iOS client without cookies (iOS client bypasses Google Play bot integrity checks)
-                    print("[*] DownloaderAgent: Retrying with Apple iOS client (Bypasses Google Play Bot Integrity checks)...", flush=True)
-                    ydl_opts.pop('cookiefile', None)
-                    ydl_opts['format'] = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best/18/22'
-                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['ios']}}
+                    # Attempt 2: Pure VisionOS client without cookies (clean anonymous session in case cookies were challenged by Google)
+                    print(f"[*] DownloaderAgent: Retrying with Pure VisionOS client without cookies (Attempt 2/{max_attempts})...", flush=True)
+                    current_opts.pop('cookiefile', None)
+                    current_opts['extractor_args'] = {'youtube': {'player_client': ['visionos']}}
                 elif attempt == 3:
-                    # Attempt 3: Web Creator and Mobile Web fallback
-                    print("[*] DownloaderAgent: Retrying with Web Creator & mWeb client...", flush=True)
-                    ydl_opts.pop('cookiefile', None)
-                    ydl_opts['format'] = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best/18/22'
-                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['web_creator', 'mweb', 'android']}}
+                    # Attempt 3: Android mobile client (bypasses web bot checks)
+                    print(f"[*] DownloaderAgent: Retrying with Android mobile client (Attempt 3/{max_attempts})...", flush=True)
+                    current_opts['extractor_args'] = {'youtube': {'player_client': ['android']}}
+                    current_opts['format'] = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best/18/22'
+                    if active_cookie:
+                        current_opts['cookiefile'] = active_cookie
                 elif attempt == 4:
-                    # Attempt 4: TV Embedded fallback
-                    print("[*] DownloaderAgent: Retrying with TV Embedded fallback...", flush=True)
-                    ydl_opts.pop('cookiefile', None)
-                    ydl_opts['format'] = 'best/18/22'
-                    ydl_opts['extractor_args'] = {'youtube': {'player_client': ['tv_embedded', 'android_vr']}}
+                    # Attempt 4: Android progressive stream fallback (Bulletproof direct stream)
+                    print(f"[*] DownloaderAgent: Retrying with Android progressive fallback (Attempt 4/{max_attempts})...", flush=True)
+                    current_opts.pop('cookiefile', None)
+                    current_opts['extractor_args'] = {'youtube': {'player_client': ['android']}}
+                    current_opts['format'] = 'best/18/22/bestvideo+bestaudio'
 
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                with yt_dlp.YoutubeDL(current_opts) as ydl:
                     print(f"[*] DownloaderAgent: Fetching video stream (Attempt {attempt}/{max_attempts})...", flush=True)
                     info_dict = ydl.extract_info(url, download=True)
                     if not info_dict:
@@ -172,8 +181,6 @@ class DownloaderAgent:
                         )
                     raise e
                 print(f"[*] Retrying in 5 seconds with fallback client format...")
-                ydl_opts['format'] = 'bestvideo+bestaudio/best' # Fallback to combined or best stream
-                ydl_opts['socket_timeout'] = 120
                 time.sleep(5)
 
         # Verify downloaded file actually exists before returning
