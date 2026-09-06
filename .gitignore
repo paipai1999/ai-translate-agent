@@ -18,4 +18,11 @@ config.json.tmp
 cookies.txt
 assets/cookies.txt
 
+# Private notebooks with credentials (never commit to git)
+*_PRIVATE.ipynb
+*_private.ipynb
+*PRIVATE*
+*private*
+private/
+
 .tmp.driveupload/
