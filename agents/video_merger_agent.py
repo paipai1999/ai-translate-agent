@@ -362,17 +362,16 @@ class VideoMergerAgent:
                 #   2. If preferred position < curr_t (already passed), use curr_t (sequential)
                 #   3. If TTS is longer than the remaining gap to next block, speed it up (max 1.35x)
                 #   4. Never place audio beyond video_dur
-                # ─────────────────────────────────────────────────────────────────
+                # Strict Zero-Overlap Rule:
+                # A single voiceover narration track can NEVER speak two sentences at once.
+                # If the previous sentence finished before orig_start, wait until orig_start.
+                # If the previous sentence ran past orig_start, start immediately at curr_t.
+                # Under NO circumstances can place_time ever be less than curr_t!
                 curr_t = 0.0
                 for idx, c in enumerate(audio_clips):
                     orig_start = starts[idx]
 
-                    # Non-accumulating anchor: If previous clip finished before orig_start, snap to orig_start
-                    if orig_start >= curr_t:
-                        place_time = orig_start
-                    else:
-                        # Allow at most 0.35s overrun before snapping back at next pause
-                        place_time = min(curr_t, orig_start + 0.35)
+                    place_time = max(curr_t, orig_start)
 
                     # Calculate available gap to next dialogue block
                     if idx < n_blocks - 1:
@@ -396,21 +395,25 @@ class VideoMergerAgent:
                                     except Exception:
                                         import moviepy.audio.fx.all as afx
                                         c = afx.speedx(c, speed_factor)
-                            except Exception as e:
+                                if hasattr(c, "duration") and c.duration:
+                                    c.duration = c.duration / speed_factor
+                            except Exception:
                                 pass
 
-                    # Clamp place_time strictly within video bounds
-                    place_time = min(place_time, max(0.0, video_dur - c.duration - 0.05))
-                    place_time = max(0.0, place_time)
+                    # If place_time has reached or exceeded video duration, stop placing audio
+                    if place_time >= video_dur:
+                        print(f"[*] VideoMerger: Audio clip {idx+1} falls past video duration ({video_dur:.1f}s), trimming remaining clips.")
+                        break
 
                     if hasattr(c, "with_start"):
                         positioned_clips.append(c.with_start(place_time))
                     else:
                         positioned_clips.append(c.set_start(place_time))
 
-                    curr_t = place_time + c.duration + 0.02
+                    # Next clip must start AFTER this clip finishes + 0.05s natural breath pause
+                    curr_t = place_time + c.duration + 0.05
 
-                    # Store timings for subtitles
+                    # Store timings for subtitles in 100% lockstep with spoken audio
                     if idx < len(script_blocks):
                         b = script_blocks[idx]
                         narration_text = b.get("narration", "").strip() if isinstance(b, dict) else ""

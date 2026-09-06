@@ -41,11 +41,24 @@ class WriterAgent:
         models_dict = gemini_cfg.get("models", {})
         model_workhorse = models_dict.get("workhorse", "gemini-3.5-flash")
 
-        # 1. Extract and clean all Whisper dialogue segments
-        # 1. Extract, sentence-split, and clean all Whisper dialogue segments
-        # Ensures 100% of spoken dialogue is translated without skipping or summarization
+        # 1. Extract, clean, and smooth Whisper dialogue segments
+        # Ensures 100% full coverage while eliminating micro-fragments, repetitive stutters, and unnatural breaks
         import re
-        raw_segments = []
+
+        def _clean_transcript_line(t: str) -> str:
+            t = re.sub(r'\[.*?\]|\(.*?\)', '', t)
+            t = re.sub(r'\.{2,}', '.', t)
+            t = re.sub(r'-{2,}', ' ', t)
+            t = re.sub(r'\s+', ' ', t).strip()
+            return t
+
+        whisper_hallucinations = {
+            "thank you for watching", "thanks for watching", "please subscribe",
+            "subscribe to my channel", "bye bye", "see you next time", "subtitles by",
+            "subtitles", "thank you.", "bye.", "you"
+        }
+
+        initial_segments = []
         for i, seg in enumerate(state.transcript):
             if isinstance(seg, dict):
                 t_start = float(seg.get("start", 0.0) or 0.0)
@@ -56,48 +69,115 @@ class WriterAgent:
                 t_end = float(getattr(seg, "end", t_start + 2.0) or (t_start + 2.0))
                 text = str(getattr(seg, "text", "")).strip()
 
-            if not text or len(text) <= 1 or t_end <= t_start:
+            cleaned = _clean_transcript_line(text)
+            if not cleaned or len(cleaned) <= 1 or t_end <= t_start:
+                continue
+            if cleaned.lower().rstrip('.!') in whisper_hallucinations:
                 continue
 
-            total_dur = max(0.8, t_end - t_start)
-            # Split continuous narration into individual sentences (. ! ?)
-            raw_sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if s.strip()]
-            if not raw_sentences:
-                raw_sentences = [text]
+            seg_dur = t_end - t_start
+            # Split only very long monologue segments (> 7.0s) at full sentence boundaries
+            if seg_dur > 7.0 and re.search(r'(?<!\bMr)(?<!\bDr)(?<!\bMs)(?<!\bMrs)(?<!\bSt)(?<!\be\.g)(?<!\bi\.e)[.!?]\s+[A-Z]', cleaned):
+                parts = [p.strip() for p in re.split(r'(?<=[.!?])\s+(?=[A-Z])', cleaned) if p.strip()]
+                if len(parts) > 1:
+                    total_chars = sum(len(p) for p in parts)
+                    c_start = t_start
+                    for p_idx, p in enumerate(parts):
+                        prop = len(p) / total_chars if total_chars > 0 else (1.0 / len(parts))
+                        c_dur = seg_dur * prop
+                        c_end = t_end if (p_idx == len(parts) - 1) else (c_start + c_dur)
+                        initial_segments.append({
+                            "start_sec": round(c_start, 2),
+                            "end_sec": round(c_end, 2),
+                            "text": p
+                        })
+                        c_start = c_end
+                    continue
 
-            if len(raw_sentences) == 1:
-                dur = round(total_dur, 2)
-                max_chars = max(24, int(dur * 12.0))
-                raw_segments.append({
-                    "id": len(raw_segments) + 1,
-                    "start_sec": round(t_start, 2),
-                    "end_sec": round(t_end, 2),
-                    "duration_sec": dur,
-                    "max_chars": max_chars,
-                    "text": raw_sentences[0]
-                })
-            else:
-                total_chars = sum(len(s) for s in raw_sentences)
-                cur_t = t_start
-                for s_idx, sent in enumerate(raw_sentences):
-                    prop = len(sent) / total_chars if total_chars > 0 else (1.0 / len(raw_sentences))
-                    s_dur = total_dur * prop
-                    s_start = cur_t
-                    s_end = t_end if (s_idx == len(raw_sentences) - 1) else (cur_t + s_dur)
-                    dur = round(max(0.8, s_end - s_start), 2)
-                    max_chars = max(24, int(dur * 12.0))
-                    raw_segments.append({
-                        "id": len(raw_segments) + 1,
-                        "start_sec": round(s_start, 2),
-                        "end_sec": round(s_end, 2),
-                        "duration_sec": dur,
-                        "max_chars": max_chars,
-                        "text": sent
-                    })
-                    cur_t = s_end
+            initial_segments.append({
+                "start_sec": round(t_start, 2),
+                "end_sec": round(t_end, 2),
+                "text": cleaned
+            })
+
+        if not initial_segments:
+            print("[!] WriterAgent: No valid dialogue text found in transcript.")
+            return state
+
+        # Pass 1: Deduplicate Whisper stuttering tokens (e.g. repeated word fragments)
+        deduped = []
+        for seg in initial_segments:
+            if not deduped:
+                deduped.append(seg)
+                continue
+            prev = deduped[-1]
+            prev_words = [w.lower().strip('.,!?\'"') for w in prev["text"].split() if w.strip('.,!?\'"')]
+            curr_words = [w.lower().strip('.,!?\'"') for w in seg["text"].split() if w.strip('.,!?\'"')]
+            if not curr_words:
+                continue
+            # If the entire segment is just 1-2 words that were already spoken at the end of prev
+            if len(curr_words) <= 2 and all(w in prev_words[-3:] for w in curr_words):
+                prev["end_sec"] = max(prev["end_sec"], seg["end_sec"])
+                continue
+            if seg["text"].lower().strip('.,!?') == prev["text"].lower().strip('.,!?'):
+                prev["end_sec"] = max(prev["end_sec"], seg["end_sec"])
+                continue
+            deduped.append(seg)
+
+        # Pass 2: Merge micro-fragments (< 2.2s or < 4 words) into cohesive complete thoughts
+        MIN_DUR = 2.2
+        MIN_WORDS = 4
+        MAX_GAP = 1.8
+
+        merged_segments = []
+        s_i = 0
+        n_deduped = len(deduped)
+        while s_i < n_deduped:
+            curr = deduped[s_i]
+            words = curr["text"].split()
+            dur = curr["end_sec"] - curr["start_sec"]
+            is_frag = (dur < MIN_DUR) or (len(words) < MIN_WORDS)
+
+            # Try forward merge if next segment is close
+            if is_frag and (s_i + 1 < n_deduped):
+                nxt = deduped[s_i + 1]
+                gap_forward = round(nxt["start_sec"] - curr["end_sec"], 2)
+                if gap_forward <= MAX_GAP:
+                    joiner = " " if curr["text"].endswith(('.', '!', '?', ',')) else ", "
+                    nxt["text"] = (curr["text"].rstrip('.!?') + joiner + nxt["text"]).strip()
+                    nxt["start_sec"] = curr["start_sec"]
+                    s_i += 1
+                    continue
+
+            # If cannot forward-merge, try backward merge into previous segment
+            if is_frag and merged_segments:
+                prev = merged_segments[-1]
+                gap_back = round(curr["start_sec"] - prev["end_sec"], 2)
+                if gap_back <= MAX_GAP:
+                    joiner = " " if prev["text"].endswith(('.', '!', '?', ',')) else ", "
+                    prev["text"] = (prev["text"].rstrip('.!?') + joiner + curr["text"]).strip()
+                    prev["end_sec"] = curr["end_sec"]
+                    s_i += 1
+                    continue
+
+            merged_segments.append(curr)
+            s_i += 1
+
+        raw_segments = []
+        for idx, seg in enumerate(merged_segments):
+            dur = round(max(MIN_DUR, seg["end_sec"] - seg["start_sec"]), 2)
+            max_chars = max(24, int(dur * 11.0))
+            raw_segments.append({
+                "id": idx + 1,
+                "start_sec": seg["start_sec"],
+                "end_sec": seg["end_sec"],
+                "duration_sec": dur,
+                "max_chars": max_chars,
+                "text": seg["text"]
+            })
 
         if not raw_segments:
-            print("[!] WriterAgent: No valid dialogue text found in transcript.")
+            print("[!] WriterAgent: No valid dialogue text found after smoothing.")
             return state
 
         total_count = len(raw_segments)
@@ -125,7 +205,8 @@ class WriterAgent:
                 f"CRITICAL REQUIREMENTS:\n"
                 f"1. STRICT 1:1 TRANSLATION: Translate every single item completely. DO NOT summarize, merge, or drop any sentence.\n"
                 f"2. Translate all character names, places, events, and plot points accurately without leaving anything out.\n"
-                f"3. DURATION MATCH: Match the length of the Burmese translation so spoken duration fits `duration_sec` naturally without trailing off or rushing.\n\n"
+                f"3. DURATION MATCH: Match the length of the Burmese translation so spoken duration fits `duration_sec` naturally without trailing off or rushing.\n"
+                f"4. NATURAL CINEMATIC FLOW: Avoid repetitive sentence endings (do NOT repeat identical words like 'ပေါ့', 'ပါ', 'တယ်' in consecutive lines). Write natural storytelling movie recap dialogue.\n\n"
                 f"{json.dumps(batch, ensure_ascii=False, indent=2)}\n\n"
                 f"Output a JSON array where each object has: id, narration, start_sec, end_sec, emotion, character, gender (\"male\" or \"female\")."
             )
