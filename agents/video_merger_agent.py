@@ -12,10 +12,39 @@ _DETECTED_ENCODER = None
 
 def _get_ffmpeg_bin() -> str:
     import shutil
-    # Prioritize GPU NVENC builds (Colab / Linux / Custom builds)
-    for candidate in ["/usr/local/bin/ffmpeg", os.environ.get("IMAGEIO_FFMPEG_EXE"), shutil.which("ffmpeg")]:
-        if candidate and os.path.exists(candidate):
-            return candidate
+    import subprocess
+    # Search all candidate ffmpeg paths
+    search_paths = [
+        "/usr/local/bin/ffmpeg",
+        shutil.which("ffmpeg"),
+        os.environ.get("IMAGEIO_FFMPEG_EXE"),
+        "/usr/bin/ffmpeg",
+    ]
+    existing = [p for p in search_paths if p and os.path.exists(p)]
+    
+    # Priority 1: Pick any binary that actively supports NVIDIA NVENC
+    for p in existing:
+        try:
+            res = subprocess.run([p, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True, timeout=4)
+            if res.returncode == 0:
+                os.environ["IMAGEIO_FFMPEG_EXE"] = p
+                return p
+        except Exception:
+            pass
+
+    # Priority 2: Pick any binary that supports Intel QSV
+    for p in existing:
+        try:
+            res = subprocess.run([p, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_qsv", "-f", "null", "-"], capture_output=True, timeout=4)
+            if res.returncode == 0:
+                os.environ["IMAGEIO_FFMPEG_EXE"] = p
+                return p
+        except Exception:
+            pass
+
+    if existing:
+        return existing[0]
+
     try:
         from imageio_ffmpeg import get_ffmpeg_exe
         ffmpeg_bin = get_ffmpeg_exe()

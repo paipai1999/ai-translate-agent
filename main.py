@@ -84,7 +84,7 @@ def run_interactive_cleanup():
             print("[OK] Temporary cache cleared!")
 
 def check_dependencies():
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = "/usr/local/bin/ffmpeg" if (os.path.exists("/usr/local/bin/ffmpeg") and os.path.getsize("/usr/local/bin/ffmpeg") > 10000000) else shutil.which("ffmpeg")
     if not ffmpeg:
         try:
             from imageio_ffmpeg import get_ffmpeg_exe
