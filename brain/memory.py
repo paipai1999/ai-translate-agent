@@ -54,9 +54,12 @@ class MovieState(BaseModel):
     reels_video_path: Optional[str] = None  # Path to generated 9:16 Facebook Reels video
     clean_video_path: Optional[str] = None  # Path to un-subtitled video copy (used for 9:16 Reels canvas source)
     thumbnail_intro_enabled: Optional[bool] = False  # Whether 3-second thumbnail intro should be stitched
+    skip_demucs: Optional[bool] = False  # When True, Demucs vocal separation was skipped
     source_language: Optional[str] = "auto"  # Source audio language for Whisper STT (e.g. "auto", "zh", "en", "th", "ko", "ja")
     subtitle_timings: List[Any] = Field(default_factory=list)  # Exact (place_time, duration, text) timings synced with audio
     uploaded_video_name: Optional[str] = None  # Stores the GenAI file name (e.g. files/abc)
+
+    model_config = {"extra": "allow"}
     qa_results: Optional[Dict[str, Any]] = None  # Phase 7: QA Agent review results
     output_video_transcript: List[Any] = Field(default_factory=list)  # Phase 7: Re-extracted output video transcript & actions
     phase_durations: Dict[str, float] = Field(default_factory=dict)  # Elapsed seconds per phase (e.g. {"Phase 1": 1.5, ...})

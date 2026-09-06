@@ -336,51 +336,50 @@ class VideoMergerAgent:
                 # ─────────────────────────────────────────────────────────────────
                 curr_t = 0.0
                 for idx, c in enumerate(audio_clips):
-                    preferred_start = starts[idx]
+                    orig_start = starts[idx]
 
-                    # Rule 2: If preferred window already passed, use sequential position
-                    if preferred_start < curr_t:
-                        preferred_start = curr_t
-                        if idx > 0:
-                            print(f"[*] VideoMerger [Hybrid]: Block {idx+1} preferred window passed — using sequential placement at {curr_t:.2f}s.")
-
-                    # Rule 3: Calculate available gap to next block and speed up if needed
-                    if idx < n_blocks - 1:
-                        available_gap = max(starts[idx+1], curr_t + c.duration) - preferred_start
-                        # Use actual next preferred start if it's ahead
-                        next_preferred = starts[idx+1]
-                        if next_preferred > preferred_start:
-                            available_gap = next_preferred - preferred_start
+                    # Non-accumulating anchor: If previous clip finished before orig_start, snap to orig_start
+                    if orig_start >= curr_t:
+                        place_time = orig_start
                     else:
-                        available_gap = video_dur - preferred_start
+                        # Allow at most 0.35s overrun before snapping back at next pause
+                        place_time = min(curr_t, orig_start + 0.35)
 
+                    # Calculate available gap to next dialogue block
+                    if idx < n_blocks - 1:
+                        next_orig = starts[idx + 1]
+                        available_gap = max(0.5, next_orig - place_time)
+                    else:
+                        available_gap = max(0.5, video_dur - place_time)
+
+                    # Natural pitch-preserving speedup: capped at 1.18x max to strictly prevent robotic sound
                     if available_gap > 0.5 and c.duration > available_gap:
-                        speed_factor = min(c.duration / available_gap, 1.35)
-                        print(f"[*] VideoMerger [Hybrid]: Block {idx+1} audio ({c.duration:.1f}s) > gap ({available_gap:.1f}s). Speeding up {speed_factor:.2f}x.")
-                        try:
+                        speed_factor = min(c.duration / available_gap, 1.18)
+                        if speed_factor > 1.03:
                             try:
-                                from moviepy.audio.fx.MultiplySpeed import MultiplySpeed
-                                c = c.with_effects([MultiplySpeed(speed_factor)])
-                            except Exception:
                                 try:
-                                    from moviepy.video.fx.MultiplySpeed import MultiplySpeed
+                                    from moviepy.audio.fx.MultiplySpeed import MultiplySpeed
                                     c = c.with_effects([MultiplySpeed(speed_factor)])
                                 except Exception:
-                                    import moviepy.audio.fx.all as afx
-                                    c = afx.speedx(c, speed_factor)
-                        except Exception as e:
-                            print(f"[WARN] VideoMerger: Speed-up failed for block {idx+1}: {e}")
+                                    try:
+                                        from moviepy.video.fx.MultiplySpeed import MultiplySpeed
+                                        c = c.with_effects([MultiplySpeed(speed_factor)])
+                                    except Exception:
+                                        import moviepy.audio.fx.all as afx
+                                        c = afx.speedx(c, speed_factor)
+                            except Exception as e:
+                                pass
 
-                    # Rule 4: Clamp to video bounds
-                    place_time = min(preferred_start, max(0.0, video_dur - c.duration - 0.05))
-                    place_time = max(place_time, curr_t)  # Never go backwards
+                    # Clamp place_time strictly within video bounds
+                    place_time = min(place_time, max(0.0, video_dur - c.duration - 0.05))
+                    place_time = max(0.0, place_time)
 
                     if hasattr(c, "with_start"):
                         positioned_clips.append(c.with_start(place_time))
                     else:
                         positioned_clips.append(c.set_start(place_time))
 
-                    curr_t = place_time + c.duration + 0.05
+                    curr_t = place_time + c.duration + 0.02
 
                     # Store timings for subtitles
                     if idx < len(script_blocks):
@@ -471,24 +470,57 @@ class VideoMergerAgent:
                                 except Exception:
                                     pass
 
-                    # Mix original audio with positioned voiceover clips
-                    if orig_audio is not None:
-                        if not has_no_vocals and not duck_applied:
-                            # When vocal separation is bypassed/skipped and dynamic ducking was NOT applied,
-                            # duck original audio down to 15% so original dialogue is faint while preserving background music & SFX!
+                    # Mix original audio / BGM with positioned voiceover clips
+                    # Per user requirement: when vocal separation (Demucs) was skipped/bypassed (has_no_vocals is False),
+                    # completely MUTE original audio to guarantee zero English narrator voice bleed-through!
+                    bgm_clip = None
+                    if not has_no_vocals or getattr(state, "skip_demucs", False):
+                        print("[*] VideoMerger: Vocal separation bypassed / skip-demucs -> 100% MUTING original audio (zero English voice bleed).")
+                        orig_audio = None
+
+                        # Add professional cinematic BGM from assets/bgm to replace the muted audio
+                        bgm_cfg = config_data.get("bgm", {})
+                        bgm_folder = bgm_cfg.get("folder", "assets/bgm")
+                        bgm_track = None
+                        if os.path.exists(bgm_folder):
+                            candidates = [f for f in os.listdir(bgm_folder) if f.endswith(('.wav', '.mp3'))]
+                            for preferred in ["scifi_tension.wav", "dark_suspense.wav", "action_pulse.wav"]:
+                                if preferred in candidates:
+                                    bgm_track = os.path.join(bgm_folder, preferred)
+                                    break
+                            if not bgm_track and candidates:
+                                bgm_track = os.path.join(bgm_folder, candidates[0])
+
+                        if bgm_track and os.path.exists(bgm_track):
+                            print(f"[*] VideoMerger: Adding cinematic BGM -> {os.path.basename(bgm_track)}")
                             try:
-                                from moviepy.audio.fx.MultiplyVolume import MultiplyVolume
-                                orig_audio = orig_audio.with_effects([MultiplyVolume(0.15)])
-                            except Exception:
                                 try:
-                                    import moviepy.audio.fx.all as afx
-                                    orig_audio = afx.volumex(orig_audio, 0.15)
+                                    from moviepy import AudioFileClip
+                                except ImportError:
+                                    from moviepy.editor import AudioFileClip
+                                raw_bgm = AudioFileClip(bgm_track)
+                                try:
+                                    from moviepy.audio.fx.AudioLoop import AudioLoop
+                                    from moviepy.audio.fx.MultiplyVolume import MultiplyVolume
+                                    bgm_clip = raw_bgm.with_effects([AudioLoop(duration=main_video.duration), MultiplyVolume(0.18)])
                                 except Exception:
-                                    pass
-                            print("[*] VideoMerger: Original audio mixed at 15% duck volume (vocal separation bypassed).")
-                        final_audio = CompositeAudioClip([orig_audio] + positioned_clips)
-                    else:
-                        final_audio = CompositeAudioClip(positioned_clips)
+                                    try:
+                                        import moviepy.audio.fx.all as afx
+                                        bgm_clip = afx.audio_loop(raw_bgm, duration=main_video.duration)
+                                        bgm_clip = afx.volumex(bgm_clip, 0.18)
+                                    except Exception:
+                                        pass
+                            except Exception as b_err:
+                                print(f"[WARN] VideoMerger: Failed to load BGM loop: {b_err}")
+
+                    audio_components = []
+                    if orig_audio is not None:
+                        audio_components.append(orig_audio)
+                    if bgm_clip is not None:
+                        audio_components.append(bgm_clip)
+                    audio_components.extend(positioned_clips)
+
+                    final_audio = CompositeAudioClip(audio_components)
                         
                     if hasattr(main_video, "with_audio"):
                         main_video = main_video.with_audio(final_audio)

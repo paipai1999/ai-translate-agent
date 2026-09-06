@@ -40,7 +40,7 @@ DEFAULT_CONFIG = {
         "tts_voice_mm": "my-MM-ThihaNeural",  # Burmese voice (Thiha)
         "tts_voice_en": "en-US-GuyNeural",    # English voice (Guy)
         "tts_voice": "my-MM-ThihaNeural",     # Active default voice
-        "tts_rate_mm": "+8%",
+        "tts_rate_mm": "+18%",
         "tts_rate_en": "+15%",
         "f5_tts": {
             "model_type": "F5-TTS",           # "F5-TTS" | "E2-TTS"

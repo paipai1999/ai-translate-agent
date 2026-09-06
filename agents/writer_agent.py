@@ -42,6 +42,9 @@ class WriterAgent:
         model_workhorse = models_dict.get("workhorse", "gemini-3.5-flash")
 
         # 1. Extract and clean all Whisper dialogue segments
+        # 1. Extract, sentence-split, and clean all Whisper dialogue segments
+        # Ensures 100% of spoken dialogue is translated without skipping or summarization
+        import re
         raw_segments = []
         for i, seg in enumerate(state.transcript):
             if isinstance(seg, dict):
@@ -53,19 +56,45 @@ class WriterAgent:
                 t_end = float(getattr(seg, "end", t_start + 2.0) or (t_start + 2.0))
                 text = str(getattr(seg, "text", "")).strip()
 
-            if text and len(text) > 1 and t_end > t_start:
-                dur = round(t_end - t_start, 2)
-                # Syllable / character budget: Edge-TTS Burmese speaks ~9.5 to 11 chars/sec
-                # Setting max_chars prevents Gemini from writing long essays that cause chipmunk speedup or audio drift
-                max_chars = max(16, int(dur * 9.5))
+            if not text or len(text) <= 1 or t_end <= t_start:
+                continue
+
+            total_dur = max(0.8, t_end - t_start)
+            # Split continuous narration into individual sentences (. ! ?)
+            raw_sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', text) if s.strip()]
+            if not raw_sentences:
+                raw_sentences = [text]
+
+            if len(raw_sentences) == 1:
+                dur = round(total_dur, 2)
+                max_chars = max(24, int(dur * 12.0))
                 raw_segments.append({
                     "id": len(raw_segments) + 1,
                     "start_sec": round(t_start, 2),
                     "end_sec": round(t_end, 2),
                     "duration_sec": dur,
                     "max_chars": max_chars,
-                    "text": text
+                    "text": raw_sentences[0]
                 })
+            else:
+                total_chars = sum(len(s) for s in raw_sentences)
+                cur_t = t_start
+                for s_idx, sent in enumerate(raw_sentences):
+                    prop = len(sent) / total_chars if total_chars > 0 else (1.0 / len(raw_sentences))
+                    s_dur = total_dur * prop
+                    s_start = cur_t
+                    s_end = t_end if (s_idx == len(raw_sentences) - 1) else (cur_t + s_dur)
+                    dur = round(max(0.8, s_end - s_start), 2)
+                    max_chars = max(24, int(dur * 12.0))
+                    raw_segments.append({
+                        "id": len(raw_segments) + 1,
+                        "start_sec": round(s_start, 2),
+                        "end_sec": round(s_end, 2),
+                        "duration_sec": dur,
+                        "max_chars": max_chars,
+                        "text": sent
+                    })
+                    cur_t = s_end
 
         if not raw_segments:
             print("[!] WriterAgent: No valid dialogue text found in transcript.")
@@ -77,7 +106,7 @@ class WriterAgent:
             total_count = len(raw_segments)
             print(f"[*] WriterAgent: Limited to MAX_BLOCKS={self.max_blocks} dialogue lines.")
 
-        print(f"[*] WriterAgent: Found {total_count} spoken dialogue segments to translate.")
+        print(f"[*] WriterAgent: Found {total_count} sentence-level dialogue segments to translate (100% full coverage).")
 
         # 2. Batch dialogue lines (20 per batch) for fast, reliable Gemini translation
         BATCH_SIZE = 20
@@ -92,8 +121,11 @@ class WriterAgent:
             batch_prompt = (
                 f"Target Language: {self.language.upper()}\n"
                 f"Movie Title: {state.movie_name}\n"
-                f"Translate the following movie dialogues into natural colloquial {self.language.title()} for professional dubbing.\n"
-                f"CRITICAL TIMING RULE: Fit the translation to `duration_sec` and stay within `max_chars` characters so speech timing synchronizes perfectly without rushing.\n"
+                f"Translate EVERY SINGLE movie dialogue sentence below into natural colloquial {self.language.title()} for professional dubbing.\n"
+                f"CRITICAL REQUIREMENTS:\n"
+                f"1. STRICT 1:1 TRANSLATION: Translate every single item completely. DO NOT summarize, merge, or drop any sentence.\n"
+                f"2. Translate all character names, places, events, and plot points accurately without leaving anything out.\n"
+                f"3. DURATION MATCH: Match the length of the Burmese translation so spoken duration fits `duration_sec` naturally without trailing off or rushing.\n\n"
                 f"{json.dumps(batch, ensure_ascii=False, indent=2)}\n\n"
                 f"Output a JSON array where each object has: id, narration, start_sec, end_sec, emotion, character, gender (\"male\" or \"female\")."
             )

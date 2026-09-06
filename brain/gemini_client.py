@@ -22,12 +22,12 @@ def _mask_key(key: str) -> str:
 # 7. gemini-3-flash           : Standard Flash fallback (5 RPM)
 _FALLBACK_MODELS = [
     "gemini-3.5-flash-lite",
-    "gemini-flash-latest",
     "gemini-3.1-flash-lite",
+    "gemini-flash-lite-latest",
     "gemini-3.5-flash",
     "gemini-3.6-flash",
     "gemini-3.7-flash",
-    "gemini-3-flash",
+    "gemini-flash-latest",
 ]
 
 # How many seconds to wait when ALL keys are rate-limited before retrying.
@@ -148,13 +148,14 @@ def call_gemini(
                     except Exception: pass
                     
                     if e.code == 429:
-                        setattr(e, "is_quota", "quota" in err_body.lower() or "exhausted" in err_body.lower())
-                        if getattr(e, "is_quota", False):
+                        is_daily = "daily" in err_body.lower() or "per day" in err_body.lower() or "free_tier_requests" in err_body.lower()
+                        setattr(e, "is_quota", is_daily)
+                        if is_daily:
                             print(f"[!] Gemini API Daily Quota Exhausted (429) on '{m}'. Trying next API key...")
                         else:
-                            print(f"[!] Gemini API Rate Limit (429) hit on '{m}'. Trying next API key...")
+                            print(f"[!] Gemini API Rate Limit (429 RPM) on '{m}'. Trying next API key...")
                         _record_api_usage(key, m, "rate_limited")
-                        time.sleep(1)   # tiny pause — don't hammer
+                        time.sleep(2)   # brief pause — don't hammer
                         continue        # next key, same model
                     elif e.code in (404, 503):
                         # FIX-W2: 404/503 = model doesn't exist or service unavailable globally → skip whole model
@@ -184,17 +185,17 @@ def call_gemini(
             is_rate_limit = (
                 isinstance(last_err, urllib.error.HTTPError)
                 and last_err.code == 429
-                and not getattr(last_err, "is_quota", False)
             )
             if is_rate_limit:
+                wait_time = 30 if getattr(last_err, "is_quota", False) else _RPM_WAIT_SEC
                 print(
-                    f"[!] All API keys hit Rate Limit! "
-                    f"Waiting {_RPM_WAIT_SEC}s for RPM quota to reset "
+                    f"[!] All API keys hit 429 Rate Limit! "
+                    f"Waiting {wait_time}s for quota window to reset "
                     f"(attempt {attempt + 1}/3)..."
                 )
-                time.sleep(_RPM_WAIT_SEC)
+                time.sleep(wait_time)
             else:
-                break   # non-transient error or daily quota — stop retrying
+                break   # non-transient error — stop retrying
 
     raise last_err or Exception("All Gemini API keys and models failed.")
 

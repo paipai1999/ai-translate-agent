@@ -45,8 +45,8 @@ class QAAgent:
             
         model = config_data.get("gemini", {}).get("models", {}).get("workhorse", "gemini-3.5-flash")
         blocks_to_rewrite = []
-        chars_per_sec = 9.5  # Burmese Edge-TTS reading speed (~9.5 characters/sec)
-        max_stretch = 1.25  # Allows audio to be up to 1.25x target duration
+        chars_per_sec = 11.5  # Burmese Edge-TTS reading speed (~11.5 characters/sec for natural conversational flow)
+        max_stretch = 1.35  # Allows audio to fit naturally without dropping sentences
 
         for i, block in enumerate(script_blocks):
             if not isinstance(block, dict): continue
@@ -78,12 +78,12 @@ class QAAgent:
         
         system_prompt = (
             "You are a professional Myanmar dubbing scriptwriter and video editor.\n"
-            "Your task: Shorten the provided Burmese dialogue blocks to fit within the target character limit.\n"
-            "RULES FOR SHORTENING:\n"
-            "1. PRESERVE the single most important story beat in each block (character reveals, emotional peaks, key plot facts).\n"
-            "2. DROP filler words, repetitive phrases, and secondary details - NOT key content.\n"
-            "3. NEVER drop: character names, emotional turning points, or plot-critical information.\n"
-            "4. Keep the natural colloquial Burmese style (use particles: လေ, ပေါ့, ကွာ, ဗျာ).\n"
+            "Your task: Make the provided Burmese dialogue sentences concise to fit within the target character limit while preserving the full spoken meaning.\n"
+            "RULES FOR CONCISENESS:\n"
+            "1. PRESERVE the full dialogue meaning and all factual details in each sentence.\n"
+            "2. Make phrasing concise by trimming unnecessary particles or repetitive filler words - DO NOT summarize or omit plot content.\n"
+            "3. NEVER drop: character names, emotional turning points, questions, or key spoken dialogue.\n"
+            "4. Keep natural colloquial Burmese dubbing style.\n"
             "5. Output ONLY a valid JSON array of objects with: scene_id and rewritten_narration. No markdown."
         )
 

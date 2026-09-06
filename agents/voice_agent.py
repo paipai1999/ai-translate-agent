@@ -453,7 +453,7 @@ class VoiceAgent:
 
                 if raw_dur > 0:
                     stretch_ratio = target_dur / raw_dur
-                    effective_ratio = min(1.1, max(0.7, stretch_ratio))
+                    effective_ratio = min(1.10, max(0.85, stretch_ratio))
 
                     if abs(effective_ratio - 1.0) > 0.05:
                         base, ext = os.path.splitext(output_file)
@@ -468,7 +468,13 @@ class VoiceAgent:
                         else:
                             filter_str = f"atempo={atempo_val:.3f}"
                         
-                        ffmpeg_bin = shutil.which("ffmpeg") or os.environ.get("IMAGEIO_FFMPEG_EXE") or "ffmpeg"
+                        ffmpeg_bin = shutil.which("ffmpeg") or os.environ.get("IMAGEIO_FFMPEG_EXE")
+                        if not ffmpeg_bin or not os.path.exists(ffmpeg_bin):
+                            try:
+                                from imageio_ffmpeg import get_ffmpeg_exe
+                                ffmpeg_bin = get_ffmpeg_exe()
+                            except Exception:
+                                ffmpeg_bin = "ffmpeg"
                         cmd = [
                             ffmpeg_bin, "-y", "-i", temp_file,
                             "-filter:a", filter_str,

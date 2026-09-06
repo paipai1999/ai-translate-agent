@@ -1042,6 +1042,7 @@ def get_movie_logs(movie_name: str):
     return PlainTextResponse(content)
 
 @app.get("/api/outputs/file")
+@app.get("/api/download")
 def serve_output(path: str = Query("")):
     rel_path = path
     if not rel_path:
