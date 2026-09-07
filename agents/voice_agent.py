@@ -48,7 +48,8 @@ class VoiceAgent:
             else:
                 self.f5_engine = F5TTSEngine(
                     model_type=self.f5_cfg.get("model_type", "F5-TTS"),
-                    device=self.f5_cfg.get("device", "cuda"),
+                    device=self.f5_cfg.get("device", "auto"),
+                    speed=float(self.f5_cfg.get("speed", 1.0)),
                     output_dir=os.path.join(self.output_dir, "f5_reference_clips")
                 )
                 if self.f5_engine.device == "cpu":

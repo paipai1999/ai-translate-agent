@@ -35,10 +35,11 @@ class F5TTSEngine:
       - Pitch-preserving atempo time stretch
     """
 
-    def __init__(self, model_type: str = "F5-TTS", device: str = "auto", speed: float = 1.0):
+    def __init__(self, model_type: str = "F5-TTS", device: str = "auto", speed: float = 1.0, output_dir: Optional[str] = None, **kwargs):
         self.model_type = model_type
         self.speed = speed
         self.device = self._resolve_device(device)
+        self.output_dir = output_dir
         self._f5_model = None
         self._is_available = None
 
