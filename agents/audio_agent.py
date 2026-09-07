@@ -18,34 +18,32 @@ class AudioAgent:
             state.audio_path = audio_path
             return state
 
-        # Try MoviePy first (v1.x and v2.x compatible)
+        # Direct FFmpeg extraction first (instant C-speed, zero RAM overhead)
         extracted = False
-        try:
+        result = self._ffmpeg_extract_audio(audio_path)
+        if result and os.path.exists(audio_path) and os.path.getsize(audio_path) > 1000:
+            state.audio_path = result
+            extracted = True
+            print(f"[*] AudioAgent: Audio extracted via FFmpeg -> {audio_path}")
+        else:
+            # Fallback to MoviePy if FFmpeg direct extraction failed
             try:
-                from moviepy.editor import VideoFileClip
-            except ImportError:
-                from moviepy import VideoFileClip
+                try:
+                    from moviepy.editor import VideoFileClip
+                except ImportError:
+                    from moviepy import VideoFileClip
 
-            video = VideoFileClip(self.movie_path)
-            if video.audio is not None:
-                video.audio.write_audiofile(audio_path, logger=None)
-                state.audio_path = audio_path
-                extracted = True
-                print(f"[*] AudioAgent: Audio extracted via MoviePy -> {audio_path}")
-            else:
-                print("[!] AudioAgent: No audio stream detected in the video.")
-            video.close()
-        except Exception as e:
-            print(f"[!] AudioAgent: MoviePy failed ({e}). Trying FFmpeg fallback...")
-
-        # FFmpeg fallback
-        if not extracted:
-            result = self._ffmpeg_extract_audio(audio_path)
-            if result:
-                state.audio_path = result
-                print(f"[*] AudioAgent: Audio extracted via FFmpeg -> {audio_path}")
-            else:
-                print("[!] AudioAgent: Both extraction methods failed. Transcription will be skipped.")
+                video = VideoFileClip(self.movie_path)
+                if video.audio is not None:
+                    video.audio.write_audiofile(audio_path, logger=None)
+                    state.audio_path = audio_path
+                    extracted = True
+                    print(f"[*] AudioAgent: Audio extracted via MoviePy fallback -> {audio_path}")
+                else:
+                    print("[!] AudioAgent: No audio stream detected in the video.")
+                video.close()
+            except Exception as e:
+                print(f"[!] AudioAgent: MoviePy fallback failed ({e}). Transcription will be skipped.")
 
         if getattr(state, 'audio_path', None):
             state.audio_path = self.separate_vocals(state.audio_path, output_dir)
@@ -61,6 +59,19 @@ class AudioAgent:
         use_demucs_cfg = config_data.get("pipeline", {}).get("use_demucs", True)
         if os.getenv("SKIP_DEMUCS") == "true" or not use_demucs_cfg:
             print("[*] AudioAgent: Skipping vocal separation (Demucs disabled) -> using direct audio for Whisper.")
+            return audio_path
+
+        # CPU Bottleneck Guard: Demucs on CPU takes 20-40 mins per video. Auto-skip on CPU unless CUDA or explicitly forced.
+        try:
+            import torch
+            has_cuda = torch.cuda.is_available()
+        except Exception:
+            has_cuda = False
+
+        force_cpu = config_data.get("pipeline", {}).get("force_cpu_demucs", False) or os.getenv("FORCE_DEMUCS") == "true"
+        if not has_cuda and not force_cpu:
+            print("[*] AudioAgent: No CUDA GPU detected (CPU mode). Skipping Demucs to save 20-40 mins of CPU processing.")
+            print("    💡 Tip: Demucs requires an NVIDIA GPU for fast separation. Whisper will transcribe original audio directly.")
             return audio_path
 
         base_name = os.path.splitext(os.path.basename(audio_path))[0]

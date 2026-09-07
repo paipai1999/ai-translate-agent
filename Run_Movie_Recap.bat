@@ -48,13 +48,19 @@ echo 🔗 PASTE YOUTUBE/TIKTOK URL OR LOCAL VIDEO FILE PATH BELOW:
 echo ===============================================================================
 echo Tip: For YouTube links, paste full link (e.g., https://www.youtube.com/watch?v=...)
 echo.
-set /p input_src="👉 Input URL or File Path: "
-if "%input_src%"=="" goto MENU
+set "input_src="
+set /p "input_src=👉 Input URL or File Path: "
+setlocal EnableDelayedExpansion
+if not defined input_src (
+    endlocal
+    goto MENU
+)
 cls
 echo ===============================================================================
-echo 🎬 PROCESSING: %input_src%
+echo 🎬 PROCESSING: !input_src!
 echo ===============================================================================
-"%PYTHON_EXE%" main.py "%input_src%"
+"%PYTHON_EXE%" main.py "!input_src!"
+endlocal
 echo.
 echo ===============================================================================
 echo ✅ Processing Complete! Press any key to return to menu...

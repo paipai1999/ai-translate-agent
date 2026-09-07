@@ -164,6 +164,34 @@ This major release eliminates cumulative audio drift, guarantees complete spoken
   - **Full CLI & Web UI Integration:**
     - CLI: Added `--resume` (enabled by default) and `--fresh` / `--force-restart` flags in [main.py](main.py) and [brain/planner.py](brain/planner.py).
     - Web UI: Added `resume: bool` parameter to `/api/start` and `/api/batch/start` in [web_ui.py](web_ui.py).
+---
 
+### 16. 🔊 Overlap-Add Audio Mixing & True Scene-Anchor Zero Cumulative Drift
+- **Problem:** Sequential audio placement (`place_time = max(curr_t, orig_start)`) combined with direct buffer assignment (`vo_buffer[...] = data`) resulted in two compounding problems:
+  1. If any clip overran by even 0.2s, every subsequent clip was permanently pushed later, causing runaway cumulative drift.
+  2. Overlapping speech clips suffered hard cutoff where the subsequent clip abruptly silenced the tail of the previous clip.
+- **Solution:** In [agents/video_merger_agent.py](agents/video_merger_agent.py):
+  - **Overlap-Add Mixing:** Switched to `vo_buffer[start_idx:end_idx] += data[:end_idx - start_idx]` with soft-clipping/normalization to smoothly blend speech tails without integer clipping.
+  - **True Scene-Anchor Sync:** If a clip overruns by $\le 0.5\text{s}$, the next clip snaps directly to `orig_start`. Timing drift instantly resets to 0.000s at dialogue and scene transitions.
 
+---
+
+### 17. 🇲🇲 Space-Agnostic Burmese Syllable Subtitle Chunking & Dynamic Reels ASS
+- **Problem:**
+  1. In `_write_ass` and Reels export, narration text was split using `text.split(" ")`. Because standard Burmese text does not use spaces between words, sentences appeared as single massive unbroken lines without proportional time division.
+  2. The Reels subtitle path was static (`temp/reels_subs.ass`), causing batch processing collisions.
+  3. Unspaced Reels hook titles overflowed horizontally beyond the 1080px canvas boundaries.
+- **Solution:** In [agents/video_merger_agent.py](agents/video_merger_agent.py):
+  - **Space-Agnostic Chunking:** Implemented `_chunk_burmese_narration()` using Myanmar syllable boundary regex (`[\u1000-\u102a\u104e]...`), partitioning unspaced sentences into proportional, syllable-accurate subtitle chunks.
+  - **Dynamic Collision-Free Naming:** Reels ASS subtitles now use unique filenames (`reels_subs_{safe_id}_{uuid}.ass`).
+  - **Syllable Title Wrapping:** Hook titles are wrapped via `_wrap_burmese_text` to fit the 1080px canvas without overflow.
+
+---
+
+### 18. ⚡ Windows Launcher Ampersand Fix & Performance Optimizations
+- **Windows Launcher URL Fix:** In [Run_Movie_Recap.bat](Run_Movie_Recap.bat), enabled `EnableDelayedExpansion` and quoted `!input_src!` expansion so URLs containing `&` (e.g. `&t=30s&ab_channel=...`) do not trigger cmd.exe syntax errors or command chaining crashes.
+- **Instant Audio Extraction:** In [agents/audio_agent.py](agents/audio_agent.py), direct FFmpeg extraction is now executed first (instant C-speed, minimal RAM), using MoviePy only as a fallback.
+- **CPU Demucs Guard:** In [agents/audio_agent.py](agents/audio_agent.py), automatically detects CUDA availability. If running on CPU without explicit override, Demucs is gracefully skipped, saving 20–40 minutes of 100% CPU lockup per video.
+- **RPD Quota Corrections:** In [brain/config.py](brain/config.py), corrected `DEFAULT_CONFIG` `daily_limit_per_key` to 1500 and model daily limits to 1000/500 (resolving confusion between RPM and RPD).
+- **F5-TTS Burmese Auto-Reroute:** In [agents/voice_agent.py](agents/voice_agent.py), automatically re-routes Burmese requests from F5-TTS to Edge-TTS to prevent phonological distortion.
 

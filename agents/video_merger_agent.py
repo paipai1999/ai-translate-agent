@@ -259,7 +259,13 @@ def _assemble_voiceover_track(clips_with_timing: list, total_duration: float, ou
         start_idx = int(place_time * target_sr)
         end_idx = min(start_idx + len(data), total_samples)
         if start_idx < total_samples and end_idx > start_idx:
-            vo_buffer[start_idx:end_idx] = data[:end_idx - start_idx]
+            # Overlap-add mixing: blend overlapping speech tails cleanly rather than clipping/overwriting
+            vo_buffer[start_idx:end_idx] += data[:end_idx - start_idx]
+
+    # Prevent 16-bit integer clipping distortion if overlapping signals exceed unity
+    max_val = float(np.max(np.abs(vo_buffer))) if len(vo_buffer) > 0 else 0.0
+    if max_val > 1.0:
+        vo_buffer = vo_buffer / max_val
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     import soundfile as sf
@@ -364,7 +370,16 @@ class VideoMergerAgent:
 
             for idx, (s_idx, fpath, dur, b) in enumerate(audio_items):
                 orig_start = starts[idx]
-                place_time = max(curr_t, orig_start)
+                # True Scene-Anchor Sync:
+                # If the previous clip overran slightly (<= 0.5s), anchor directly to orig_start.
+                # Overlap-add audio mixing cleanly blends speech tails with zero cumulative drift.
+                # If overrun is larger, place at curr_t, but whenever a scene gap occurs,
+                # timing instantly snaps back to orig_start (0.000s drift).
+                if orig_start >= curr_t - 0.5:
+                    place_time = orig_start
+                else:
+                    place_time = curr_t
+
                 if video_dur > 0 and place_time >= video_dur:
                     print(f"[*] VideoMerger: Audio clip {idx+1} falls past video duration ({video_dur:.1f}s), trimming remaining clips.")
                     break
@@ -919,7 +934,10 @@ class VideoMergerAgent:
                 legacy_subtitle_timings = []
                 for idx, c in enumerate(audio_clips):
                     orig_start = starts[idx]
-                    place_time = max(curr_t, orig_start)
+                    if orig_start >= curr_t - 0.5:
+                        place_time = orig_start
+                    else:
+                        place_time = curr_t
                     if place_time >= video_dur:
                         break
                     if hasattr(c, "with_start"):
@@ -1282,6 +1300,67 @@ class VideoMergerAgent:
 
         return "{\\N}".join(lines)
 
+    def _chunk_burmese_narration(self, text: str, max_chars_per_chunk: int = 40) -> list:
+        """
+        Splits narration text into proportional timing chunks.
+        Space-agnostic: if the text lacks spaces (standard Myanmar writing),
+        segments syllables using Myanmar phonetic boundaries so subtitles are
+        never displayed as one giant unchunked sentence.
+        """
+        text = str(text or "").strip()
+        if not text:
+            return []
+
+        import re
+        syllable_pattern = re.compile(
+            r'[\u1000-\u102a\u104e]'
+            r'[\u102b-\u103e\u1036-\u1038]*'
+            r'(?:[\u1039][\u1000-\u1021][\u102b-\u103e\u1036-\u1038]*)*'
+            r'(?:[\u1000-\u1021][\u103a][\u1037\u1038]*)*'
+            r'|[\u1040-\u1049]+'
+            r'|[a-zA-Z0-9]+'
+            r'|[^\u1000-\u104f\s]'
+        )
+
+        words = [w for w in text.split(" ") if w]
+        refined_tokens = []
+        for word in words:
+            if len(word) <= max_chars_per_chunk:
+                refined_tokens.append(word)
+            else:
+                last_idx = 0
+                for m in syllable_pattern.finditer(word):
+                    if m.start() > last_idx:
+                        refined_tokens.append(word[last_idx:m.start()])
+                    refined_tokens.append(m.group(0))
+                    last_idx = m.end()
+                if last_idx < len(word):
+                    refined_tokens.append(word[last_idx:])
+
+        if not refined_tokens:
+            refined_tokens = [text]
+
+        chunks = []
+        current = ""
+        for tok in refined_tokens:
+            if not tok:
+                continue
+            if tok in ["၊", "။", ",", ".", "!", "?"] and current:
+                current += tok
+                continue
+            sep = " " if current and not ('\u1000' <= tok[0] <= '\u109F' and '\u1000' <= current[-1] <= '\u109F') else ""
+            candidate = current + sep + tok if current else tok
+            if len(candidate) <= max_chars_per_chunk:
+                current = candidate
+            else:
+                if current:
+                    chunks.append(current)
+                current = tok
+        if current:
+            chunks.append(current)
+
+        return chunks if chunks else [text]
+
     def _write_ass(
         self,
         timings: list,
@@ -1364,18 +1443,8 @@ class VideoMergerAgent:
                 continue
             text = text.strip()
 
-            # Split long narration into proportional chunks
-            words = text.split(" ")
-            chunks, line = [], ""
-            for word in words:
-                if len(line) + len(word) + 1 <= max_chars * 2:
-                    line = (line + " " + word).strip()
-                else:
-                    if line:
-                        chunks.append(line)
-                    line = word
-            if line:
-                chunks.append(line)
+            # Split long narration into proportional chunks using syllable awareness
+            chunks = self._chunk_burmese_narration(text, max_chars_per_chunk=max_chars * 2)
             if not chunks:
                 continue
 
@@ -2003,8 +2072,10 @@ class VideoMergerAgent:
             elif "mmrtext" in base_font.lower() or "myanmar" in base_font.lower():
                 font_name = "Myanmar Text"
 
-        # 1. Create Reels ASS Subtitle & Hook Title File
-        ass_path = os.path.join(temp_dir, "reels_subs.ass")
+        # 1. Create Reels ASS Subtitle & Hook Title File with unique filename to prevent batch collision
+        import uuid
+        safe_reels_id = re.sub(r'[^\w\-]', '_', os.path.splitext(os.path.basename(source_video_path))[0])
+        ass_path = os.path.join(temp_dir, f"reels_subs_{safe_reels_id}_{uuid.uuid4().hex[:6]}.ass")
         title_clean = str(hook_title or "").replace("|", "-").strip()
         if not title_clean:
             title_clean = "Movie Recap"
@@ -2012,18 +2083,8 @@ class VideoMergerAgent:
         if len(title_clean) > 80:
             title_clean = title_clean[:77] + "..."
 
-        # Word wrap title for 1080px width (approx 20-22 chars per line)
-        words = title_clean.split()
-        lines = []
-        cur_line = ""
-        for word in words:
-            if len(cur_line + " " + word) <= 22:
-                cur_line = (cur_line + " " + word).strip()
-            else:
-                if cur_line: lines.append(cur_line)
-                cur_line = word
-        if cur_line: lines.append(cur_line)
-        wrapped_title = "\\N".join(lines) if lines else title_clean
+        # Word wrap title for 1080px portrait canvas (approx 20-22 chars per line) using syllable awareness
+        wrapped_title = self._wrap_burmese_text(title_clean, max_chars=20).replace("{\\N}", "\\N")
 
         # Generate ASS with three styles:
         # Style 1: ReelsBrand (Top Header Badge on Canvas, White/Gold with Dark Pill, MarginV=45)
@@ -2084,15 +2145,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     dur_s   = float(item[1])
                     raw_txt = str(item[2]).strip()
                     if not raw_txt: continue
-                    words = raw_txt.split(" ")
-                    chunks, line = [], ""
-                    for word in words:
-                        if len(line) + len(word) + 1 <= 48:
-                            line = (line + " " + word).strip()
-                        else:
-                            if line: chunks.append(line)
-                            line = word
-                    if line: chunks.append(line)
+                    chunks = self._chunk_burmese_narration(raw_txt, max_chars_per_chunk=48)
                     if not chunks: continue
                     seg_dur = dur_s / len(chunks)
                     for i, chunk in enumerate(chunks):

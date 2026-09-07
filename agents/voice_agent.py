@@ -27,12 +27,18 @@ class VoiceAgent:
         self.f5_cfg = voice_cfg.get("f5_tts", {})
         self.f5_engine = None
         if self.engine == "f5_tts":
-            model_type = self.f5_cfg.get("model_type", "F5-TTS")
-            device = self.f5_cfg.get("device", "auto")
-            speed = float(self.f5_cfg.get("speed", 1.0))
-            self.f5_engine = F5TTSEngine(model_type=model_type, device=device, speed=speed)
-            if self.f5_engine.device == "cpu":
-                print("💡 [F5-TTS NOTICE] Running on CPU. For 50x faster zero-shot voice cloning, consider using Google Colab T4 GPU or Edge-TTS.")
+            is_burmese = str(self.voice).startswith("my-") or config_data.get("pipeline", {}).get("language", "").lower() == "burmese"
+            if is_burmese:
+                print("⚠️ [F5-TTS NOTICE] F5-TTS does not support Burmese phonology/Unicode. Auto-routing to Edge-TTS (my-MM-ThihaNeural / my-MM-NilarNeural) for natural Burmese speech.")
+                self.engine = "edge_tts"
+                self.tts_engine = "edge_tts"
+            else:
+                model_type = self.f5_cfg.get("model_type", "F5-TTS")
+                device = self.f5_cfg.get("device", "auto")
+                speed = float(self.f5_cfg.get("speed", 1.0))
+                self.f5_engine = F5TTSEngine(model_type=model_type, device=device, speed=speed)
+                if self.f5_engine.device == "cpu":
+                    print("💡 [F5-TTS NOTICE] Running on CPU. For 50x faster zero-shot voice cloning, consider using Google Colab T4 GPU or Edge-TTS.")
 
         print(f"[*] VoiceAgent: Active TTS Engine: {self.engine.upper()} (Voice: {self.voice})")
 
