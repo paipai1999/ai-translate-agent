@@ -172,7 +172,7 @@ Choose from 5 professionally designed subtitle styles with real-time live previe
 * **Tier Synchronization:** Pre-configured with Google AI Studio 2026 PRO quotas:
   - **Workhorse:** `gemini-3.5-flash-lite` (15 RPM) & `gemini-3.1-flash-lite` (15 RPM)
   - **Fastest Cloud:** `gemini-flash-latest` (Dynamic auto-routed to newest stable engine)
-  - **Primary & Fallbacks:** `gemini-3.5-flash` (5 RPM), `gemini-3.7-flash` (5 RPM), `gemini-3.6-flash`, `gemini-3-flash`
+  - **Primary & Fallbacks:** `gemini-3.5-flash-lite`, `gemini-flash-latest`, `gemini-3.5-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`
 * **Zero-Error Parsing:** Safe `_extract_text_from_gemini_response` multi-part and thought-block extractor preventing `KeyError: 'parts'`.
 
 ### ⏱️ 13. Process Records Time & Live Stopwatch Dashboard

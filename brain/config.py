@@ -26,8 +26,7 @@ DEFAULT_CONFIG = {
             "gemini-flash-latest": 500,
             "gemini-3.5-flash": 500,
             "gemini-3.6-flash": 500,
-            "gemini-3.7-flash": 500,
-            "gemini-3-flash": 500
+            "gemini-3.7-flash": 500
         },
         "models": {
             "heavy": "gemini-flash-latest",
@@ -265,7 +264,7 @@ def load_config() -> dict:
     else:
         # First-time: write the default config file for the user
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(DEFAULT_CONFIG, f, indent=4)
+            json.dump(DEFAULT_CONFIG, f, indent=4, ensure_ascii=False)
         print(f"[*] Config: Created default config file -> {CONFIG_FILE}")
         _config_cache = DEFAULT_CONFIG
         _config_cache_mtime = mtime
@@ -281,7 +280,7 @@ def save_config(config_data: dict) -> None:
     global _config_cache, _config_cache_mtime
     tmp_file = CONFIG_FILE + ".tmp"
     with open(tmp_file, "w", encoding="utf-8") as f:
-        json.dump(config_data, f, indent=4)
+        json.dump(config_data, f, indent=4, ensure_ascii=False)
     os.replace(tmp_file, CONFIG_FILE)
     _config_cache = config_data
     _config_cache_mtime = os.path.getmtime(CONFIG_FILE)

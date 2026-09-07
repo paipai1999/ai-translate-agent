@@ -6,6 +6,19 @@ import subprocess
 from brain.memory import MovieState
 from agents.f5_tts_engine import F5TTSEngine
 
+_CACHED_AVAILABLE_VOICES = None
+_KNOWN_EDGE_VOICES = {
+    "my-mm-thihaneural",
+    "my-mm-nilarneural",
+    "en-us-guyneural",
+    "en-us-jennyneural",
+    "en-us-arianeural",
+    "en-us-christopherneural",
+    "en-us-ericneural",
+    "zh-cn-xiaoxianeural",
+    "zh-cn-yunjianneural",
+}
+
 class VoiceAgent:
     def __init__(self, voice: str = None, output_dir: str = "outputs", engine: str = None, tts_engine: str = None):
         """
@@ -29,14 +42,15 @@ class VoiceAgent:
         if self.engine == "f5_tts":
             is_burmese = str(self.voice).startswith("my-") or config_data.get("pipeline", {}).get("language", "").lower() == "burmese"
             if is_burmese:
-                print("⚠️ [F5-TTS NOTICE] F5-TTS does not support Burmese phonology/Unicode. Auto-routing to Edge-TTS (my-MM-ThihaNeural / my-MM-NilarNeural) for natural Burmese speech.")
+                print("[*] VoiceAgent: Burmese language detected. Routing to Microsoft Neural Edge-TTS for authentic Myanmar narration.")
                 self.engine = "edge_tts"
                 self.tts_engine = "edge_tts"
             else:
-                model_type = self.f5_cfg.get("model_type", "F5-TTS")
-                device = self.f5_cfg.get("device", "auto")
-                speed = float(self.f5_cfg.get("speed", 1.0))
-                self.f5_engine = F5TTSEngine(model_type=model_type, device=device, speed=speed)
+                self.f5_engine = F5TTSEngine(
+                    model_type=self.f5_cfg.get("model_type", "F5-TTS"),
+                    device=self.f5_cfg.get("device", "cuda"),
+                    output_dir=os.path.join(self.output_dir, "f5_reference_clips")
+                )
                 if self.f5_engine.device == "cpu":
                     print("💡 [F5-TTS NOTICE] Running on CPU. For 50x faster zero-shot voice cloning, consider using Google Colab T4 GPU or Edge-TTS.")
 
@@ -58,36 +72,45 @@ class VoiceAgent:
             if value and value not in candidates:
                 candidates.append(value)
 
-        try:
-            import edge_tts
-            import asyncio
-            available_voices = []
-            
-            async def get_voices():
-                return await edge_tts.list_voices()
-            
-            # FIX-W1: Kaggle/Colab already has a running event loop
-            try:
-                voices_list = asyncio.run(get_voices())
-            except RuntimeError:
-                try:
-                    import nest_asyncio; nest_asyncio.apply()
-                    voices_list = asyncio.get_event_loop().run_until_complete(get_voices())
-                except Exception:
-                    voices_list = []
-            for item in voices_list:
-                if isinstance(item, dict):
-                    available_voices.append(str(item.get("ShortName") or item.get("Name") or "").strip())
-                else:
-                    available_voices.append(str(item).strip())
-            available_lower = {v.lower() for v in available_voices if v}
-            for candidate in candidates:
-                if candidate.lower() in available_lower:
-                    return candidate
-        except Exception:
-            pass
+        # 1. Instant check against known standard Edge voices (zero network delay)
+        for candidate in candidates:
+            if candidate.lower() in _KNOWN_EDGE_VOICES:
+                return candidate
 
-        # If the environment cannot list voices (offline or package mismatch), use a known-good default.
+        # 2. Module-level cached check for custom/uncommon voices
+        global _CACHED_AVAILABLE_VOICES
+        if _CACHED_AVAILABLE_VOICES is None:
+            try:
+                import edge_tts
+                import asyncio
+                available_voices = []
+                
+                async def get_voices():
+                    return await edge_tts.list_voices()
+                
+                try:
+                    voices_list = asyncio.run(get_voices())
+                except RuntimeError:
+                    try:
+                        import nest_asyncio; nest_asyncio.apply()
+                        voices_list = asyncio.get_event_loop().run_until_complete(get_voices())
+                    except Exception:
+                        voices_list = []
+                for item in voices_list:
+                    if isinstance(item, dict):
+                        available_voices.append(str(item.get("ShortName") or item.get("Name") or "").strip())
+                    else:
+                        available_voices.append(str(item).strip())
+                _CACHED_AVAILABLE_VOICES = {v.lower() for v in available_voices if v}
+            except Exception:
+                _CACHED_AVAILABLE_VOICES = set()
+
+        if _CACHED_AVAILABLE_VOICES:
+            for candidate in candidates:
+                if candidate.lower() in _CACHED_AVAILABLE_VOICES:
+                    return candidate
+
+        # 3. If offline or unlisted, use known-good default.
         for candidate in candidates:
             if candidate.lower().startswith("my-"):
                 return candidate

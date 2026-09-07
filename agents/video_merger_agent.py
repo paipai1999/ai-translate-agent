@@ -742,6 +742,24 @@ class VideoMergerAgent:
             dur_sec = video_dur if video_dur > 0 else (getattr(state, "duration_sec", 0.0) if state else 0.0)
             dyn_timeout = max(1200, int((dur_sec or 600.0) * 2.5))
 
+            def _build_sp_cmd(curr_codec, curr_preset, curr_quality, curr_blur):
+                flt_str, r_stream = _build_filtergraph(curr_blur)
+                return [
+                    ffmpeg_bin, "-y",
+                    *sp_inputs,
+                    "-filter_complex", flt_str,
+                    "-map", r_stream, "-map", "[a_master1]",
+                    "-c:v", curr_codec, "-preset", curr_preset, *curr_quality,
+                    "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                    "-c:a", "aac", "-b:a", "192k",
+                    os.path.abspath(final_output),
+                    "-map", "[v_for_clean]", "-map", "[a_master2]",
+                    "-c:v", curr_codec, "-preset", curr_preset, *curr_quality,
+                    "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                    "-c:a", "aac", "-b:a", "192k",
+                    os.path.abspath(persistent_clean_path),
+                ]
+
             # Attempt single-pass: first with blur (if enabled), fallback without blur if filter fails
             blur_attempts = [True, False] if (do_blur and subtitle_found) else [False]
 
@@ -749,23 +767,7 @@ class VideoMergerAgent:
                 if single_pass_success:
                     break
                 
-                filter_complex_str, recap_v_stream = _build_filtergraph(curr_blur)
-                
-                sp_cmd = [
-                    ffmpeg_bin, "-y",
-                    *sp_inputs,
-                    "-filter_complex", filter_complex_str,
-                    "-map", recap_v_stream, "-map", "[a_master1]",
-                    "-c:v", codec, "-preset", preset, *quality_args,
-                    "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                    "-c:a", "aac", "-b:a", "192k",
-                    os.path.abspath(final_output),
-                    "-map", "[v_for_clean]", "-map", "[a_master2]",
-                    "-c:v", codec, "-preset", preset, *quality_args,
-                    "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                    "-c:a", "aac", "-b:a", "192k",
-                    os.path.abspath(persistent_clean_path),
-                ]
+                sp_cmd = _build_sp_cmd(codec, preset, quality_args, curr_blur)
 
                 print(f"[*] VideoMerger (Single-Pass Engine): Rendering both Recap & Clean Canvas (Blur={curr_blur}, Encoder={codec})...")
                 try:
@@ -785,13 +787,7 @@ class VideoMergerAgent:
                     else:
                         err_snippet = res.stderr[-500:] if res.stderr else "Unknown error"
                         print(f"[WARN] VideoMerger: Single-pass hardware render failed ({err_snippet}). Retrying with CPU libx264...")
-                        fb_cmd = list(sp_cmd)
-                        if codec != "libx264":
-                            fb_cmd = [c.replace(codec, "libx264") if c == codec else c for c in fb_cmd]
-                            fb_cmd = [c.replace(preset, "superfast") if c == preset else c for c in fb_cmd]
-                            if "-b:v" in fb_cmd:
-                                b_idx = fb_cmd.index("-b:v")
-                                fb_cmd = fb_cmd[:b_idx] + ["-crf", "20"] + fb_cmd[b_idx+6:]
+                        fb_cmd = _build_sp_cmd("libx264", "superfast", ["-crf", "20"], curr_blur)
                         res_cpu = subprocess.run(
                             fb_cmd, cwd=ass_dir, capture_output=True, text=True,
                             timeout=dyn_timeout, encoding="utf-8", errors="replace"

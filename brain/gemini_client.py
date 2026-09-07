@@ -19,7 +19,6 @@ def _mask_key(key: str) -> str:
 # 4. gemini-3.5-flash         : Heavy quality model (5 RPM)
 # 5. gemini-3.6-flash         : High-speed Flash fallback (5 RPM)
 # 6. gemini-3.7-flash         : Advanced reasoning & translation (5 RPM)
-# 7. gemini-3-flash           : Standard Flash fallback (5 RPM)
 _FALLBACK_MODELS = [
     "gemini-3.5-flash-lite",
     "gemini-3.1-flash-lite",
