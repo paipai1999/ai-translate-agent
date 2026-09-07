@@ -2,6 +2,7 @@ import os
 import sys
 import shutil
 import subprocess
+import re
 from brain.memory import MovieState
 import brain.config as cfg
 
