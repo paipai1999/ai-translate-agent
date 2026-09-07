@@ -38,12 +38,21 @@ def _auto_setup_nvenc_linux() -> str:
     if not has_nvidia:
         return None
 
+    # Configure LD_LIBRARY_PATH for NVIDIA CUDA and NVENC driver libraries on Linux
+    ld_candidates = ["/usr/lib/x86_64-linux-gnu", "/usr/local/cuda/lib64", "/usr/local/nvidia/lib64", "/usr/local/cuda/targets/x86_64-linux/lib"]
+    cur_ld = os.environ.get("LD_LIBRARY_PATH", "")
+    extra_ld = [p for p in ld_candidates if os.path.exists(p) and p not in cur_ld]
+    if extra_ld:
+        os.environ["LD_LIBRARY_PATH"] = ":".join(extra_ld) + ((":" + cur_ld) if cur_ld else "")
+
     target = "/usr/local/bin/ffmpeg"
     if os.path.exists(target) and os.path.getsize(target) > 10000000:
         try:
             chk = subprocess.run([target, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True, timeout=4)
             if chk.returncode == 0:
                 os.environ["IMAGEIO_FFMPEG_EXE"] = target
+                global _DETECTED_ENCODER
+                _DETECTED_ENCODER = None
                 return target
         except Exception:
             pass
@@ -51,7 +60,7 @@ def _auto_setup_nvenc_linux() -> str:
     print("[*] Hardware Detection: NVIDIA GPU detected! Auto-fetching static NVENC FFmpeg build...")
     try:
         os.makedirs("/tmp/ff_build", exist_ok=True)
-        subprocess.run("curl -L -f -s https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz -o /tmp/ff_build/ffmpeg.tar.xz", shell=True, check=True, timeout=90)
+        subprocess.run("curl -L -f -s -A 'Mozilla/5.0' https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz -o /tmp/ff_build/ffmpeg.tar.xz", shell=True, check=True, timeout=90)
         subprocess.run("tar -xf /tmp/ff_build/ffmpeg.tar.xz -C /tmp/ff_build", shell=True, check=True, timeout=45)
         subprocess.run("find /tmp/ff_build -type f -name ffmpeg -exec cp -f {} /usr/local/bin/ffmpeg \\;", shell=True, check=True)
         subprocess.run("find /tmp/ff_build -type f -name ffprobe -exec cp -f {} /usr/local/bin/ffprobe \\;", shell=True, check=True)
@@ -63,6 +72,7 @@ def _auto_setup_nvenc_linux() -> str:
         chk = subprocess.run([target, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True, timeout=4)
         if chk.returncode == 0:
             print("🚀 [OK] NVIDIA NVENC GPU Encoder ready and active (/usr/local/bin/ffmpeg)!")
+            _DETECTED_ENCODER = None
             return target
     except Exception as e:
         print(f"[!] Auto NVENC FFmpeg install notice: {e}")
@@ -119,7 +129,7 @@ def _get_ffmpeg_bin() -> str:
 def detect_hardware_encoder() -> dict:
     """Detects available hardware video encoders (NVIDIA NVENC, Intel QSV, AMD AMF) or CPU libx264."""
     global _DETECTED_ENCODER
-    if _DETECTED_ENCODER is not None:
+    if _DETECTED_ENCODER is not None and _DETECTED_ENCODER.get("type") == "gpu":
         return _DETECTED_ENCODER
 
     import subprocess
@@ -1765,21 +1775,39 @@ class VideoMergerAgent:
 
             # Filter out false positives (e.g., watermarks at the top of the screen)
             # Dialogue subtitles are almost always in the lower half (y >= 0.5)
-            valid_subs = [r for r in frames_with_subs if float(r.get("start_y_pct", default_start_y)) >= 0.5]
+            valid_subs = []
+            for r in frames_with_subs:
+                try:
+                    raw_y = r.get("start_y_pct", r.get("y", default_start_y))
+                    raw_h = r.get("height_pct", r.get("h", default_height))
+                    y_val = float(raw_y)
+                    h_val = float(raw_h)
+                    # Normalize if returned as raw pixel value (e.g. 743px for 1080p frame)
+                    if y_val > 1.0:
+                        y_val = y_val / 1080.0
+                    if h_val > 1.0:
+                        h_val = h_val / 1080.0
+                    
+                    y_val = max(0.0, min(0.98, y_val))
+                    h_val = max(0.02, min(0.40, h_val))
+                    if y_val >= 0.5:
+                        valid_subs.append({"start_y_pct": y_val, "height_pct": h_val})
+                except Exception:
+                    continue
             
             subtitle_found = len(valid_subs) > 0
 
             if subtitle_found:
                 import statistics
-                y_values = [float(r.get("start_y_pct", default_start_y)) for r in valid_subs]
-                h_values = [float(r.get("height_pct", default_height)) for r in valid_subs]
+                y_values = [float(r["start_y_pct"]) for r in valid_subs]
+                h_values = [float(r["height_pct"]) for r in valid_subs]
                 
                 # Use median to ignore extreme outliers instead of average
                 median_y = statistics.median(y_values)
                 max_h = max(h_values)  # Use max height to ensure we cover 2-line subtitles if detected
                 
-                y_start  = max(0.5, median_y - 0.02)
-                y_height = min(1.0 - y_start, max_h + 0.04)
+                y_start  = max(0.50, min(0.92, median_y - 0.02))
+                y_height = max(0.05, min(1.0 - y_start, max_h + 0.04))
 
                 print(
                     f"[OK] VisionAI: Subtitles CONFIRMED ({len(valid_subs)}/{len(detection_results)} frames positive)! "
