@@ -198,12 +198,18 @@ class VoiceAgent:
             print(f"[*] VoiceAgent: Reusing {len(existing_mp3s)} cached voiceover clips from {audio_out_dir}...")
             return state
 
+        # Granular Checkpoint Resume: Clean up only corrupted/empty mp3 clips (<= 1000 bytes).
+        # Preserve valid scene_*.mp3 clips so subsequent loop can skip them!
         for old_file in os.listdir(audio_out_dir):
             if old_file.endswith(".mp3"):
+                f_path = os.path.join(audio_out_dir, old_file)
                 try:
-                    os.remove(os.path.join(audio_out_dir, old_file))
+                    if os.path.getsize(f_path) <= 1000:
+                        os.remove(f_path)
                 except Exception:
                     pass
+        if existing_mp3s:
+            print(f"[*] VoiceAgent: Found {len(existing_mp3s)} valid cached voiceover clips. Granular checkpoint resume active!")
 
         # Check if F5-TTS engine is requested
         use_f5 = self.engine == "f5_tts"

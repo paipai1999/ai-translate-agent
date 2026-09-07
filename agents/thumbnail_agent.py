@@ -335,7 +335,11 @@ Dialogue: 0,0:00:00.00,0:00:01.00,Default,,60,60,55,,{ass_text}
                 "-update", "1",
                 thumbnail_path_abs
             ]
-            proc = subprocess.run(ffmpeg_cmd, cwd=os.path.abspath(output_folder), capture_output=True, text=True)
+            proc = subprocess.run(
+                ffmpeg_cmd, cwd=os.path.abspath(output_folder),
+                capture_output=True, text=True,
+                encoding="utf-8", errors="replace"
+            )
             if proc.returncode == 0 and os.path.exists(thumbnail_path):
                 print(f"[OK] ThumbnailAgent: Thumbnail (with perfect Burmese font rendering) successfully saved to {thumbnail_path}")
             else:

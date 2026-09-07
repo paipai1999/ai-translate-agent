@@ -1,5 +1,6 @@
 @echo off
 chcp 65001 >nul
+cd /d "%~dp0"
 title AI Movie Recap Generator - Windows Launcher
 color 0B
 set "PYTHON_EXE=%~dp0.venv\Scripts\python.exe"

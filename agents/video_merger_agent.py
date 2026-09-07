@@ -208,10 +208,11 @@ def _get_audio_duration(file_path: str) -> float:
         ffmpeg_bin = _get_ffmpeg_bin()
         res = subprocess.run(
             [ffmpeg_bin, "-i", file_path, "-f", "null", "-"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=5,
+            encoding="utf-8", errors="replace"
         )
         import re
-        m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", res.stderr or "")
+        m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", res.stderr or "")
         if m:
             return int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
     except Exception:
@@ -244,10 +245,11 @@ def _get_video_info(video_path: str) -> dict:
         ffmpeg_bin = _get_ffmpeg_bin()
         res = subprocess.run(
             [ffmpeg_bin, "-i", video_path, "-f", "null", "-"],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=5,
+            encoding="utf-8", errors="replace"
         )
         import re
-        m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.\d+)", res.stderr or "")
+        m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", res.stderr or "")
         if m:
             info["duration"] = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + float(m.group(3))
         dim = re.search(r",\s*(\d{3,4})x(\d{3,4})", res.stderr or "")
@@ -636,6 +638,9 @@ class VideoMergerAgent:
                 wm_input_idx = next_idx
                 next_idx += 1
 
+            has_ass = bool(burn_subs and target_ass_path and os.path.exists(target_ass_path))
+            ass_dir = os.path.dirname(os.path.abspath(target_ass_path)) if (has_ass and target_ass_path) else (os.path.abspath(temp_dir) if os.path.exists(temp_dir) else os.path.abspath(output_dir))
+
             # --- FILTERGRAPH GENERATOR (Modular for safe fallbacks) ---
             def _build_filtergraph(include_blur: bool):
                 flt_parts = [
@@ -764,7 +769,10 @@ class VideoMergerAgent:
 
                 print(f"[*] VideoMerger (Single-Pass Engine): Rendering both Recap & Clean Canvas (Blur={curr_blur}, Encoder={codec})...")
                 try:
-                    res = subprocess.run(sp_cmd, cwd=ass_dir, capture_output=True, text=True, timeout=dyn_timeout)
+                    res = subprocess.run(
+                        sp_cmd, cwd=ass_dir, capture_output=True, text=True,
+                        timeout=dyn_timeout, encoding="utf-8", errors="replace"
+                    )
                     if res.returncode == 0 and os.path.exists(final_output) and os.path.getsize(final_output) > 1000:
                         single_pass_success = True
                         try:
@@ -784,7 +792,10 @@ class VideoMergerAgent:
                             if "-b:v" in fb_cmd:
                                 b_idx = fb_cmd.index("-b:v")
                                 fb_cmd = fb_cmd[:b_idx] + ["-crf", "20"] + fb_cmd[b_idx+6:]
-                        res_cpu = subprocess.run(fb_cmd, cwd=ass_dir, capture_output=True, text=True, timeout=dyn_timeout)
+                        res_cpu = subprocess.run(
+                            fb_cmd, cwd=ass_dir, capture_output=True, text=True,
+                            timeout=dyn_timeout, encoding="utf-8", errors="replace"
+                        )
                         if res_cpu.returncode == 0 and os.path.exists(final_output) and os.path.getsize(final_output) > 1000:
                             single_pass_success = True
                             try:

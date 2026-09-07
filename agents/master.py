@@ -424,7 +424,7 @@ class MasterAgent:
                     skip_scenes = os.environ.get("SKIP_SCENES", "").lower() in ("1", "true", "yes") or not scene_cfg
                     if skip_scenes:
                         print("[*] MasterAgent: Scene detection skipped (1:1 dialogue mode uses Whisper timestamps). Populating fallback macro scene.")
-                        dur = getattr(state, "video_duration", 0.0) or 0.0
+                        dur = getattr(state, "duration_sec", 0.0) or getattr(state, "video_duration", 0.0) or 0.0
                         if dur <= 0.0:
                             try:
                                 from moviepy import VideoFileClip

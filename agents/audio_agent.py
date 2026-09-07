@@ -359,7 +359,8 @@ print(f"[Whisper] Transcribed {{len(results)}} segments in language: {{detected_
         try:
             proc = subprocess.run(
                 [python_exe, helper_path, state.audio_path, model_size, result_path, state.movie_name, source_lang],
-                capture_output=True, text=True, timeout=whisper_timeout
+                capture_output=True, text=True, timeout=whisper_timeout,
+                encoding="utf-8", errors="replace"
             )
             if proc.stdout:
                 print(f"[*] AudioAgent: {proc.stdout.strip()}")

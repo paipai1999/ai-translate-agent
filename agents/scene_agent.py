@@ -28,7 +28,7 @@ class SceneAgent:
             
         if not scene_list:
             print("[WARN] SceneAgent: No scenes detected. Creating single fallback chapter.")
-            dur = state.duration_sec if (state and state.duration_sec < 9000) else 120.0
+            dur = state.duration_sec if (state and getattr(state, "duration_sec", 0.0) > 0.0) else 120.0
             state.timeline = [
                 SceneData(
                     scene_id=1,

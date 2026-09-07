@@ -1,4 +1,5 @@
 @echo off
+cd /d "%~dp0"
 title AI Movie Recap - Web UI Dashboard
 echo ====================================================
 echo Starting AI Movie Recap Dashboard (Web UI)
