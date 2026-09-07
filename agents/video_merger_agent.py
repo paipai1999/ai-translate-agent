@@ -12,6 +12,22 @@ if sys.platform == "win32":
 
 _DETECTED_ENCODER = None
 
+def _ensure_linux_cuda_ld_path():
+    """Ensure Linux dynamic linker finds NVIDIA CUDA & NVENC driver libraries."""
+    if not sys.platform.startswith("linux"):
+        return
+    ld_candidates = [
+        "/usr/lib/x86_64-linux-gnu",
+        "/usr/local/cuda/lib64",
+        "/usr/local/nvidia/lib64",
+        "/usr/local/cuda/targets/x86_64-linux/lib",
+        "/usr/lib/wsl/lib",
+    ]
+    cur_ld = os.environ.get("LD_LIBRARY_PATH", "")
+    extra_ld = [p for p in ld_candidates if os.path.exists(p) and p not in cur_ld]
+    if extra_ld:
+        os.environ["LD_LIBRARY_PATH"] = ":".join(extra_ld) + ((":" + cur_ld) if cur_ld else "")
+
 def _auto_setup_nvenc_linux() -> str:
     """If running on Linux with an NVIDIA GPU, auto-downloads BtbN NVENC static build if missing."""
     import subprocess
@@ -39,11 +55,7 @@ def _auto_setup_nvenc_linux() -> str:
         return None
 
     # Configure LD_LIBRARY_PATH for NVIDIA CUDA and NVENC driver libraries on Linux
-    ld_candidates = ["/usr/lib/x86_64-linux-gnu", "/usr/local/cuda/lib64", "/usr/local/nvidia/lib64", "/usr/local/cuda/targets/x86_64-linux/lib"]
-    cur_ld = os.environ.get("LD_LIBRARY_PATH", "")
-    extra_ld = [p for p in ld_candidates if os.path.exists(p) and p not in cur_ld]
-    if extra_ld:
-        os.environ["LD_LIBRARY_PATH"] = ":".join(extra_ld) + ((":" + cur_ld) if cur_ld else "")
+    _ensure_linux_cuda_ld_path()
 
     target = "/usr/local/bin/ffmpeg"
     if os.path.exists(target) and os.path.getsize(target) > 10000000:
@@ -58,9 +70,26 @@ def _auto_setup_nvenc_linux() -> str:
             pass
 
     print("[*] Hardware Detection: NVIDIA GPU detected! Auto-fetching static NVENC FFmpeg build...")
+    urls = [
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz",
+        "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl.tar.xz",
+    ]
     try:
         os.makedirs("/tmp/ff_build", exist_ok=True)
-        subprocess.run("curl -L -f -s -A 'Mozilla/5.0' https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz -o /tmp/ff_build/ffmpeg.tar.xz", shell=True, check=True, timeout=90)
+        downloaded = False
+        for url in urls:
+            try:
+                res = subprocess.run(f"curl -L -f -s -A 'Mozilla/5.0' {url} -o /tmp/ff_build/ffmpeg.tar.xz", shell=True, timeout=90)
+                if res.returncode == 0 and os.path.exists("/tmp/ff_build/ffmpeg.tar.xz") and os.path.getsize("/tmp/ff_build/ffmpeg.tar.xz") > 10000000:
+                    downloaded = True
+                    break
+            except Exception:
+                continue
+
+        if not downloaded:
+            print("[WARN] Could not download static NVENC FFmpeg build from primary or fallback URLs.")
+            return None
+
         subprocess.run("tar -xf /tmp/ff_build/ffmpeg.tar.xz -C /tmp/ff_build", shell=True, check=True, timeout=45)
         subprocess.run("find /tmp/ff_build -type f -name ffmpeg -exec cp -f {} /usr/local/bin/ffmpeg \\;", shell=True, check=True)
         subprocess.run("find /tmp/ff_build -type f -name ffprobe -exec cp -f {} /usr/local/bin/ffprobe \\;", shell=True, check=True)
@@ -81,6 +110,9 @@ def _auto_setup_nvenc_linux() -> str:
 def _get_ffmpeg_bin() -> str:
     import shutil
     import subprocess
+    # Ensure Linux driver libraries are visible to dynamic linker before any test
+    _ensure_linux_cuda_ld_path()
+
     # Search all candidate ffmpeg paths
     search_paths = [
         "/usr/local/bin/ffmpeg",
@@ -604,146 +636,154 @@ class VideoMergerAgent:
                 wm_input_idx = next_idx
                 next_idx += 1
 
-            # --- VIDEO FILTERGRAPH ---
-            flt_parts = [
-                "[0:v]crop=w='trunc(iw/2)*2':h='trunc(ih/2)*2'[v_base]"
-            ]
-            last_v = "[v_base]"
+            # --- FILTERGRAPH GENERATOR (Modular for safe fallbacks) ---
+            def _build_filtergraph(include_blur: bool):
+                flt_parts = [
+                    "[0:v]crop=w='trunc(iw/2)*2':h='trunc(ih/2)*2'[v_base]"
+                ]
+                last_v = "[v_base]"
 
-            if copyright_enabled:
-                mirror_enabled = copyright_cfg.get("mirror_video", False)
-                if mirror_enabled:
-                    flt_parts.append(f"{last_v}hflip[v_flipped]")
-                    last_v = "[v_flipped]"
-                resize_factor = float(copyright_cfg.get("resize_factor", 1.02))
-                if resize_factor != 1.0:
-                    flt_parts.append(f"{last_v}scale=iw*{resize_factor}:ih*{resize_factor},crop=iw/{resize_factor}:ih/{resize_factor}[v_resized]")
-                    last_v = "[v_resized]"
+                if copyright_enabled:
+                    mirror_enabled = copyright_cfg.get("mirror_video", False)
+                    if mirror_enabled:
+                        flt_parts.append(f"{last_v}hflip[v_flipped]")
+                        last_v = "[v_flipped]"
+                    resize_factor = float(copyright_cfg.get("resize_factor", 1.02))
+                    if resize_factor != 1.0:
+                        flt_parts.append(f"{last_v}scale=iw*{resize_factor}:ih*{resize_factor},crop=iw/{resize_factor}:ih/{resize_factor}[v_resized]")
+                        last_v = "[v_resized]"
 
-            if do_blur and subtitle_found:
-                r = blur_strength
-                blur_seg = (
-                    f"{last_v}split=2[v_orig][v_sub_crop];"
-                    f"[v_sub_crop]crop=iw:'trunc(ih*{height_pct:.3f}/2)*2':0:'trunc(ih*{start_y_pct:.3f}/2)*2',"
-                    f"boxblur=luma_radius={r}:luma_power=2:chroma_radius={max(1,r//2)}:chroma_power=2[v_blurred_sub];"
-                    f"[v_orig][v_blurred_sub]overlay=0:'trunc(H*{start_y_pct:.3f}/2)*2'[v_blended]"
-                )
-                flt_parts.append(blur_seg)
-                last_v = "[v_blended]"
-
-            if color_enabled:
-                cg_str = (
-                    f"{last_v}eq=brightness={cg_brightness:.3f}:contrast={cg_contrast:.3f}:saturation={cg_saturation:.3f},"
-                    f"noise=alls=2:allf=t,vignette=PI/4[v_graded]"
-                )
-                flt_parts.append(cg_str)
-                last_v = "[v_graded]"
-
-            if wm_input_idx is not None:
-                if wm_pos == "bottom_left":
-                    pos_str = f"{wm_margin}:main_h-overlay_h-{wm_margin}"
-                elif wm_pos == "bottom_right":
-                    pos_str = f"main_w-overlay_w-{wm_margin}:main_h-overlay_h-{wm_margin}"
-                elif wm_pos == "top_left":
-                    pos_str = f"{wm_margin}:{wm_margin}"
-                elif wm_pos == "top_center":
-                    pos_str = f"(main_w-overlay_w)/2:{wm_margin}"
-                else:
-                    pos_str = f"main_w-overlay_w-{wm_margin}:{wm_margin}"
-                flt_parts.append(f"{last_v}[{wm_input_idx}:v]overlay={pos_str}[v_clean]")
-                last_v = "[v_clean]"
-
-            flt_parts.append(f"{last_v}split=2[v_for_sub][v_for_clean]")
-
-            has_ass = bool(burn_subs and target_ass_path and os.path.exists(target_ass_path))
-            ass_dir = None
-            if has_ass:
-                ass_basename = os.path.basename(target_ass_path)
-                ass_dir = os.path.dirname(os.path.abspath(target_ass_path))
-                flt_parts.append(f"[v_for_sub]ass={ass_basename}[v_subbed]")
-                recap_v_stream = "[v_subbed]"
-            else:
-                recap_v_stream = "[v_for_sub]"
-
-            # --- AUDIO FILTERGRAPH (Dynamic Audio Ducking & Compositing) ---
-            duck_cfg = config_data.get("audio_ducking", {})
-            duck_enabled = duck_cfg.get("enabled", True)
-            ambient_vol = float(duck_cfg.get("ambient_volume", 0.35))
-            target_dur_str = f"{video_dur:.2f}" if video_dur > 0 else "600.00"
-
-            if vo_input_idx is not None and (bg_input_idx is not None or bg_source_type == "orig"):
-                if bg_source_type == "bgm":
-                    flt_parts.append(f"[{bg_input_idx}:a]aloop=loop=-1:size=2e+09,atrim=0:{target_dur_str},volume={ambient_vol:.2f}[bg_raw]")
-                elif bg_source_type == "demucs":
-                    flt_parts.append(f"[{bg_input_idx}:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f}[bg_raw]")
-                else:
-                    flt_parts.append(f"[0:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f}[bg_raw]")
-
-                if duck_enabled:
-                    flt_parts.append(
-                        f"[bg_raw][{vo_input_idx}:a]sidechaincompress=threshold=0.08:ratio=8:attack=100:release=400[ducked_bg]"
+                if include_blur and subtitle_found:
+                    r = blur_strength
+                    blur_seg = (
+                        f"{last_v}split=2[v_orig][v_sub_crop];"
+                        f"[v_sub_crop]crop=iw:'trunc(ih*{height_pct:.3f}/2)*2':0:'trunc(ih*{start_y_pct:.3f}/2)*2',"
+                        f"boxblur=luma_radius={r}:luma_power=2:chroma_radius={max(1,r//2)}:chroma_power=2[v_blurred_sub];"
+                        f"[v_orig][v_blurred_sub]overlay=0:'trunc(H*{start_y_pct:.3f}/2)*2'[v_blended]"
                     )
-                    flt_parts.append(
-                        f"[ducked_bg][{vo_input_idx}:a]amix=inputs=2:duration=first:dropout_transition=0,asplit=2[a_master1][a_master2]"
-                    )
-                else:
-                    flt_parts.append(
-                        f"[bg_raw][{vo_input_idx}:a]amix=inputs=2:duration=first:dropout_transition=0,asplit=2[a_master1][a_master2]"
-                    )
-            elif vo_input_idx is not None:
-                flt_parts.append(f"[{vo_input_idx}:a]asplit=2[a_master1][a_master2]")
-            elif bg_input_idx is not None or bg_source_type == "orig":
-                if bg_source_type == "bgm":
-                    flt_parts.append(f"[{bg_input_idx}:a]aloop=loop=-1:size=2e+09,atrim=0:{target_dur_str},volume={ambient_vol:.2f},asplit=2[a_master1][a_master2]")
-                elif bg_source_type == "demucs":
-                    flt_parts.append(f"[{bg_input_idx}:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f},asplit=2[a_master1][a_master2]")
-                else:
-                    flt_parts.append(f"[0:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f},asplit=2[a_master1][a_master2]")
-            else:
-                flt_parts.append(f"aevalsrc=0:d={target_dur_str},asplit=2[a_master1][a_master2]")
+                    flt_parts.append(blur_seg)
+                    last_v = "[v_blended]"
 
-            filter_complex_str = ";".join(flt_parts)
+                if color_enabled:
+                    cg_str = (
+                        f"{last_v}eq=brightness={cg_brightness:.3f}:contrast={cg_contrast:.3f}:saturation={cg_saturation:.3f},"
+                        f"noise=alls=2:allf=t,vignette=PI/4[v_graded]"
+                    )
+                    flt_parts.append(cg_str)
+                    last_v = "[v_graded]"
+
+                if wm_input_idx is not None:
+                    if wm_pos == "bottom_left":
+                        pos_str = f"{wm_margin}:main_h-overlay_h-{wm_margin}"
+                    elif wm_pos == "bottom_right":
+                        pos_str = f"main_w-overlay_w-{wm_margin}:main_h-overlay_h-{wm_margin}"
+                    elif wm_pos == "top_left":
+                        pos_str = f"{wm_margin}:{wm_margin}"
+                    elif wm_pos == "top_center":
+                        pos_str = f"(main_w-overlay_w)/2:{wm_margin}"
+                    else:
+                        pos_str = f"main_w-overlay_w-{wm_margin}:{wm_margin}"
+                    flt_parts.append(f"{last_v}[{wm_input_idx}:v]overlay={pos_str}[v_clean]")
+                    last_v = "[v_clean]"
+
+                flt_parts.append(f"{last_v}split=2[v_for_sub][v_for_clean]")
+
+                if has_ass:
+                    ass_basename = os.path.basename(target_ass_path)
+                    flt_parts.append(f"[v_for_sub]ass={ass_basename}[v_subbed]")
+                    r_stream = "[v_subbed]"
+                else:
+                    r_stream = "[v_for_sub]"
+
+                # Dynamic Audio Ducking & Compositing
+                duck_cfg = config_data.get("audio_ducking", {})
+                duck_enabled = duck_cfg.get("enabled", True)
+                ambient_vol = float(duck_cfg.get("ambient_volume", 0.35))
+                target_dur_str = f"{video_dur:.2f}" if video_dur > 0 else "600.00"
+
+                if vo_input_idx is not None and (bg_input_idx is not None or bg_source_type == "orig"):
+                    if bg_source_type == "bgm":
+                        flt_parts.append(f"[{bg_input_idx}:a]aloop=loop=-1:size=2e+09,atrim=0:{target_dur_str},volume={ambient_vol:.2f}[bg_raw]")
+                    elif bg_source_type == "demucs":
+                        flt_parts.append(f"[{bg_input_idx}:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f}[bg_raw]")
+                    else:
+                        flt_parts.append(f"[0:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f}[bg_raw]")
+
+                    if duck_enabled:
+                        flt_parts.append(
+                            f"[bg_raw][{vo_input_idx}:a]sidechaincompress=threshold=0.08:ratio=8:attack=100:release=400[ducked_bg]"
+                        )
+                        flt_parts.append(
+                            f"[ducked_bg][{vo_input_idx}:a]amix=inputs=2:duration=first:dropout_transition=0,asplit=2[a_master1][a_master2]"
+                        )
+                    else:
+                        flt_parts.append(
+                            f"[bg_raw][{vo_input_idx}:a]amix=inputs=2:duration=first:dropout_transition=0,asplit=2[a_master1][a_master2]"
+                        )
+                elif vo_input_idx is not None:
+                    flt_parts.append(f"[{vo_input_idx}:a]asplit=2[a_master1][a_master2]")
+                elif bg_input_idx is not None or bg_source_type == "orig":
+                    if bg_source_type == "bgm":
+                        flt_parts.append(f"[{bg_input_idx}:a]aloop=loop=-1:size=2e+09,atrim=0:{target_dur_str},volume={ambient_vol:.2f},asplit=2[a_master1][a_master2]")
+                    elif bg_source_type == "demucs":
+                        flt_parts.append(f"[{bg_input_idx}:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f},asplit=2[a_master1][a_master2]")
+                    else:
+                        flt_parts.append(f"[0:a]apad=whole_dur={target_dur_str},atrim=0:{target_dur_str},volume={ambient_vol:.2f},asplit=2[a_master1][a_master2]")
+                else:
+                    flt_parts.append(f"aevalsrc=0:d={target_dur_str},asplit=2[a_master1][a_master2]")
+
+                return ";".join(flt_parts), r_stream
 
             dur_sec = video_dur if video_dur > 0 else (getattr(state, "duration_sec", 0.0) if state else 0.0)
             dyn_timeout = max(1200, int((dur_sec or 600.0) * 2.5))
 
-            sp_cmd = [
-                ffmpeg_bin, "-y",
-                *sp_inputs,
-                "-filter_complex", filter_complex_str,
-                "-map", recap_v_stream, "-map", "[a_master1]",
-                "-c:v", codec, "-preset", preset, *quality_args,
-                "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                "-c:a", "aac", "-b:a", "192k",
-                os.path.abspath(final_output),
-                "-map", "[v_for_clean]", "-map", "[a_master2]",
-                "-c:v", codec, "-preset", preset, *quality_args,
-                "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-                "-c:a", "aac", "-b:a", "192k",
-                os.path.abspath(persistent_clean_path),
-            ]
+            # Attempt single-pass: first with blur (if enabled), fallback without blur if filter fails
+            blur_attempts = [True, False] if (do_blur and subtitle_found) else [False]
 
-            print(f"[*] VideoMerger (Single-Pass Engine): Rendering both Recap & Clean Canvas simultaneously...")
-            try:
-                res = subprocess.run(sp_cmd, cwd=ass_dir, capture_output=True, text=True, timeout=dyn_timeout)
-                if res.returncode == 0 and os.path.exists(final_output) and os.path.getsize(final_output) > 1000:
-                    single_pass_success = True
-                    try:
-                        shutil.copy2(persistent_clean_path, clean_video_path)
-                    except Exception:
-                        pass
-                    state.clean_video_path = persistent_clean_path
-                    print("🚀 [OK] VideoMerger: Pure FFmpeg Single-Pass Video & Audio Compositing COMPLETE!")
-                else:
-                    err_snippet = res.stderr[-500:] if res.stderr else "Unknown error"
-                    print(f"[WARN] VideoMerger: Single-pass hardware render failed ({err_snippet}). Retrying with CPU libx264...")
-                    if codec != "libx264":
+            for attempt_idx, curr_blur in enumerate(blur_attempts):
+                if single_pass_success:
+                    break
+                
+                filter_complex_str, recap_v_stream = _build_filtergraph(curr_blur)
+                
+                sp_cmd = [
+                    ffmpeg_bin, "-y",
+                    *sp_inputs,
+                    "-filter_complex", filter_complex_str,
+                    "-map", recap_v_stream, "-map", "[a_master1]",
+                    "-c:v", codec, "-preset", preset, *quality_args,
+                    "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                    "-c:a", "aac", "-b:a", "192k",
+                    os.path.abspath(final_output),
+                    "-map", "[v_for_clean]", "-map", "[a_master2]",
+                    "-c:v", codec, "-preset", preset, *quality_args,
+                    "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                    "-c:a", "aac", "-b:a", "192k",
+                    os.path.abspath(persistent_clean_path),
+                ]
+
+                print(f"[*] VideoMerger (Single-Pass Engine): Rendering both Recap & Clean Canvas (Blur={curr_blur}, Encoder={codec})...")
+                try:
+                    res = subprocess.run(sp_cmd, cwd=ass_dir, capture_output=True, text=True, timeout=dyn_timeout)
+                    if res.returncode == 0 and os.path.exists(final_output) and os.path.getsize(final_output) > 1000:
+                        single_pass_success = True
+                        try:
+                            shutil.copy2(persistent_clean_path, clean_video_path)
+                        except Exception:
+                            pass
+                        state.clean_video_path = persistent_clean_path
+                        print(f"🚀 [OK] VideoMerger: Pure FFmpeg Single-Pass Video & Audio Compositing COMPLETE! ({codec})")
+                        break
+                    else:
+                        err_snippet = res.stderr[-500:] if res.stderr else "Unknown error"
+                        print(f"[WARN] VideoMerger: Single-pass hardware render failed ({err_snippet}). Retrying with CPU libx264...")
                         fb_cmd = list(sp_cmd)
-                        fb_cmd = [c.replace(codec, "libx264") if c == codec else c for c in fb_cmd]
-                        fb_cmd = [c.replace(preset, "superfast") if c == preset else c for c in fb_cmd]
-                        if "-b:v" in fb_cmd:
-                            b_idx = fb_cmd.index("-b:v")
-                            fb_cmd = fb_cmd[:b_idx] + ["-crf", "20"] + fb_cmd[b_idx+6:]
+                        if codec != "libx264":
+                            fb_cmd = [c.replace(codec, "libx264") if c == codec else c for c in fb_cmd]
+                            fb_cmd = [c.replace(preset, "superfast") if c == preset else c for c in fb_cmd]
+                            if "-b:v" in fb_cmd:
+                                b_idx = fb_cmd.index("-b:v")
+                                fb_cmd = fb_cmd[:b_idx] + ["-crf", "20"] + fb_cmd[b_idx+6:]
                         res_cpu = subprocess.run(fb_cmd, cwd=ass_dir, capture_output=True, text=True, timeout=dyn_timeout)
                         if res_cpu.returncode == 0 and os.path.exists(final_output) and os.path.getsize(final_output) > 1000:
                             single_pass_success = True
@@ -753,8 +793,11 @@ class VideoMergerAgent:
                                 pass
                             state.clean_video_path = persistent_clean_path
                             print("🚀 [OK] VideoMerger: Pure FFmpeg Single-Pass CPU Video & Audio Compositing COMPLETE!")
-            except Exception as spe:
-                print(f"[WARN] Single-pass execution exception: {spe}")
+                            break
+                        elif curr_blur and attempt_idx == 0 and len(blur_attempts) > 1:
+                            print("[WARN] VideoMerger: Blur filter failed. Retrying Pure FFmpeg without blur filter to prevent slow MoviePy fallback...")
+                except Exception as spe:
+                    print(f"[WARN] Single-pass execution exception: {spe}")
 
         # ── 10. Fallback Legacy Path (Only if Single-Pass failed or Thumbnail Intro active) ──
         if not single_pass_success:
