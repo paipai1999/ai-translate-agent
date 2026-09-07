@@ -2205,7 +2205,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         timeout_sec = max(600, int((duration_sec or 600.0) * 1.5))
         try:
             res = subprocess.run(cmd, cwd=temp_dir, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout_sec)
-            if res.returncode == 0 and os.path.exists(temp_reels_out) and os.path.getsize(temp_reels_out) > 500_000:
+            if res.returncode == 0 and os.path.exists(temp_reels_out) and os.path.getsize(temp_reels_out) > 10_000:
                 shutil.move(temp_reels_out, reels_output)
                 print(f"🎉 [OK] ReelsExporter: Successfully created 9:16 Facebook Reels video -> {reels_output}")
                 return reels_output
@@ -2235,7 +2235,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     temp_reels_out
                 ]
                 res2 = subprocess.run(cmd_fallback, cwd=temp_dir, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout_sec)
-                if res2.returncode == 0 and os.path.exists(temp_reels_out) and os.path.getsize(temp_reels_out) > 500_000:
+                if res2.returncode == 0 and os.path.exists(temp_reels_out) and os.path.getsize(temp_reels_out) > 10_000:
                     shutil.move(temp_reels_out, reels_output)
                     print(f"🎉 [OK] ReelsExporter: Created 9:16 Reels video via fallback -> {reels_output}")
                     return reels_output
