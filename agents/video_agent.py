@@ -17,7 +17,8 @@ class VideoAgent:
                 result = subprocess.run(
                     [ffprobe_bin, "-v", "quiet", "-print_format", "json",
                      "-show_format", self.movie_path],
-                    capture_output=True, text=True, timeout=15
+                    capture_output=True, text=True, timeout=15,
+                    encoding="utf-8", errors="replace"
                 )
                 if result.returncode == 0:
                     info = json.loads(result.stdout)
@@ -41,7 +42,11 @@ class VideoAgent:
 
         if ffmpeg_bin:
             try:
-                res = subprocess.run([ffmpeg_bin, "-i", self.movie_path], capture_output=True, text=True, timeout=15)
+                res = subprocess.run(
+                    [ffmpeg_bin, "-i", self.movie_path],
+                    capture_output=True, text=True, timeout=15,
+                    encoding="utf-8", errors="replace"
+                )
                 m = re.search(r"Duration:\s*(\d+):(\d+):(\d+\.?\d*)", res.stderr)
                 if m:
                     hours, minutes, seconds = int(m.group(1)), int(m.group(2)), int(float(m.group(3)))

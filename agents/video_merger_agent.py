@@ -268,7 +268,8 @@ def _has_audio_stream(video_path: str) -> bool:
         ffmpeg_bin = _get_ffmpeg_bin()
         res = subprocess.run(
             [ffmpeg_bin, "-i", video_path],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, text=True, timeout=5,
+            encoding="utf-8", errors="replace"
         )
         return "Audio:" in (res.stderr or "")
     except Exception:
@@ -2055,7 +2056,10 @@ class VideoMergerAgent:
 
         try:
             print(f"[*] PostProcess: Encoding with {enc_info.get('label', codec)} [{codec}]...")
-            result = subprocess.run(cmd, cwd=working_dir, capture_output=True, text=True, timeout=dyn_timeout)
+            result = subprocess.run(
+                cmd, cwd=working_dir, capture_output=True, text=True, timeout=dyn_timeout,
+                encoding="utf-8", errors="replace"
+            )
             if result.returncode != 0 and codec != "libx264":
                 print(f"[WARN] PostProcess: Hardware encoder '{codec}' failed. Retrying with CPU libx264...")
                 fallback_cmd = list(cmd)
@@ -2066,7 +2070,10 @@ class VideoMergerAgent:
                 if "-b:v" in fallback_cmd:
                     b_idx = fallback_cmd.index("-b:v")
                     fallback_cmd = fallback_cmd[:b_idx] + ["-crf", "20"] + fallback_cmd[b_idx+6:]
-                result = subprocess.run(fallback_cmd, cwd=working_dir, capture_output=True, text=True, timeout=dyn_timeout)
+                result = subprocess.run(
+                    fallback_cmd, cwd=working_dir, capture_output=True, text=True, timeout=dyn_timeout,
+                    encoding="utf-8", errors="replace"
+                )
 
             if result.returncode == 0 and os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 100_000:
                 os.replace(tmp_path, video_path)

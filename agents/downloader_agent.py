@@ -150,10 +150,20 @@ class DownloaderAgent:
                     # If extension changed during merging, ensure we point to the existing file
                     if not os.path.exists(filename):
                         base, _ = os.path.splitext(filename)
-                        for ext in ['.mp4', '.mkv', '.webm']:
+                        for ext in ['.mp4', '.mkv', '.webm', '.m4v', '.mov', '.avi', '.ts']:
                             if os.path.exists(base + ext):
                                 filename = base + ext
                                 break
+                        else:
+                            parent_dir = os.path.dirname(filename) or self.output_dir
+                            base_name = os.path.splitext(os.path.basename(filename))[0]
+                            if os.path.exists(parent_dir):
+                                for cand in os.listdir(parent_dir):
+                                    cand_path = os.path.join(parent_dir, cand)
+                                    if cand.startswith(base_name) and not cand.endswith(('.part', '.ytdl', '.tmp')):
+                                        if os.path.isfile(cand_path) and os.path.getsize(cand_path) > 1000:
+                                            filename = cand_path
+                                            break
                 break # Download succeeded
             except Exception as e:
                 last_error = e

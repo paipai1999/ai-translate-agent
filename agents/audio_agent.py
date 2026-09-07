@@ -144,7 +144,10 @@ class AudioAgent:
                 "-ac", "2",                 # Stereo — required for Demucs
                 audio_path
             ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            result = subprocess.run(
+                cmd, capture_output=True, text=True, timeout=600,
+                encoding="utf-8", errors="replace"
+            )
             if result.returncode == 0 and os.path.exists(audio_path):
                 return audio_path
             print(f"[!] AudioAgent FFmpeg stderr: {result.stderr[-300:]}")
@@ -253,10 +256,12 @@ class AudioAgent:
             if sys.version_info[:2] in [(3, 10), (3, 11), (3, 12)]:
                 return sys.executable
 
-            # 3. If running on incompatible Python (e.g. 3.13+), look for Python 3.12
             try:
-                r = subprocess.run(["py", "-3.12", "-c", "import sys; print(sys.executable)"],
-                                   capture_output=True, text=True, timeout=10)
+                r = subprocess.run(
+                    ["py", "-3.12", "-c", "import sys; print(sys.executable)"],
+                    capture_output=True, text=True, timeout=10,
+                    encoding="utf-8", errors="replace"
+                )
                 if r.returncode == 0 and os.path.exists(r.stdout.strip()):
                     return r.stdout.strip()
             except Exception:

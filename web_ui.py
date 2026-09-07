@@ -199,6 +199,7 @@ def pipeline_worker(
     skip_demucs=False,
     detect_scenes=False,
     resume=True,
+    tts_voice=None,
 ):
     current_job_id.set(job_id)
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
@@ -248,9 +249,18 @@ def pipeline_worker(
             movie_path = _resolve_input_source(input_source)
         
         # Multi-Voice Mapping
-        tts_voice_override = None
+        tts_voice_override = tts_voice
         clean_lang = language
-        if language == "burmese_thiha":
+        if tts_voice_override:
+            if tts_voice_override in ["thiha", "male", "burmese_thiha"]:
+                tts_voice_override = "my-MM-ThihaNeural"
+            elif tts_voice_override in ["nilar", "female", "burmese_nilar"]:
+                tts_voice_override = "my-MM-NilarNeural"
+            elif tts_voice_override in ["guy", "english_guy"]:
+                tts_voice_override = "en-US-GuyNeural"
+            elif tts_voice_override in ["jenny", "english_jenny"]:
+                tts_voice_override = "en-US-JennyNeural"
+        elif language == "burmese_thiha":
             clean_lang = "burmese"
             tts_voice_override = "my-MM-ThihaNeural"
         elif language == "burmese_nilar":
@@ -354,6 +364,7 @@ def batch_worker(
     skip_demucs=False,
     detect_scenes=False,
     resume=True,
+    tts_voice=None,
 ):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
@@ -390,9 +401,18 @@ def batch_worker(
         urls = [i for i in inputs_list if DownloaderAgent.is_url(i)]
         local_paths = [_resolve_input_source(i) for i in inputs_list if not DownloaderAgent.is_url(i)]
         # Multi-Voice Mapping
-        tts_voice_override = None
+        tts_voice_override = tts_voice
         clean_lang = language
-        if language == "burmese_thiha":
+        if tts_voice_override:
+            if tts_voice_override in ["thiha", "male", "burmese_thiha"]:
+                tts_voice_override = "my-MM-ThihaNeural"
+            elif tts_voice_override in ["nilar", "female", "burmese_nilar"]:
+                tts_voice_override = "my-MM-NilarNeural"
+            elif tts_voice_override in ["guy", "english_guy"]:
+                tts_voice_override = "en-US-GuyNeural"
+            elif tts_voice_override in ["jenny", "english_jenny"]:
+                tts_voice_override = "en-US-JennyNeural"
+        elif language == "burmese_thiha":
             clean_lang = "burmese"
             tts_voice_override = "my-MM-ThihaNeural"
         elif language == "burmese_nilar":
@@ -486,6 +506,7 @@ class StartRequest(BaseModel):
     subtitle_mode: Optional[str] = "burn"
     resolution: Optional[str] = "1080p"
     tts_engine: Optional[str] = None
+    tts_voice: Optional[str] = None
     custom_thumb_title: Optional[str] = None
     watermark_enabled: Optional[bool] = True
     watermark_text: Optional[str] = None
@@ -505,6 +526,7 @@ class BatchStartRequest(BaseModel):
     subtitle_mode: Optional[str] = "burn"
     resolution: Optional[str] = "1080p"
     tts_engine: Optional[str] = None
+    tts_voice: Optional[str] = None
     custom_thumb_title: Optional[str] = None
     watermark_enabled: Optional[bool] = True
     watermark_text: Optional[str] = None
@@ -667,6 +689,7 @@ async def start_pipeline(req: StartRequest):
             req.skip_demucs or False,
             req.detect_scenes or False,
             req.resume if req.resume is not None else True,
+            req.tts_voice,
         ),
         daemon=True,
     )
@@ -723,6 +746,7 @@ async def start_batch_pipeline(req: BatchStartRequest):
             req.skip_demucs or False,
             req.detect_scenes or False,
             req.resume if req.resume is not None else True,
+            req.tts_voice,
         ),
         daemon=True,
     )
