@@ -177,7 +177,11 @@ class VoiceAgent:
         for spkr, candidates in by_speaker.items():
             # Pick candidate closest to 5.0 seconds
             best = min(candidates, key=lambda c: abs(c["dur"] - 5.0))
-            safe_name = re.sub(r'[^\w\-]', '_', spkr)
+            import hashlib
+            raw_spkr = str(spkr or "").strip()
+            ascii_spkr = re.sub(r'[^a-zA-Z0-9_\-]', '_', raw_spkr).strip('_')
+            spkr_hash = hashlib.md5(raw_spkr.encode('utf-8', errors='replace')).hexdigest()[:8]
+            safe_name = f"{ascii_spkr[:16]}_{spkr_hash}" if ascii_spkr else f"spkr_{spkr_hash}"
             out_clip = os.path.join(voices_temp_dir, f"{safe_name}_ref.wav")
 
             cmd = [

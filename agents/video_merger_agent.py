@@ -12,6 +12,18 @@ if sys.platform == "win32":
 
 _DETECTED_ENCODER = None
 
+def _get_safe_ascii_id(val: str, prefix: str = "vid", max_len: int = 16) -> str:
+    """Generates an ASCII-safe unique identifier for temp files and FFmpeg filters,
+    preventing libass fopen failures on Windows when video names contain Unicode/Burmese."""
+    import hashlib
+    raw = str(val or "").strip()
+    stem = os.path.splitext(os.path.basename(raw))[0] if ("/" in raw or "\\" in raw or "." in raw) else raw
+    ascii_clean = re.sub(r'[^a-zA-Z0-9_\-]', '_', stem).strip('_')
+    h = hashlib.md5(raw.encode('utf-8', errors='replace')).hexdigest()[:8]
+    if ascii_clean:
+        return f"{ascii_clean[:max_len]}_{h}"
+    return f"{prefix}_{h}"
+
 def _ensure_linux_cuda_ld_path():
     """Ensure Linux dynamic linker finds NVIDIA CUDA & NVENC driver libraries."""
     if not sys.platform.startswith("linux"):
@@ -441,8 +453,7 @@ class VideoMergerAgent:
         # ── 4. Linear PCM Voiceover Track Assembly in C-speed (~2s) ───────────
         temp_dir = os.path.abspath("temp")
         os.makedirs(temp_dir, exist_ok=True)
-        import re
-        safe_id = re.sub(r'[^\w\-]', '_', os.path.splitext(os.path.basename(movie_path))[0])
+        safe_id = _get_safe_ascii_id(movie_path)
         persistent_clean_path = os.path.join(output_dir, f"{os.path.splitext(os.path.basename(final_output))[0]}_clean.mp4")
         clean_video_path = os.path.join(temp_dir, f"{safe_id}_clean.mp4")
 
@@ -1360,7 +1371,7 @@ class VideoMergerAgent:
         if current:
             lines.append(current)
 
-        return "{\\N}".join(lines)
+        return "\\N".join(lines)
 
     def _chunk_burmese_narration(self, text: str, max_chars_per_chunk: int = 40) -> list:
         """
@@ -1579,8 +1590,7 @@ class VideoMergerAgent:
         # Write ASS to temp/ with safe unique filename — avoids FFmpeg filter parsing issues and job collisions
         temp_dir = os.path.abspath("temp")
         os.makedirs(temp_dir, exist_ok=True)
-        import re
-        safe_id = re.sub(r'[^\w\-]', '_', os.path.splitext(os.path.basename(video_path))[0])
+        safe_id = _get_safe_ascii_id(video_path)
         ass_path = os.path.join(temp_dir, f"myanmar_subs_{safe_id}.ass")
 
         font_found = self._find_myanmar_font()
@@ -2160,7 +2170,7 @@ class VideoMergerAgent:
 
         # 1. Create Reels ASS Subtitle & Hook Title File with unique filename to prevent batch collision
         import uuid
-        safe_reels_id = re.sub(r'[^\w\-]', '_', os.path.splitext(os.path.basename(source_video_path))[0])
+        safe_reels_id = _get_safe_ascii_id(source_video_path, prefix="reels")
         ass_path = os.path.join(temp_dir, f"reels_subs_{safe_reels_id}_{uuid.uuid4().hex[:6]}.ass")
         title_clean = str(hook_title or "").replace("|", "-").strip()
         if not title_clean:

@@ -34,7 +34,7 @@ except Exception as e:
     print(f"[WARN] check_dependencies failed: {e}")
 
 try:
-    from brain.sqlite_store import clean_stale_running_jobs
+    from brain.sqlite_store import clean_stale_running_jobs, create_job, update_job
     stale_count = clean_stale_running_jobs()
     if stale_count > 0:
         print(f"[*] WebUI: Reset {stale_count} stale running job(s) from previous session.")
@@ -226,7 +226,6 @@ def pipeline_worker(
         jobs[job_id]['buffer'] = buffer
     
     try:
-        from brain.sqlite_store import create_job, update_job
         create_job(job_id, str(input_source), phase="Starting...")
     except Exception:
         pass
@@ -236,7 +235,6 @@ def pipeline_worker(
             with jobs_lock:
                 jobs[job_id]['phase'] = 'Downloading Video...'
             try:
-                from brain.sqlite_store import update_job
                 update_job(job_id, phase='Downloading Video...')
             except Exception:
                 pass
@@ -303,7 +301,6 @@ def pipeline_worker(
                 jobs[job_id]['status'] = 'cancelled'
                 jobs[job_id]['phase'] = 'Stopped by user'
             try:
-                from brain.sqlite_store import update_job
                 update_job(job_id, status='cancelled', phase='Stopped by user')
             except Exception:
                 pass
@@ -311,7 +308,6 @@ def pipeline_worker(
             with jobs_lock:
                 jobs[job_id]['status'] = 'done'
             try:
-                from brain.sqlite_store import update_job
                 update_job(job_id, status='done', phase='Done')
             except Exception:
                 pass
@@ -323,7 +319,6 @@ def pipeline_worker(
                 jobs[job_id]['status'] = 'cancelled'
                 jobs[job_id]['phase'] = 'Stopped by user'
             try:
-                from brain.sqlite_store import update_job
                 update_job(job_id, status='cancelled', phase='Stopped by user')
             except Exception:
                 pass
@@ -392,7 +387,6 @@ def batch_worker(
         jobs[job_id]['buffer'] = buffer
     
     try:
-        from brain.sqlite_store import create_job, update_job
         create_job(job_id, f"Batch ({len(inputs_list)} items)", phase="Starting...")
     except Exception:
         pass
@@ -457,7 +451,6 @@ def batch_worker(
                 jobs[job_id]['status'] = 'cancelled'
                 jobs[job_id]['phase'] = 'Stopped by user'
             try:
-                from brain.sqlite_store import update_job
                 update_job(job_id, status='cancelled', phase='Stopped by user')
             except Exception:
                 pass
@@ -465,7 +458,6 @@ def batch_worker(
             with jobs_lock:
                 jobs[job_id]['status'] = 'done'
             try:
-                from brain.sqlite_store import update_job
                 update_job(job_id, status='done', phase='Done')
             except Exception:
                 pass
@@ -477,7 +469,6 @@ def batch_worker(
                 jobs[job_id]['status'] = 'cancelled'
                 jobs[job_id]['phase'] = 'Stopped by user'
             try:
-                from brain.sqlite_store import update_job
                 update_job(job_id, status='cancelled', phase='Stopped by user')
             except Exception:
                 pass
