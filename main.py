@@ -344,7 +344,7 @@ def main():
         src = chosen_input
 
         if DownloaderAgent.is_url(src):
-            print(f"[URL] Detected URL - starting auto-download...")
+            print("[URL] Detected URL - starting auto-download...")
             try:
                 downloader = DownloaderAgent(output_dir="movies")
                 movie_path = downloader.download_video(src)

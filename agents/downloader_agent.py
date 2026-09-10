@@ -1,6 +1,5 @@
 import os
 import re
-import sys
 import time
 
 class DownloaderAgent:
@@ -51,6 +50,8 @@ class DownloaderAgent:
         # Check for optional cookies.txt
         has_cookies = False
         cookie_candidates = [
+            os.environ.get('MOVIE_COOKIES_PATH', ''),
+            os.path.abspath(os.path.join(os.path.dirname(os.getcwd()), 'Movie_Translate_Private', 'cookies.txt')),
             'cookies.txt',
             os.path.join('assets', 'cookies.txt'),
             '/kaggle/working/cookies.txt',
@@ -112,6 +113,7 @@ class DownloaderAgent:
 
         max_attempts = 4
         last_error = None
+        filename = None
         for attempt in range(1, max_attempts + 1):
             try:
                 current_opts = dict(ydl_opts)
@@ -190,7 +192,7 @@ class DownloaderAgent:
                             f"Original Error: {e}"
                         )
                     raise e
-                print(f"[*] Retrying in 5 seconds with fallback client format...")
+                print("[*] Retrying in 5 seconds with fallback client format...")
                 time.sleep(5)
 
         # Verify downloaded file actually exists before returning

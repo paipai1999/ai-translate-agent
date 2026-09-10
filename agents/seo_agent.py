@@ -41,7 +41,7 @@ class SEOAgent:
                 seo_data = self._parse_json(raw_content)
                 if seo_data:
                     state.seo_metadata = seo_data
-                    print(f"[OK] SEOAgent: Successfully generated viral YouTube Title & Tags via Gemini API!")
+                    print("[OK] SEOAgent: Successfully generated viral YouTube Title & Tags via Gemini API!")
                     self.export_final_outputs(state)
                     return state
                 else:
@@ -100,7 +100,7 @@ class SEOAgent:
 
     def _heuristic_seo(self, state: MovieState) -> dict:
         """Generate high-ranking SEO metadata without LLM."""
-        clean_title = state.movie_name.replace("_", " ").title()
+        clean_title = (state.movie_name or "Movie").replace("_", " ").title()
         chars = ", ".join(state.characters[:2]) if state.characters else "the characters"
         story = state.story_structure or {}
         genre = state.genre or "Action/Drama"
@@ -154,9 +154,9 @@ class SEOAgent:
         # 1. Export human-readable script TXT
         txt_path = os.path.join(output_dir, "final_recap_script.txt")
         with open(txt_path, "w", encoding="utf-8") as f:
-            f.write(f"==================================================\n")
+            f.write("==================================================\n")
             f.write(f"[VIDEO] MOVIE RECAP SCRIPT: {(state.movie_name or 'UNKNOWN').upper()}\n")
-            f.write(f"==================================================\n\n")
+            f.write("==================================================\n\n")
             
             if state.seo_metadata:
                 tags = state.seo_metadata.get('hashtags', [])
@@ -167,10 +167,10 @@ class SEOAgent:
                 f.write(f"[TAG] HASHTAGS: {tag_str}\n\n")
                 f.write(f"[TEXT] DESCRIPTION:\n{state.seo_metadata.get('description', '')}\n\n")
                 f.write(f"[KEY] KEYWORDS:\n{key_str}\n")
-                f.write(f"--------------------------------------------------\n\n")
+                f.write("--------------------------------------------------\n\n")
 
-            f.write(f"[NARRATION] VOICE-OVER NARRATION SCRIPT\n")
-            f.write(f"--------------------------------------------------\n\n")
+            f.write("[NARRATION] VOICE-OVER NARRATION SCRIPT\n")
+            f.write("--------------------------------------------------\n\n")
             if state.generated_script:
                 for idx, item in enumerate(state.generated_script, start=1):
                     f.write(f"--- [Scene {item.get('scene_id', idx)}] ---\n")

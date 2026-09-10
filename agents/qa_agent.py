@@ -95,6 +95,7 @@ class QAAgent:
         for b_idx in range(0, len(blocks_to_rewrite), BATCH_SIZE):
             batch = blocks_to_rewrite[b_idx:b_idx + BATCH_SIZE]
             batch_num = (b_idx // BATCH_SIZE) + 1
+            print(f"[*] QAAgent (Auto-Rewrite): Processing Batch {batch_num}/{total_batches} ({len(batch)} blocks)...")
 
             prompt_lines = []
             for b in batch:
@@ -209,6 +210,7 @@ class QAAgent:
         api_key = gemini_cfg.get("api_keys") or os.getenv("GEMINI_API_KEY")
         if not api_key:
             print("[!] QAAgent: No Gemini API key. Skipping QA.")
+            state.qa_results = {"status": "skipped", "reason": "missing_api_key"}
             return state
 
         models_dict = gemini_cfg.get("models", {})
@@ -218,7 +220,7 @@ class QAAgent:
         do_sync_check = qa_cfg.get("sync_check", True)
         do_language_check = qa_cfg.get("language_check", True)
 
-        qa_results = {"movie_name": state.movie_name, "sync": None, "language": None}
+        qa_results = {"status": "running", "movie_name": state.movie_name, "sync": None, "language": None}
 
         # ── Upload output video ONCE, reuse for both extract + sync check ────
         # Avoids double-uploading the same file to Gemini File API
@@ -226,7 +228,7 @@ class QAAgent:
         recap_working_key = None
         if os.path.exists(recap_video_path):
             try:
-                print(f"[*] QAAgent: Uploading output video to Gemini (single upload for all QA tasks)...")
+                print("[*] QAAgent: Uploading output video to Gemini (single upload for all QA tasks)...")
                 recap_file_name, recap_working_key = upload_video_file(recap_video_path, api_key)
                 print(f"[OK] QAAgent: Video uploaded -> {recap_file_name}")
             except Exception as e:
@@ -235,7 +237,7 @@ class QAAgent:
         try:
             if recap_file_name:
                 # ── Task 1: Extract Myanmar voiceover + visual action details ──
-                print(f"[*] QAAgent: Extracting output video transcript & visual actions...")
+                print("[*] QAAgent: Extracting output video transcript & visual actions...")
                 output_transcript = self._extract_output_video_transcript_with_file(
                     recap_file_name, recap_working_key, state, model_heavy
                 )
@@ -245,7 +247,7 @@ class QAAgent:
 
                 # ── Task 2: Sync check using the SAME uploaded file ────────────
                 if do_sync_check:
-                    print(f"[*] QAAgent: Running sync review on uploaded video...")
+                    print("[*] QAAgent: Running sync review on uploaded video...")
                     sync_result = self._run_sync_check_with_file(
                         recap_file_name, recap_working_key, state, model_heavy
                     )
@@ -263,15 +265,18 @@ class QAAgent:
         if do_language_check and state.generated_script:
             if getattr(state, "qa_results", None) and state.qa_results.get("language"):
                 qa_results["language"] = state.qa_results["language"]
-                print(f"[OK] QAAgent: Reusing pre-TTS language QA results.")
+                print("[OK] QAAgent: Reusing pre-TTS language QA results.")
             else:
-                print(f"[*] QAAgent: Reviewing Myanmar narration language quality...")
+                print("[*] QAAgent: Reviewing Myanmar narration language quality...")
                 lang_result = self._run_language_check(state, api_key, model_workhorse)
                 if lang_result:
                     qa_results["language"] = lang_result
                     print(f"[OK] QAAgent: Language naturalness score = {lang_result.get('overall_language_score', 'N/A')}/10")
 
         project_output_dir = os.path.join(self.output_dir, state.project_dir)
+        qa_results["status"] = "completed" if (qa_results.get("sync") or qa_results.get("language")) else "failed"
+        if qa_results["status"] != "completed":
+            qa_results["reason"] = "no_successful_checks"
         self._save_reports(qa_results, project_output_dir)
 
         # Note: Script rewriting is handled in Phase 4.1c before TTS synthesis.
@@ -393,7 +398,7 @@ class QAAgent:
 
             sync = qa_results.get("sync")
             if sync:
-                f.write(f"SYNC ACCURACY\n")
+                f.write("SYNC ACCURACY\n")
                 f.write(f"  Overall: {sync.get('overall_sync_score', 'N/A')}/10\n\n")
                 for b in sync.get("blocks", []):
                     score = b.get("score", "?")
@@ -411,7 +416,7 @@ class QAAgent:
 
             lang = qa_results.get("language")
             if lang:
-                f.write(f"LANGUAGE NATURALNESS\n")
+                f.write("LANGUAGE NATURALNESS\n")
                 f.write(f"  Overall: {lang.get('overall_language_score', 'N/A')}/10\n")
                 f.write(f"  Summary: {lang.get('summary', '')}\n\n")
                 for b in lang.get("blocks", []):

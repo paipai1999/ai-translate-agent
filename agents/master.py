@@ -76,6 +76,14 @@ class _PipelineLogWriter:
 
 
 class MasterAgent:
+    @staticmethod
+    def _portable_path(value):
+        """Normalize persisted Windows paths when restoring on Linux/macOS."""
+        if not value:
+            return value
+        text = str(value).replace("\\", os.sep)
+        return os.path.normpath(text)
+
     def __init__(
         self,
         movie_path: str,
@@ -158,8 +166,13 @@ class MasterAgent:
                     self.state.transcript = prev_state.transcript
                 if getattr(prev_state, "timeline", None) and isinstance(prev_state.timeline, list) and len(prev_state.timeline) > 0:
                     self.state.timeline = prev_state.timeline
-                if getattr(prev_state, "audio_path", None) and os.path.exists(prev_state.audio_path):
-                    self.state.audio_path = prev_state.audio_path
+                for path_field in ("movie_path", "file_path", "audio_path", "thumbnail_path", "clean_video_path", "reels_video_path"):
+                    restored_path = self._portable_path(getattr(prev_state, path_field, None))
+                    if restored_path and os.path.exists(restored_path):
+                        setattr(self.state, path_field, restored_path)
+                restored_movie = self._portable_path(getattr(prev_state, "movie_path", None))
+                if restored_movie and os.path.exists(restored_movie):
+                    self.movie_path = restored_movie
                 if getattr(prev_state, "generated_script", None) and len(prev_state.generated_script) > 0:
                     self.state.generated_script = prev_state.generated_script
                 if getattr(prev_state, "seo_metadata", None):
@@ -294,7 +307,8 @@ class MasterAgent:
             return has_16_9
 
         elif phase_id == PHASE_7_QA:
-            return bool(getattr(self.state, "qa_report", None) or not config.load_config().get("qa", {}).get("enabled", False))
+            qa_result = getattr(self.state, "qa_results", None) or getattr(self.state, "qa_report", None)
+            return bool(isinstance(qa_result, dict) and qa_result.get("status") == "completed")
 
         return False
 
@@ -314,6 +328,7 @@ class MasterAgent:
     def save_checkpoint(self, phase_id: str, phase_label: str):
         """Saves an atomic checkpoint.json and updates state.json for the completed phase."""
         self.state.mark_phase_completed(phase_id)
+        self.state.phase_statuses[phase_id] = "COMPLETED"
         self.save_state()
         ckpt_dir = os.path.join(self.output_dir, self.state.project_dir)
         os.makedirs(ckpt_dir, exist_ok=True)
@@ -329,6 +344,10 @@ class MasterAgent:
             "duration_sec": getattr(self.state, "duration_sec", 0.0),
             "script_blocks_count": len(self.state.generated_script or []),
             "speaker_profiles": self.state.speaker_profiles,
+            "pipeline_status": self.state.pipeline_status,
+            "phase_statuses": self.state.phase_statuses,
+            "warnings": self.state.warnings,
+            "errors": self.state.errors,
         }
         try:
             tmp_ckpt = ckpt_path + ".tmp"
@@ -343,6 +362,7 @@ class MasterAgent:
 
     def run_pipeline(self):
         total_start = time.time()
+        self.state.pipeline_status = "RUNNING"
         self.state.start_time = datetime.datetime.now().isoformat()
         
         # Setup real-time process log file
@@ -368,7 +388,7 @@ class MasterAgent:
                 hw_str = f"💻 CPU Multi-Core [Encoder: {enc['label']}]"
 
             print(f"\n{'='*60}")
-            print(f"[MOVIE RECAP AI] End-to-End Autonomous Pipeline")
+            print("[MOVIE RECAP AI] End-to-End Autonomous Pipeline")
             print(f"[INPUT] {self.movie_path}")
             print(f"[HARDWARE] {hw_str}")
             print(f"[CONFIG] Lang: {self.language.upper()} | Subtitles: {self.subtitle_mode.upper()} | Res: {self.resolution} | Voice: {self.tts_voice} | Engine: {self.tts_engine.upper()} | Resume: {self.resume}")
@@ -384,7 +404,7 @@ class MasterAgent:
                 print(f"[⏱️ TIMING] Phase 1 finished in {self.state.phase_durations['Phase 1: Video Analysis']}s")
                 self.save_checkpoint(PHASE_1_ANALYSIS, "Phase 1: Video & Metadata Analysis")
             else:
-                print(f"[*] Phase 1: Video & Metadata Analysis skipped (reusing cached metadata).")
+                print("[*] Phase 1: Video & Metadata Analysis skipped (reusing cached metadata).")
 
             # Phase 2 & 3: Audio STT and Scene Detection (Parallel)
             run_p2 = self._should_run_phase(PHASE_2_AUDIO)
@@ -485,7 +505,7 @@ class MasterAgent:
                 if run_p3:
                     self.save_checkpoint(PHASE_3_SCENES, "Phase 3: Scene Detection")
             else:
-                print(f"[*] Phase 2 & 3 skipped (reusing cached audio transcript & scene timeline).")
+                print("[*] Phase 2 & 3 skipped (reusing cached audio transcript & scene timeline).")
 
             # Phase 4: Script Writing, SEO & Thumbnail
             if self._should_run_phase(PHASE_4_SCRIPT):
@@ -544,7 +564,7 @@ class MasterAgent:
                 print(f"[⏱️ TIMING] Phase 4 finished in {self.state.phase_durations['Phase 4: Script, SEO & Thumbnail']}s")
                 self.save_checkpoint(PHASE_4_SCRIPT, "Phase 4: Script Writing, SEO & Thumbnail")
             else:
-                print(f"[*] Phase 4: Script Writing, SEO & Thumbnail skipped (reusing cached script & thumbnail).")
+                print("[*] Phase 4: Script Writing, SEO & Thumbnail skipped (reusing cached script & thumbnail).")
 
             # Phase 5: Voice Generation
             if self.tts_enabled:
@@ -556,7 +576,7 @@ class MasterAgent:
                     print(f"[⏱️ TIMING] Phase 5 finished in {self.state.phase_durations['Phase 5: Voice Generation']}s")
                     self.save_checkpoint(PHASE_5_VOICE, "Phase 5: Voice Generation")
                 else:
-                    print(f"[*] Phase 5: Voice Generation skipped (all voice clips already synthesized).")
+                    print("[*] Phase 5: Voice Generation skipped (all voice clips already synthesized).")
             else:
                 print("\n[*] VoiceAgent: Skipped (disabled in config.json -> voice.enabled = false)")
                 self.state.phase_durations["Phase 5: Voice Generation"] = 0.0
@@ -616,12 +636,13 @@ class MasterAgent:
                             self.state.reels_video_path = reels_path
                         except Exception as e:
                             print(f"[WARN] MasterAgent: Failed to generate Reels video: {e}")
+                            self.state.warnings.append(f"Reels generation failed: {e}")
                 else:
                     print(f"[*] Phase 6b (9:16 Reels): Skipped (Video format is '{self.video_format}')")
 
                 self.save_checkpoint(PHASE_6_MERGE, "Phase 6: Video Merge & Subtitle Pass")
             else:
-                print(f"[*] Phase 6: Video Merge skipped (reusing completed final recap video).")
+                print("[*] Phase 6: Video Merge skipped (reusing completed final recap video).")
 
             # Phase 7: QA Review — Gemini checks sync accuracy & language naturalness
             if self._should_run_phase(PHASE_7_QA):
@@ -637,12 +658,17 @@ class MasterAgent:
                         )
                         self.state.phase_durations["Phase 7: QA Review"] = round(time.time() - p7_t0, 2)
                         print(f"[⏱️ TIMING] Phase 7 finished in {self.state.phase_durations['Phase 7: QA Review']}s")
-                        self.save_checkpoint(PHASE_7_QA, "Phase 7: QA Review")
+                        if isinstance(getattr(self.state, "qa_results", None), dict) and self.state.qa_results.get("status") == "completed":
+                            self.save_checkpoint(PHASE_7_QA, "Phase 7: QA Review")
+                        else:
+                            print("[WARN] QA did not complete successfully; Phase 7 will remain pending for resume.")
                     else:
                         print("[!] QA: final_recap.mp4 not found — skipping QA phase.")
+                        self.state.warnings.append("QA pending: final_recap.mp4 was not found")
                         self.state.phase_durations["Phase 7: QA Review"] = 0.0
                 else:
                     print("[*] QA Phase: Disabled (set qa.enabled=true in config.json to enable)")
+                    self.state.warnings.append("QA disabled by configuration")
                     self.state.phase_durations["Phase 7: QA Review"] = 0.0
             else:
                 print("[*] Phase 7: QA Review skipped.")
@@ -653,30 +679,41 @@ class MasterAgent:
             self.state.total_duration_formatted = self._format_duration(total_elapsed)
             self.state.end_time = datetime.datetime.now().isoformat()
 
-            # Done
+            # Final status is explicit: a rendered video is not automatically QA-complete.
             self.state.progress = 100
-            self.state.current_phase = "Done"
+            qa_enabled = config.load_config().get("qa", {}).get("enabled", False)
+            qa_complete = isinstance(getattr(self.state, "qa_results", None), dict) and self.state.qa_results.get("status") == "completed"
+            if qa_enabled and not qa_complete:
+                self.state.pipeline_status = "QA_PENDING"
+                self.state.current_phase = "QA Pending"
+                self.state.progress = 95
+            elif self.state.warnings:
+                self.state.pipeline_status = "COMPLETED_WITH_WARNINGS"
+                self.state.current_phase = "Completed with warnings"
+            else:
+                self.state.pipeline_status = "COMPLETED"
+                self.state.current_phase = "Completed"
             self.save_state()
 
             print(f"\n{'='*60}")
-            print(f"🎉 [DONE] Pipeline Complete in {self.state.total_duration_formatted} ({total_elapsed}s)!")
+            print(f"🎉 [{self.state.pipeline_status}] Pipeline finished in {self.state.total_duration_formatted} ({total_elapsed}s)!")
             print(f"{'='*60}")
-            print(f"⏱️  PHASE DURATION BREAKDOWN:")
+            print("⏱️  PHASE DURATION BREAKDOWN:")
             for phase_name, dur in self.state.phase_durations.items():
                 print(f"   • {phase_name:<42} : {dur:>7.2f}s ({self._format_duration(dur)})")
             print(f"   {'-'*56}")
             print(f"   🌟 TOTAL DURATION                          : {total_elapsed:>7.2f}s ({self.state.total_duration_formatted})")
             print(f"\n📦 OUTPUT DIRECTORY: outputs/{self.state.project_dir}/")
             if self.video_format in ["16:9", "both"]:
-                print(f"   ├─ final_recap.mp4         (16:9 YouTube Video)")
+                print("   ├─ final_recap.mp4         (16:9 YouTube Video)")
             if getattr(self.state, "reels_video_path", None) and os.path.exists(self.state.reels_video_path):
-                print(f"   ├─ final_reels.mp4         (9:16 Facebook Reels Canvas Video)")
-            print(f"   ├─ thumbnail.jpg           (High-CTR Thumbnail)")
-            print(f"   ├─ final_recap_script.txt  (Narration Script + SEO)")
-            print(f"   ├─ seo_metadata.json       (Title/Tags/Hashtags)")
-            print(f"   ├─ pipeline.log            (Complete Process Log)")
-            print(f"   ├─ state.json              (Full State Metadata)")
-            print(f"   └─ voiceover/              (Audio Clips per Scene)")
+                print("   ├─ final_reels.mp4         (9:16 Facebook Reels Canvas Video)")
+            print("   ├─ thumbnail.jpg           (High-CTR Thumbnail)")
+            print("   ├─ final_recap_script.txt  (Narration Script + SEO)")
+            print("   ├─ seo_metadata.json       (Title/Tags/Hashtags)")
+            print("   ├─ pipeline.log            (Complete Process Log)")
+            print("   ├─ state.json              (Full State Metadata)")
+            print("   └─ voiceover/              (Audio Clips per Scene)")
             print(f"{'='*60}\n")
 
             # Auto Cleanup of intermediate temp files if enabled
@@ -709,6 +746,18 @@ class MasterAgent:
                     except Exception:
                         pass
 
+        except InterruptedError as error:
+            self.state.pipeline_status = "CANCELLED"
+            self.state.current_phase = "Cancelled"
+            self.state.errors.append(str(error))
+            self.save_state()
+            raise
+        except Exception as error:
+            self.state.pipeline_status = "FAILED"
+            self.state.current_phase = "Failed"
+            self.state.errors.append(f"{type(error).__name__}: {error}")
+            self.save_state()
+            raise
         finally:
             sys.stdout = orig_stdout
             sys.stderr = orig_stderr
@@ -719,6 +768,13 @@ class MasterAgent:
             raise InterruptedError(f"Pipeline force-stopped by user at {label}.")
         print(f"\n--- [{label}] ---")
         self.state.current_phase = label
+        phase_id = next((p for p, name in {
+            PHASE_1_ANALYSIS: "Phase 1", PHASE_2_AUDIO: "Phase 2", PHASE_3_SCENES: "Phase 3",
+            PHASE_4_SCRIPT: "Phase 4", PHASE_5_VOICE: "Phase 5", PHASE_6_MERGE: "Phase 6",
+            PHASE_7_QA: "Phase 7"
+        }.items() if name.lower() in label.lower()), None)
+        if phase_id:
+            self.state.phase_statuses[phase_id] = "RUNNING"
         if progress > 0:
             self.state.progress = progress
         self.save_state()

@@ -41,9 +41,9 @@ def _ensure_linux_cuda_ld_path():
         os.environ["LD_LIBRARY_PATH"] = ":".join(extra_ld) + ((":" + cur_ld) if cur_ld else "")
 
 def _auto_setup_nvenc_linux() -> str:
-    """If running on Linux with an NVIDIA GPU, auto-downloads BtbN NVENC static build if missing."""
+    """Optionally cache a BtbN NVENC build locally without modifying system binaries."""
     import subprocess
-    import shutil
+    import tarfile
     
     if not sys.platform.startswith("linux"):
         return None
@@ -69,7 +69,9 @@ def _auto_setup_nvenc_linux() -> str:
     # Configure LD_LIBRARY_PATH for NVIDIA CUDA and NVENC driver libraries on Linux
     _ensure_linux_cuda_ld_path()
 
-    target = "/usr/local/bin/ffmpeg"
+    target_dir = os.path.abspath(os.path.join("temp", "ffmpeg_nvenc"))
+    target = os.path.join(target_dir, "ffmpeg")
+    ffprobe_target = os.path.join(target_dir, "ffprobe")
     if os.path.exists(target) and os.path.getsize(target) > 10000000:
         try:
             chk = subprocess.run([target, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True, timeout=4)
@@ -87,12 +89,14 @@ def _auto_setup_nvenc_linux() -> str:
         "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.1-latest-linux64-gpl.tar.xz",
     ]
     try:
-        os.makedirs("/tmp/ff_build", exist_ok=True)
+        build_dir = os.path.join("temp", "ffmpeg_nvenc_build")
+        os.makedirs(build_dir, exist_ok=True)
         downloaded = False
+        archive_path = os.path.join(build_dir, "ffmpeg.tar.xz")
         for url in urls:
             try:
-                res = subprocess.run(f"curl -L -f -s -A 'Mozilla/5.0' {url} -o /tmp/ff_build/ffmpeg.tar.xz", shell=True, timeout=90)
-                if res.returncode == 0 and os.path.exists("/tmp/ff_build/ffmpeg.tar.xz") and os.path.getsize("/tmp/ff_build/ffmpeg.tar.xz") > 10000000:
+                res = subprocess.run(["curl", "-L", "-f", "-s", "-A", "Mozilla/5.0", url, "-o", archive_path], timeout=90)
+                if res.returncode == 0 and os.path.exists(archive_path) and os.path.getsize(archive_path) > 10000000:
                     downloaded = True
                     break
             except Exception:
@@ -102,17 +106,32 @@ def _auto_setup_nvenc_linux() -> str:
             print("[WARN] Could not download static NVENC FFmpeg build from primary or fallback URLs.")
             return None
 
-        subprocess.run("tar -xf /tmp/ff_build/ffmpeg.tar.xz -C /tmp/ff_build", shell=True, check=True, timeout=45)
-        subprocess.run("find /tmp/ff_build -type f -name ffmpeg -exec cp -f {} /usr/local/bin/ffmpeg \\;", shell=True, check=True)
-        subprocess.run("find /tmp/ff_build -type f -name ffprobe -exec cp -f {} /usr/local/bin/ffprobe \\;", shell=True, check=True)
-        subprocess.run("chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe", shell=True, check=True)
-        subprocess.run("rm -rf /tmp/ff_build", shell=True)
-        os.environ["PATH"] = "/usr/local/bin:" + os.environ.get("PATH", "")
+        os.makedirs(target_dir, exist_ok=True)
+        extracted = set()
+        with tarfile.open(archive_path, "r:xz") as archive:
+            for member in archive.getmembers():
+                name = os.path.basename(member.name)
+                if name not in {"ffmpeg", "ffprobe"} or not member.isfile():
+                    continue
+                destination = target if name == "ffmpeg" else ffprobe_target
+                source = archive.extractfile(member)
+                if source is None:
+                    continue
+                with open(destination, "wb") as output:
+                    shutil.copyfileobj(source, output)
+                os.chmod(destination, 0o755)
+                extracted.add(name)
+        if "ffmpeg" not in extracted:
+            raise RuntimeError("Downloaded archive did not contain ffmpeg")
+        try:
+            os.remove(archive_path)
+        except OSError:
+            pass
         os.environ["IMAGEIO_FFMPEG_EXE"] = target
         
         chk = subprocess.run([target, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True, timeout=4)
         if chk.returncode == 0:
-            print("🚀 [OK] NVIDIA NVENC GPU Encoder ready and active (/usr/local/bin/ffmpeg)!")
+            print(f"🚀 [OK] NVIDIA NVENC GPU Encoder ready and active ({target})!")
             _DETECTED_ENCODER = None
             return target
     except Exception as e:
@@ -554,11 +573,12 @@ class VideoMergerAgent:
         wm_cfg = config_data.get("watermark", {})
         wm_override = getattr(state, "watermark_override", {}) or {}
         wm_enabled = wm_override.get("enabled", wm_cfg.get("enabled", False))
-        is_reels_only = getattr(state, "video_format", "16:9") == "9:16"
         wm_png = None
         wm_pos = "bottom_left"
         wm_margin = 25
-        if wm_enabled and not is_reels_only:
+        # Apply the requested watermark to every rendered format, including
+        # 9:16-only exports. Previously reels-only jobs silently skipped it.
+        if wm_enabled:
             wm_text = wm_override.get("text") or wm_cfg.get("text", "PAI AI Movie Translate")
             wm_opacity = float(wm_override.get("opacity") if wm_override.get("opacity") is not None else wm_cfg.get("opacity", 0.85))
             wm_font_size = int(wm_override.get("font_size") or wm_cfg.get("font_size", 28))

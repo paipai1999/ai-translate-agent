@@ -1,6 +1,4 @@
-import os
 from datetime import datetime, timezone, timedelta
-from typing import Optional
 
 # DST-aware Pacific Time via zoneinfo (works on Windows too).
 _PT_ZONE = None

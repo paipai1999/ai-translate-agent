@@ -3,10 +3,7 @@ import math
 import os
 import re
 from brain.memory import MovieState
-from brain.prompts import (
-    FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT,
-    FULL_RECAP_SYSTEM_PROMPT,
-)
+from brain.prompts import FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT
 from brain.gemini_client import call_gemini
 from brain import config as cfg
 
@@ -601,8 +598,14 @@ class WriterAgent:
             if "end_sec" in item:
                 try: block["end_sec"] = float(item["end_sec"])
                 except (ValueError, TypeError): pass
-            if "speaker" in item:
-                block["speaker"] = str(item["speaker"])
+            if "character" in item and item["character"]:
+                block["character"] = str(item["character"]).strip()
+            if "speaker" in item and item["speaker"]:
+                block["speaker"] = str(item["speaker"]).strip()
+                if "character" not in block:
+                    block["character"] = block["speaker"]
+            elif "character" in block:
+                block["speaker"] = block["character"]
             if "gender" in item:
                 block["gender"] = str(item["gender"])
             if "emotion" in item:

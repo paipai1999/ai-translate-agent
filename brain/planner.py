@@ -58,7 +58,7 @@ class BatchProcessor:
             # Verify the state file is valid JSON and pipeline reached 100%
             with open(state_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return int(data.get("progress", 0)) >= 100
+            return int(data.get("progress", 0)) >= 100 and data.get("pipeline_status") in {"COMPLETED", "COMPLETED_WITH_WARNINGS"}
         except Exception:
             return False  # If anything fails, re-process this movie
 
@@ -138,7 +138,9 @@ class BatchProcessor:
                     resume=self.resume,
                 )
                 master.run_pipeline()
-                self.results.append({"movie": movie_name, "status": "SUCCESS"})
+                pipeline_status = getattr(master.state, "pipeline_status", "COMPLETED")
+                result_status = "SUCCESS" if pipeline_status == "COMPLETED" else pipeline_status
+                self.results.append({"movie": movie_name, "status": result_status, "warnings": getattr(master.state, "warnings", [])})
                 print(f"[OK] [{idx}/{total}] Completed: {movie_name}")
             except Exception as e:
                 print(f"[ERROR] [{idx}/{total}] FAILED: {movie_name} - Error: {e}")
@@ -149,18 +151,22 @@ class BatchProcessor:
 
     def _print_summary(self):
         """Print a final summary report of the batch run."""
-        success = [r for r in self.results if r.get("status") == "SUCCESS"]
-        failed  = [r for r in self.results if r.get("status") == "FAILED"]
+        success = [r for r in self.results if r.get("status") in {"SUCCESS", "COMPLETED"}]
+        warnings = [r for r in self.results if r.get("status") == "COMPLETED_WITH_WARNINGS"]
+        pending = [r for r in self.results if r.get("status") == "QA_PENDING"]
+        failed  = [r for r in self.results if r.get("status") in {"FAILED", "CANCELLED"}]
         skipped = [r for r in self.results if r.get("status") == "SKIPPED"]
 
         print(f"\n{'='*55}")
-        print(f"[STATS] BATCH PROCESSING SUMMARY")
+        print("[STATS] BATCH PROCESSING SUMMARY")
         print(f"{'='*55}")
         print(f"  [OK] Completed : {len(success)}")
+        print(f"  [WARN] Warnings  : {len(warnings)}")
+        print(f"  [QA] Pending    : {len(pending)}")
         print(f"  [SKIP] Skipped   : {len(skipped)}")
         print(f"  [ERROR] Failed    : {len(failed)}")
         if failed:
-            print(f"\n  Failed jobs:")
+            print("\n  Failed jobs:")
             for r in failed:
                 name = r.get('movie') or r.get('url') or 'Unknown'
                 print(f"    - {name}: {r.get('error','Unknown error')}")

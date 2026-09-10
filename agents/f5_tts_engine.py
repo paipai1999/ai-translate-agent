@@ -66,10 +66,12 @@ class F5TTSEngine:
             return self._is_available
         try:
             from f5_tts.api import F5TTS
+            del F5TTS
             self._is_available = True
-        except (ImportError, OSError, Exception) as e:
+        except (ImportError, OSError, Exception):
             try:
                 import f5_tts
+                del f5_tts
                 self._is_available = True
             except (ImportError, OSError, Exception):
                 self._is_available = False

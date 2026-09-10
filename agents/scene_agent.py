@@ -1,5 +1,10 @@
 import os
-from scenedetect import detect, ContentDetector, AdaptiveDetector
+try:
+    from scenedetect import detect, ContentDetector, AdaptiveDetector
+except ImportError:
+    detect = None
+    ContentDetector = None
+    AdaptiveDetector = None
 from brain.memory import MovieState, SceneData
 from brain import config as cfg
 
@@ -16,28 +21,40 @@ class SceneAgent:
         """
         print(f"[*] SceneAgent: Starting visual scene detection on {movie_path} (Threshold: {self.scene_threshold})...")
         
-        try:
-            # AdaptiveDetector is up to 3x faster and handles lighting changes better than ContentDetector
-            scene_list = detect(movie_path, AdaptiveDetector(adaptive_threshold=3.0, min_scene_len=self.min_scene_len), show_progress=False)
-        except Exception as e:
+        if detect is None:
+            print("[WARN] SceneAgent: PySceneDetect is not installed. Slicing into equal-length chapters based on video duration.")
+            scene_list = []
+        else:
             try:
-                scene_list = detect(movie_path, ContentDetector(threshold=self.scene_threshold, min_scene_len=self.min_scene_len), show_progress=False)
-            except Exception as e2:
-                print(f"[ERROR] SceneAgent: PySceneDetect failed: {e2}")
-                scene_list = []
+                # AdaptiveDetector is up to 3x faster and handles lighting changes better than ContentDetector
+                scene_list = detect(movie_path, AdaptiveDetector(adaptive_threshold=3.0, min_scene_len=self.min_scene_len), show_progress=False)
+            except Exception:
+                try:
+                    scene_list = detect(movie_path, ContentDetector(threshold=self.scene_threshold, min_scene_len=self.min_scene_len), show_progress=False)
+                except Exception as e2:
+                    print(f"[ERROR] SceneAgent: PySceneDetect failed: {e2}")
+                    scene_list = []
             
         if not scene_list:
-            print("[WARN] SceneAgent: No scenes detected. Creating single fallback chapter.")
             dur = state.duration_sec if (state and getattr(state, "duration_sec", 0.0) > 0.0) else 120.0
-            state.timeline = [
-                SceneData(
-                    scene_id=1,
-                    start_time="00:00:00",
-                    end_time=self._format_time(dur),
-                    start_sec=0.0,
-                    end_sec=dur
+            _config_data = cfg.load_config()
+            target_chapters = int(os.getenv("RECAP_CHAPTERS", "0")) or _config_data.get("pipeline", {}).get("target_chapters", 10)
+            target_chapters = max(1, min(target_chapters, int(dur // 15) or 1))
+            ch_len = dur / target_chapters
+            state.timeline = []
+            for c_idx in range(target_chapters):
+                c_start = c_idx * ch_len
+                c_end = dur if c_idx == target_chapters - 1 else (c_idx + 1) * ch_len
+                state.timeline.append(
+                    SceneData(
+                        scene_id=c_idx + 1,
+                        start_time=self._format_time(c_start),
+                        end_time=self._format_time(c_end),
+                        start_sec=round(c_start, 2),
+                        end_sec=round(c_end, 2)
+                    )
                 )
-            ]
+            print(f"[*] SceneAgent: Created {len(state.timeline)} fallback macro chapters across {dur:.1f}s.")
             return state
             
         print(f"[*] SceneAgent: Detected {len(scene_list)} raw visual scenes.")
@@ -56,7 +73,6 @@ class SceneAgent:
         chapter_idx = 1
         
         for i, scene in enumerate(scene_list):
-            start_sec = scene[0].get_seconds()
             end_sec = scene[1].get_seconds()
             
             # Close the current chapter if adding this scene would exceed target length 

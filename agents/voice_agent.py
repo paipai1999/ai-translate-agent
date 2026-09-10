@@ -342,6 +342,7 @@ class VoiceAgent:
 
         try:
             import edge_tts
+            del edge_tts
         except ImportError:
             print("[!] VoiceAgent: 'edge-tts' is not installed. Please run: pip install edge-tts")
             return state
@@ -475,7 +476,7 @@ class VoiceAgent:
                 await communicate.save(output_file)
                 success = True
                 break
-            except Exception as e:
+            except Exception:
                 print(f"[RETRY] VoiceAgent: Retrying Scene {scene_id} (attempt {attempt}/3)...")
                 await asyncio.sleep(2 ** attempt)
         
@@ -528,7 +529,6 @@ class VoiceAgent:
                             raw_dur = float(wf.getnframes()) / float(wf.getframerate())
                     except Exception:
                         try:
-                            from moviepy.editor import AudioFileClip
                             clip = AudioFileClip(output_file)
                             raw_dur = clip.duration
                             clip.close()

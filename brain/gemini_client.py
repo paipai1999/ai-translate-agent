@@ -121,10 +121,7 @@ def call_gemini(
                 if not reserve_model_usage(key, m, limit):
                     continue
 
-                url = (
-                    f"https://generativelanguage.googleapis.com"
-                    f"/v1beta/models/{m}:generateContent?key={key}"
-                )
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
                 gen_config = {
                     "temperature": temperature,
                     "maxOutputTokens": max_tokens,
@@ -163,7 +160,7 @@ def call_gemini(
                     req = urllib.request.Request(
                         url,
                         data=json.dumps(payload).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
+                        headers={"Content-Type": "application/json", "x-goog-api-key": key},
                         method="POST",
                     )
                     with urllib.request.urlopen(req, timeout=120.0) as response:
@@ -272,10 +269,7 @@ def call_gemini_vision(
                 if not reserve_model_usage(key, m, limit):
                     continue
 
-                url = (
-                    f"https://generativelanguage.googleapis.com"
-                    f"/v1beta/models/{m}:generateContent?key={key}"
-                )
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
                 img_mime = (
                     "image/jpeg" if image_path.lower().endswith(('.jpg', '.jpeg'))
                     else "image/png" if image_path.lower().endswith('.png')
@@ -302,7 +296,7 @@ def call_gemini_vision(
                     req = urllib.request.Request(
                         url,
                         data=json.dumps(payload).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
+                        headers={"Content-Type": "application/json", "x-goog-api-key": key},
                         method="POST",
                     )
                     with urllib.request.urlopen(req, timeout=120.0) as response:
@@ -415,13 +409,14 @@ def upload_video_file(video_path: str, api_key) -> tuple:
     mime_type = "video/mp4"
     
     for key in api_keys:
-        start_url = f"https://generativelanguage.googleapis.com/upload/v1beta/files?key={key}"
+        start_url = "https://generativelanguage.googleapis.com/upload/v1beta/files"
         start_headers = {
             "X-Goog-Upload-Protocol": "resumable",
             "X-Goog-Upload-Command": "start",
             "X-Goog-Upload-Header-Content-Length": str(file_size),
             "X-Goog-Upload-Header-Content-Type": mime_type,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "x-goog-api-key": key
         }
         start_payload = json.dumps({"file": {"display_name": os.path.basename(video_path)}}).encode("utf-8")
         
@@ -461,9 +456,9 @@ def upload_video_file(video_path: str, api_key) -> tuple:
         max_poll_attempts = 120  # Max 10 minutes (120 * 5s)
         for _ in range(max_poll_attempts):
             time.sleep(5)
-            check_url = f"https://generativelanguage.googleapis.com/v1beta/{file_name}?key={key}"
+            check_url = f"https://generativelanguage.googleapis.com/v1beta/{file_name}"
             try:
-                req_check = urllib.request.Request(check_url, method="GET")
+                req_check = urllib.request.Request(check_url, headers={"x-goog-api-key": key}, method="GET")
                 with urllib.request.urlopen(req_check, timeout=15) as r:
                     info = json.loads(r.read().decode("utf-8"))
                     state = info.get("state")
@@ -485,7 +480,7 @@ def ask_gemini_with_video(file_name: str, system_prompt: str, user_text: str, ke
     last_err = None
     
     for m in models_to_try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
         payload = {
             "system_instruction": {"parts": [{"text": system_prompt}]},
             "contents": [{
@@ -500,12 +495,10 @@ def ask_gemini_with_video(file_name: str, system_prompt: str, user_text: str, ke
                 "responseMimeType": "application/json",
             },
         }
-        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json"}, method="POST")
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers={"Content-Type": "application/json", "x-goog-api-key": key}, method="POST")
         print(f"[*] Gemini API: Sending prompt and video '{file_name}' to {m}...")
         
         max_retries = 3
-        success = False
-        
         for attempt in range(max_retries):
             try:
                 with urllib.request.urlopen(req, timeout=600.0) as response:
@@ -533,8 +526,8 @@ def ask_gemini_with_video(file_name: str, system_prompt: str, user_text: str, ke
     raise Exception(f"All models failed for Video API. Last error: {last_err}")
 
 def delete_video_file(file_name: str, key: str):
-    url = f"https://generativelanguage.googleapis.com/v1beta/{file_name}?key={key}"
-    req = urllib.request.Request(url, method="DELETE")
+    url = f"https://generativelanguage.googleapis.com/v1beta/{file_name}"
+    req = urllib.request.Request(url, headers={"x-goog-api-key": key}, method="DELETE")
     try:
         urllib.request.urlopen(req)
         print(f"[OK] Gemini API: Deleted video '{file_name}'.")

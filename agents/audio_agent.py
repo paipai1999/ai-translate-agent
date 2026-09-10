@@ -19,11 +19,9 @@ class AudioAgent:
             return state
 
         # Direct FFmpeg extraction first (instant C-speed, zero RAM overhead)
-        extracted = False
         result = self._ffmpeg_extract_audio(audio_path)
         if result and os.path.exists(audio_path) and os.path.getsize(audio_path) > 1000:
             state.audio_path = result
-            extracted = True
             print(f"[*] AudioAgent: Audio extracted via FFmpeg -> {audio_path}")
         else:
             # Fallback to MoviePy if FFmpeg direct extraction failed
@@ -37,7 +35,6 @@ class AudioAgent:
                 if video.audio is not None:
                     video.audio.write_audiofile(audio_path, logger=None)
                     state.audio_path = audio_path
-                    extracted = True
                     print(f"[*] AudioAgent: Audio extracted via MoviePy fallback -> {audio_path}")
                 else:
                     print("[!] AudioAgent: No audio stream detected in the video.")
@@ -281,7 +278,7 @@ class AudioAgent:
             print("[WARN] AudioAgent: Python 3.10+ recommended for best Whisper compatibility.")
 
         # Write a self-contained transcription helper script to a temp file
-        helper_script = f"""
+        helper_script = """
 import os, sys, json
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
@@ -311,7 +308,7 @@ try:
         gpu_name = torch.cuda.get_device_name(0)
         device = "cuda"
         compute_type = "float16"
-        print(f"[*] AudioAgent (Faster-Whisper): 🚀 Active Hardware -> NVIDIA GPU ({{gpu_name}}) [CUDA float16 Tensor Cores]")
+        print(f"[*] AudioAgent (Faster-Whisper): 🚀 Active Hardware -> NVIDIA GPU ({gpu_name}) [CUDA float16 Tensor Cores]")
     else:
         device = "cpu"
         compute_type = "int8"
@@ -325,33 +322,33 @@ try:
         beam_size=1,
         vad_filter=True,
         vad_parameters=dict(min_silence_duration_ms=500),
-        initial_prompt=f"This is a dialogue transcript for the movie {{movie_name}}."
+        initial_prompt=f"This is a dialogue transcript for the movie {movie_name}."
     )
     detected_lang = whisper_lang or info.language
     for seg in segments:
-        results.append({{"start": round(seg.start, 2), "end": round(seg.end, 2), "text": seg.text.strip()}})
+        results.append({"start": round(seg.start, 2), "end": round(seg.end, 2), "text": seg.text.strip()})
 
 except Exception as fw_err:
-    print(f"[*] AudioAgent: Falling back to standard Whisper engine...")
+    print(f"[*] AudioAgent: Falling back to standard Whisper engine ({fw_err})...")
     import whisper
     import torch
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"[*] AudioAgent (Whisper): Running on device: {{device}}")
+    print(f"[*] AudioAgent (Whisper): Running on device: {device}")
     model = whisper.load_model(model_size, device=device)
     use_fp16 = bool(torch.cuda.is_available())
     res = model.transcribe(
         audio_path,
         language=whisper_lang,
         fp16=use_fp16,
-        initial_prompt=f"This is a dialogue transcript for the movie {{movie_name}}."
+        initial_prompt=f"This is a dialogue transcript for the movie {movie_name}."
     )
     detected_lang = whisper_lang or res.get("language", "en")
     for seg in res.get("segments", []):
-        results.append({{"start": round(float(seg["start"]), 2), "end": round(float(seg["end"]), 2), "text": seg["text"].strip()}})
+        results.append({"start": round(float(seg["start"]), 2), "end": round(float(seg["end"]), 2), "text": seg["text"].strip()})
 
 with open(output_path, "w", encoding="utf-8") as f:
-    json.dump({{"language": detected_lang, "segments": results}}, f, ensure_ascii=False)
-print(f"[Whisper] Transcribed {{len(results)}} segments in language: {{detected_lang}}")
+    json.dump({"language": detected_lang, "segments": results}, f, ensure_ascii=False)
+print(f"[Whisper] Transcribed {len(results)} segments in language: {detected_lang}")
 """
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False, encoding="utf-8") as tmp:
             tmp.write(helper_script)

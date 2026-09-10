@@ -1,4 +1,5 @@
 import os
+import re
 import shutil
 import subprocess
 from brain.memory import MovieState
@@ -20,7 +21,7 @@ class ThumbnailAgent:
         """Extracts a frame from the movie and applies background gradient/blur. Returns temp_base path."""
         print(f"[*] ThumbnailAgent: Extracting base frame for '{state.movie_name}'...")
         try:
-            from PIL import Image, ImageDraw, ImageFont, ImageFilter
+            from PIL import Image, ImageDraw, ImageFilter
         except ImportError:
             print("[WARN] ThumbnailAgent: Pillow (PIL) is not installed. Skipping thumbnail generation.")
             return None
@@ -188,7 +189,7 @@ class ThumbnailAgent:
 
     def overlay_text(self, state: MovieState, temp_base: str) -> MovieState:
         """Applies ASS text over temp_base.jpg and saves to thumbnail.jpg."""
-        print(f"[*] ThumbnailAgent: Overlaying SEO text on base frame...")
+        print("[*] ThumbnailAgent: Overlaying SEO text on base frame...")
         
         output_folder = os.path.join(self.output_dir, state.project_dir)
         thumbnail_path = os.path.join(output_folder, "thumbnail.jpg")
@@ -214,7 +215,6 @@ class ThumbnailAgent:
                 full_title = state.seo_metadata["title"]
                 
                 # Split by common separators to find the Burmese part
-                import re
                 parts = re.split(r'[|:;\-]', full_title)
                 
                 # Find the part with the most Burmese characters
@@ -237,9 +237,8 @@ class ThumbnailAgent:
             
             if not title:
                 # Fallback
-                import re
-                raw_title = state.movie_name.replace("_", " ").title()
-                match = re.search(r'(.+?)[_\s-]*((?:Season\s*\d+|S\d+E\d+|Episode\s*\d+|Ep\s*\d+|Ep\s*\d+[A-Za-z]?|Part\s*\d+)(?:.*)?)$', state.movie_name, flags=re.IGNORECASE)
+                raw_title = (state.movie_name or "Movie").replace("_", " ").title()
+                match = re.search(r'(.+?)[_\s-]*((?:Season\s*\d+|S\d+E\d+|Episode\s*\d+|Ep\s*\d+|Ep\s*\d+[A-Za-z]?|Part\s*\d+)(?:.*)?)$', state.movie_name or "", flags=re.IGNORECASE)
                 if match:
                     base_name = match.group(1).replace("_", " ").title().strip()
                     ep_name = match.group(2).replace("_", " ").title().strip()
@@ -250,13 +249,17 @@ class ThumbnailAgent:
                 print(f"[*] ThumbnailAgent: Fallback thumbnail text: '{title}'")
 
         # 4. Burn Text using FFmpeg and libass (handles Burmese complex scripts perfectly on Windows)
-        import subprocess
-        import re
+        import hashlib
         
-        ass_path = os.path.join(output_folder, 'thumb.ass')
+        # Write ASS to temp/ with safe ASCII filename — prevents Windows libass fopen failure on Unicode CWD
+        temp_dir = os.path.abspath("temp")
+        os.makedirs(temp_dir, exist_ok=True)
+        safe_id = hashlib.md5((state.movie_name or "thumb").encode("utf-8", errors="replace")).hexdigest()[:8]
+        ass_basename = f"thumb_{safe_id}.ass"
+        ass_path = os.path.join(temp_dir, ass_basename)
         
         # Add Part/Episode number if present in movie_name
-        part_match = re.search(r'(?:Part|Ep|Episode|Season\s*\d+\s*Ep|S\d+E|အပိုင်း|ပိုင်း)[_\s\-]*(\d+)', state.movie_name, flags=re.IGNORECASE)
+        part_match = re.search(r'(?:Part|Ep|Episode|Season\s*\d+\s*Ep|S\d+E|အပိုင်း|ပိုင်း)[_\s\-]*(\d+)', state.movie_name or "", flags=re.IGNORECASE)
         if part_match:
             part_num = part_match.group(1)
             burmese_digits = str.maketrans('0123456789', '၀၁၂၃၄၅၆၇၈၉')
@@ -315,7 +318,6 @@ Dialogue: 0,0:00:00.00,0:00:01.00,Default,,60,60,55,,{ass_text}
             with open(ass_path, 'w', encoding='utf-8') as f:
                 f.write(ass_content)
                 
-            ass_basename = "thumb.ass"
             temp_base_abs = os.path.abspath(temp_base)
             thumbnail_path_abs = os.path.abspath(thumbnail_path)
             
@@ -336,19 +338,22 @@ Dialogue: 0,0:00:00.00,0:00:01.00,Default,,60,60,55,,{ass_text}
                 thumbnail_path_abs
             ]
             proc = subprocess.run(
-                ffmpeg_cmd, cwd=os.path.abspath(output_folder),
+                ffmpeg_cmd, cwd=temp_dir,
                 capture_output=True, text=True,
                 encoding="utf-8", errors="replace"
             )
             if proc.returncode == 0 and os.path.exists(thumbnail_path):
+                state.thumbnail_path = thumbnail_path
                 print(f"[OK] ThumbnailAgent: Thumbnail (with perfect Burmese font rendering) successfully saved to {thumbnail_path}")
             else:
                 print(f"[WARN] ThumbnailAgent: FFmpeg failed to render thumbnail text: {proc.stderr}")
                 # Fallback to the temp base image if ffmpeg fails
                 shutil.copy(temp_base, thumbnail_path)
+                state.thumbnail_path = thumbnail_path
         except Exception as e:
             print(f"[WARN] ThumbnailAgent: Exception during ffmpeg text burn: {e}")
             shutil.copy(temp_base, thumbnail_path)
+            state.thumbnail_path = thumbnail_path
         finally:
             if os.path.exists(temp_base):
                 try: os.remove(temp_base)
