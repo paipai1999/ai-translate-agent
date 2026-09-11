@@ -59,8 +59,9 @@ CRITICAL STORYTELLER RULES:
    - ❌ FORBIDDEN: Exceeding "max_chars", which causes TTS audio rush, chipmunk speedup, or desynchronization.
 
 5. 🔤 PHONETIC TRANSLITERATION & CLEAN SCRIPT (အမည်များနှင့် အသုံးအနှုန်းများ):
-   - Transliterate all character names, places, weapons, and terms into natural Burmese phonetics:
-     Riley → ရိုင်လီ, Mike → မိုက်ခ်, Andy → အန်ဒီ, Demis → ဒီမစ်, Borneo → ဘော်နီယို, Zombie → ဇွန်ဘီ
+   - Transliterate all character names, places, weapons, and terms into natural Burmese phonetics matching the actual characters in the movie:
+     (e.g. Paul → ပေါလ်, Jessica → ဂျက်ဆီကာ, Leto → လီတို, Stilgar → စတီးလ်ဂါ, Vladimir → ဗလာဒီမာ)
+   - ❌ STRICT FORBIDDEN: NEVER invent or swap character names (e.g. do NOT use random placeholder names). Always use the exact character names present in the dialogue/story.
    - Transliterate English acronyms:
      CCTV → စီစီတီဗီ, VIP → ဗွီအိုင်ပီ, FBI → အက်ဖ်ဘီအိုင်, CIA → စီအိုင်အေ, CEO → စီအီးအို, AI → အေအိုင်, OK → အိုကေ
    - Output 100% clean Myanmar Unicode. NEVER leak foreign non-Burmese characters (like Georgian კ, Cyrillic, or raw Latin text).
