@@ -68,7 +68,7 @@ def _cleanup_old_jobs():
     with jobs_lock:
         to_delete = [
             jid for jid, job in list(jobs.items())
-            if job.get('status') in ('done', 'error')
+            if job.get('status') in ('done', 'error', 'cancelled')
             and now - job.get('created_at', now) > JOB_RETENTION_SECONDS
         ]
         for jid in to_delete:
@@ -905,7 +905,7 @@ async def stream_job_logs(job_id: str, request: Request):
                         break
                     job_status = current_job.get('status')
 
-                if job_status in ('done', 'error'):
+                if job_status in ('done', 'error', 'cancelled'):
                     yield {
                         "event": "done",
                         "data": json.dumps({"status": job_status, "error": current_job.get("error")})
@@ -1210,11 +1210,14 @@ def get_key_status():
             key_str = str(key).strip()
             if not key_str:
                 return "EMPTY", 0
-            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key_str}"
+            url = "https://generativelanguage.googleapis.com/v1beta/models"
             try:
                 req = urllib.request.Request(
                     url,
-                    headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Recap/2.2"},
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Recap/2.2",
+                        "x-goog-api-key": key_str
+                    },
                     method="GET"
                 )
                 with urllib.request.urlopen(req, timeout=8.0) as resp:
@@ -1318,7 +1321,12 @@ async def delete_item(folder_type: str, item_name: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.delete("/api/delete_all/{folder_type}")
-async def delete_all(folder_type: str):
+async def delete_all(folder_type: str, confirm: bool = False):
+    with jobs_lock:
+        if _has_running_job():
+            raise HTTPException(status_code=409, detail="Cannot delete files while a pipeline job is running.")
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Mass deletion requires 'confirm=true' parameter.")
     if folder_type not in {'movies', 'outputs', 'temp', 'all'}:
         raise HTTPException(status_code=400, detail="Invalid target")
     
@@ -1380,7 +1388,8 @@ def list_raw_keys():
             keys = []
         if not keys and os.getenv("GEMINI_API_KEY"):
             keys = [k.strip() for k in os.getenv("GEMINI_API_KEY", "").split(",") if k.strip()]
-        return {'keys': keys, 'count': len(keys)}
+        masked_keys = [k[:6] + "..." + k[-4:] if len(k) > 10 else k for k in keys]
+        return {'keys': masked_keys, 'count': len(masked_keys)}
     except Exception as e:
         print(f"[ERROR] /api/keys/list failed: {e}")
         return {'keys': [], 'count': 0, 'error': str(e)}

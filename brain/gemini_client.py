@@ -281,7 +281,7 @@ def call_gemini_vision(
                     "contents": [{
                         "role": "user",
                         "parts": [
-                            {"inline_data": {"mime_type": img_mime, "data": img_b64}},
+                            {"inlineData": {"mimeType": img_mime, "data": img_b64}},
                             {"text": user_text},
                         ],
                     }],
@@ -486,7 +486,7 @@ def ask_gemini_with_video(file_name: str, system_prompt: str, user_text: str, ke
             "contents": [{
                 "role": "user",
                 "parts": [
-                    {"file_data": {"mime_type": "video/mp4", "file_uri": f"https://generativelanguage.googleapis.com/v1beta/{file_name}"}},
+                    {"fileData": {"mimeType": "video/mp4", "fileUri": f"https://generativelanguage.googleapis.com/v1beta/{file_name}"}},
                     {"text": user_text},
                 ],
             }],

@@ -2339,7 +2339,7 @@
 
         if (!confirm(`🚨 သတိပေးချက်: ${msg}`)) return;
         try {
-            const res = await fetch(`/api/delete_all/${type}`, { method: 'DELETE' });
+            const res = await fetch(`/api/delete_all/${type}?confirm=true`, { method: 'DELETE' });
             const data = await res.json();
             if (data.error) throw new Error(data.error);
             showAlert(`✅ အောင်မြင်စွာ ဖျက်သိမ်းပြီးပါပြီ! (ဖျက်ခဲ့သော အရေအတွက်: ${data.deleted_items})`);

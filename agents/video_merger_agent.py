@@ -840,6 +840,8 @@ class VideoMergerAgent:
                             break
                         elif curr_blur and attempt_idx == 0 and len(blur_attempts) > 1:
                             print("[WARN] VideoMerger: Blur filter failed. Retrying Pure FFmpeg without blur filter to prevent slow MoviePy fallback...")
+                except InterruptedError:
+                    raise
                 except Exception as spe:
                     print(f"[WARN] Single-pass execution exception: {spe}")
 
@@ -1666,97 +1668,6 @@ class VideoMergerAgent:
                 return os.path.abspath(path)
         return None
 
-    def _burn_myanmar_subtitles(
-        self,
-        video_path: str,
-        timings: list,
-        output_dir: str,
-        font_name: str     = "Myanmar Text",
-        font_size: int     = 40,
-        bold: bool         = True,
-        border_style: int  = 3,
-        outline_width: int = 3,
-        margin_bottom: int = 50,
-        max_chars: int     = 28,
-        preset: str        = None,
-    ):
-        """
-        Burns Myanmar subtitles into video using FFmpeg 'ass' filter.
-        Uses ASS format (all styling embedded) to avoid Windows path/space escaping issues.
-        ASS file written to temp/ with a simple no-space filename.
-        """
-        import sys
-        if sys.platform != "win32" and font_name == "Myanmar Text":
-            font_name = "Padauk"
-        import subprocess, shutil
-
-        # Write ASS to temp/ with safe unique filename — avoids FFmpeg filter parsing issues and job collisions
-        temp_dir = os.path.abspath("temp")
-        os.makedirs(temp_dir, exist_ok=True)
-        safe_id = _get_safe_ascii_id(video_path)
-        ass_path = os.path.join(temp_dir, f"myanmar_subs_{safe_id}.ass")
-
-        font_found = self._find_myanmar_font()
-        if font_found:
-            print(f"[*] MyanmarSubs: Using font → {font_found}")
-
-        self._write_ass(timings, ass_path, font_name, font_size, bold, border_style, outline_width, margin_bottom, max_chars, preset=preset)
-
-        if not os.path.exists(ass_path):
-            print("[WARN] MyanmarSubs: ASS file was not created. Skipping subtitle burn.")
-            return
-
-        # -----------------------------------------------------------------------------------
-        # BUG FIX: FFmpeg's filter graph escaping is notoriously brittle on Windows.
-        # FIX: We run ffmpeg with `cwd=temp_dir` and pass the basename to bypass path escaping.
-        # Hardware acceleration: Uses QSV/NVENC with automatic CPU fallback.
-        # -----------------------------------------------------------------------------------
-        ass_basename = os.path.basename(ass_path)
-        abs_video_path = os.path.abspath(video_path)
-        name, ext = os.path.splitext(abs_video_path)
-        temp_output = f"{name}_subtitled.mp4"
-
-        ffmpeg_bin = _get_ffmpeg_bin()
-        enc_info = detect_hardware_encoder()
-        codec = enc_info.get("codec", "libx264")
-        preset = enc_info.get("preset", "faster")
-
-        cmd = [
-            ffmpeg_bin, "-y",
-            "-i", abs_video_path,
-            "-vf", f"ass={ass_basename}",
-            "-c:v", codec,
-            "-preset", preset,
-            "-pix_fmt", "yuv420p",
-            "-c:a", "copy",
-            "-movflags", "+faststart",
-            temp_output
-        ]
-
-        print(f"[*] MyanmarSubs: Burning ASS subtitles ({font_name}, {font_size}px) using {enc_info['label']} [{codec}]...")
-        result = subprocess.run(cmd, cwd=temp_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
-
-        if result.returncode != 0 and codec != "libx264":
-            print(f"[WARN] MyanmarSubs: Hardware encoder '{codec}' failed. Retrying with CPU libx264...")
-            fallback_cmd = list(cmd)
-            if codec in fallback_cmd:
-                fallback_cmd[fallback_cmd.index(codec)] = "libx264"
-            if preset in fallback_cmd:
-                fallback_cmd[fallback_cmd.index(preset)] = "superfast"
-            result = subprocess.run(fallback_cmd, cwd=temp_dir, capture_output=True, text=True, encoding="utf-8", errors="replace")
-
-        if result.returncode == 0 and os.path.exists(temp_output) and os.path.getsize(temp_output) > 100_000:
-            shutil.move(temp_output, video_path)
-            # Also copy ASS to output dir for reference
-            shutil.copy2(ass_path, os.path.join(output_dir, "myanmar_subs.ass"))
-            print(f"[OK] MyanmarSubs: Subtitle burn complete! ({font_size}px '{font_name}')")
-        else:
-            if os.path.exists(temp_output):
-                os.remove(temp_output)
-            err_tail = (result.stderr or "")[-600:]
-            print(f"[WARN] MyanmarSubs: Subtitle burn failed (code={result.returncode}).")
-            print(f"[WARN] FFmpeg stderr: {err_tail}")
-
     def _export_standalone_srt(self, timings: list, output_dir: str):
         """Exports standalone .srt and .ass subtitle files for YouTube caption upload / VLC player."""
         if not timings:
@@ -2447,6 +2358,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 else:
                     print(f"[ERROR] ReelsExporter failed completely: {(res2.stderr or '')[-400:]}")
                     return None
+        except InterruptedError:
+            raise
         except Exception as e:
             print(f"[ERROR] ReelsExporter encountered error: {e}")
             return None

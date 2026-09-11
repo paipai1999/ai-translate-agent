@@ -299,12 +299,13 @@ class WriterAgent:
                     emotion = str(item.get("emotion", "normal")).strip()
                     gender = str(item.get("gender", "male")).strip().lower()
                     character = str(item.get("character", "Narrator")).strip()
-                    try:
-                        from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
-                        narration = replace_numbers_with_burmese(narration)
-                        narration = transliterate_english_acronyms(narration)
-                    except Exception:
-                        pass
+                    if getattr(self, "language", "burmese").lower() == "burmese":
+                        try:
+                            from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
+                            narration = replace_numbers_with_burmese(narration)
+                            narration = transliterate_english_acronyms(narration)
+                        except Exception:
+                            pass
                 else:
                     # Individual line fallback if dropped by Gemini
                     narration = seg["text"]
@@ -324,12 +325,13 @@ class WriterAgent:
                             )
                             clean_line = line_res.strip().strip('"').strip("'").strip()
                             if clean_line and not any(bad in clean_line.lower() for bad in ["json", "```", "here is", "here's"]):
-                                try:
-                                    from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
-                                    clean_line = replace_numbers_with_burmese(clean_line)
-                                    clean_line = transliterate_english_acronyms(clean_line)
-                                except Exception:
-                                    pass
+                                if getattr(self, "language", "burmese").lower() == "burmese":
+                                    try:
+                                        from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
+                                        clean_line = replace_numbers_with_burmese(clean_line)
+                                        clean_line = transliterate_english_acronyms(clean_line)
+                                    except Exception:
+                                        pass
                                 narration = clean_line
                         except Exception:
                             pass
@@ -452,12 +454,13 @@ class WriterAgent:
                         pass
                 txt = txt.strip().strip('"').strip("'").strip()
                 if txt and len(txt) > 4:
-                    try:
-                        from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
-                        txt = replace_numbers_with_burmese(txt)
-                        txt = transliterate_english_acronyms(txt)
-                    except Exception:
-                        pass
+                    if getattr(self, "language", "burmese").lower() == "burmese":
+                        try:
+                            from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
+                            txt = replace_numbers_with_burmese(txt)
+                            txt = transliterate_english_acronyms(txt)
+                        except Exception:
+                            pass
                     bridge_dur = min(cand["gap_dur"] - 2.0, 5.5)
                     b_start = round(cand["gap_start"], 2)
                     b_end = round(b_start + max(bridge_dur, 3.0), 2)

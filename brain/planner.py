@@ -83,14 +83,25 @@ class BatchProcessor:
             print(f"\n[URL] Batch Mode: Downloading {len(url_list)} video(s) from URLs...")
             downloader = DownloaderAgent(output_dir=self.movies_folder)
             for idx, url in enumerate(url_list, 1):
+                if (self.cancel_event and getattr(self.cancel_event, "is_set", lambda: False)()) or os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+                    print(f"\n🛑 [STOP] Batch processing cancelled by user during download at item {idx}/{len(url_list)}.")
+                    break
                 print(f"\n[{idx}/{len(url_list)}] Downloading: {url}")
                 try:
                     downloaded_path = downloader.download_video(url)
                     downloaded_paths.append(downloaded_path)
                     print(f"[OK] Downloaded: {downloaded_path}")
+                except (InterruptedError, KeyboardInterrupt):
+                    print(f"\n🛑 [STOP] Download cancelled: {url}")
+                    self.results.append({"url": url, "status": "CANCELLED", "error": "Cancelled by user"})
+                    break
                 except Exception as e:
-                    print(f"[ERROR] Download failed for {url}: {e}")
-                    self.results.append({"url": url, "status": "DOWNLOAD_FAILED", "error": str(e)})
+                    is_cancel = os.environ.get("CURRENT_JOB_CANCELLED") == "1" or (self.cancel_event and getattr(self.cancel_event, "is_set", lambda: False)())
+                    status = "CANCELLED" if is_cancel else "DOWNLOAD_FAILED"
+                    print(f"[ERROR] Download {status} for {url}: {e}")
+                    self.results.append({"url": url, "status": status, "error": str(e)})
+                    if is_cancel:
+                        break
 
         # Step 2: Collect all local movies
         if local_paths is not None:
@@ -145,9 +156,17 @@ class BatchProcessor:
                 result_status = "SUCCESS" if pipeline_status == "COMPLETED" else pipeline_status
                 self.results.append({"movie": movie_name, "status": result_status, "warnings": getattr(master.state, "warnings", [])})
                 print(f"[OK] [{idx}/{total}] Completed: {movie_name}")
+            except (InterruptedError, KeyboardInterrupt):
+                print(f"\n🛑 [STOP] [{idx}/{total}] CANCELLED by user: {movie_name}")
+                self.results.append({"movie": movie_name, "status": "CANCELLED", "error": "Cancelled by user"})
+                break
             except Exception as e:
-                print(f"[ERROR] [{idx}/{total}] FAILED: {movie_name} - Error: {e}")
-                self.results.append({"movie": movie_name, "status": "FAILED", "error": str(e)})
+                is_cancel = os.environ.get("CURRENT_JOB_CANCELLED") == "1" or (self.cancel_event and getattr(self.cancel_event, "is_set", lambda: False)())
+                status = "CANCELLED" if is_cancel else "FAILED"
+                print(f"[ERROR] [{idx}/{total}] {status}: {movie_name} - Error: {e}")
+                self.results.append({"movie": movie_name, "status": status, "error": str(e)})
+                if is_cancel:
+                    break
 
         # Step 4: Print batch summary
         self._print_summary()
@@ -157,7 +176,8 @@ class BatchProcessor:
         success = [r for r in self.results if r.get("status") in {"SUCCESS", "COMPLETED"}]
         warnings = [r for r in self.results if r.get("status") == "COMPLETED_WITH_WARNINGS"]
         pending = [r for r in self.results if r.get("status") == "QA_PENDING"]
-        failed  = [r for r in self.results if r.get("status") in {"FAILED", "CANCELLED"}]
+        cancelled = [r for r in self.results if r.get("status") == "CANCELLED"]
+        failed  = [r for r in self.results if r.get("status") in {"FAILED", "DOWNLOAD_FAILED"}]
         skipped = [r for r in self.results if r.get("status") == "SKIPPED"]
 
         print(f"\n{'='*55}")
@@ -167,12 +187,13 @@ class BatchProcessor:
         print(f"  [WARN] Warnings  : {len(warnings)}")
         print(f"  [QA] Pending    : {len(pending)}")
         print(f"  [SKIP] Skipped   : {len(skipped)}")
+        print(f"  [STOP] Cancelled : {len(cancelled)}")
         print(f"  [ERROR] Failed    : {len(failed)}")
-        if failed:
-            print("\n  Failed jobs:")
-            for r in failed:
+        if failed or cancelled:
+            print("\n  Unfinished / Failed jobs:")
+            for r in (*cancelled, *failed):
                 name = r.get('movie') or r.get('url') or 'Unknown'
-                print(f"    - {name}: {r.get('error','Unknown error')}")
+                print(f"    - [{r.get('status')}] {name}: {r.get('error','Unknown error')}")
         print(f"{'='*55}")
 
         # Save summary to JSON

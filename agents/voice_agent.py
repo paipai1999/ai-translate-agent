@@ -260,6 +260,30 @@ class VoiceAgent:
         else:
             return self._generate_edge_voiceover(state, audio_out_dir)
 
+    def _run_async(self, coro):
+        """Safely executes an async coroutine, handling nested event loops in Jupyter / FastAPI."""
+        try:
+            return asyncio.run(coro)
+        except RuntimeError as _loop_err:
+            if "already running" in str(_loop_err).lower() or "event loop" in str(_loop_err).lower():
+                try:
+                    import nest_asyncio
+                    nest_asyncio.apply()
+                    return asyncio.get_event_loop().run_until_complete(coro)
+                except Exception:
+                    import concurrent.futures as _cf
+                    def _run_in_new_loop():
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            return loop.run_until_complete(coro)
+                        finally:
+                            loop.close()
+                    with _cf.ThreadPoolExecutor(max_workers=1) as _exe:
+                        return _exe.submit(_run_in_new_loop).result()
+            else:
+                raise
+
     def _generate_f5_voiceover(self, state: MovieState, audio_out_dir: str) -> MovieState:
         """Generates voiceover using F5-TTS Zero-Shot Voice Cloning."""
         print(f"[*] VoiceAgent: Starting F5-TTS Voice Cloning (Model: {self.f5_cfg.get('model_type', 'F5-TTS')})...")
@@ -275,38 +299,28 @@ class VoiceAgent:
         audio_files = []
         for idx, item in enumerate(state.generated_script):
             narration = item.get("narration", "").strip()
-            scene_id = item.get("scene_id", idx + 1)
-            speaker = str(item.get("speaker", "Narrator")).strip().lower()
-            start_sec = float(item.get("start_sec") or 0.0)
-            end_sec = float(item.get("end_sec") or (start_sec + 3.0))
-            target_dur = max(0.5, end_sec - start_sec)
-
             if not narration:
                 continue
 
-            clean_narration = self._prepare_tts_text(narration)
-            out_file = os.path.join(audio_out_dir, f"scene_{(idx+1):04d}.mp3")
+            scene_id = item.get("scene_id", idx + 1)
+            speaker = item.get("character", "Narrator")
+            out_file = os.path.join(audio_out_dir, f"scene_{scene_id:03d}.mp3")
 
-            # Granular Checkpoint Resume: If clip already synthesized and valid, skip
+            target_dur = None
+            if item.get("end_sec") and item.get("start_sec"):
+                target_dur = max(0.5, float(item["end_sec"]) - float(item["start_sec"]))
+
+            # Granular Checkpoint Resume: Skip synthesis if this scene's mp3 already exists and is non-empty
             if os.path.exists(out_file) and os.path.getsize(out_file) > 1000:
                 print(f"    ⏩ [Resume]: Block {idx+1} ({os.path.basename(out_file)}) already synthesized ({os.path.getsize(out_file)} bytes), skipping F5-TTS.")
                 audio_files.append(out_file)
                 continue
 
-            # Determine best reference audio for this speaker
-            ref_info = char_clips.get(speaker)
-            if not ref_info and "narrator" in char_clips:
-                ref_info = char_clips.get("narrator")
+            clean_narration = self._prepare_tts_text(narration)
 
-            ref_audio = ref_info["audio_path"] if ref_info else default_ref
-            ref_text = ref_info["text"] if ref_info else default_ref_text
-
-            # If no ref audio exists, fallback to first available or Edge TTS
-            if not os.path.exists(ref_audio):
-                if char_clips:
-                    first_ref = list(char_clips.values())[0]
-                    ref_audio = first_ref["audio_path"]
-                    ref_text = first_ref["text"]
+            # Determine reference audio for this speaker
+            ref_audio = char_clips.get(speaker, {}).get("audio_path", default_ref)
+            ref_text = char_clips.get(speaker, {}).get("text", default_ref_text)
 
             success = False
             if os.path.exists(ref_audio):
@@ -327,7 +341,7 @@ class VoiceAgent:
                 voice_override = "my-MM-NilarNeural" if (is_myanmar and gender == "female") else self.voice
                 rate = self.rate_mm if str(voice_override).startswith("my-") else self.rate_en
                 emotion = item.get("emotion", "normal").lower()
-                asyncio.run(self._speak_with_retry(clean_narration, out_file, scene_id, emotion, rate=rate, target_dur=target_dur, voice_override=voice_override))
+                self._run_async(self._speak_with_retry(clean_narration, out_file, scene_id, emotion, rate=rate, target_dur=target_dur, voice_override=voice_override))
 
             if os.path.exists(out_file):
                 audio_files.append(out_file)
@@ -409,33 +423,7 @@ class VoiceAgent:
             output_files.append(out_file)
 
         if tasks:
-            # FIX-W1: In Kaggle/Colab Jupyter, asyncio.run() raises RuntimeError("This event loop
-            # is already running") because Jupyter runs its own persistent event loop.
-            # Use nest_asyncio.apply() if available, otherwise create a new thread with its own loop.
-            try:
-                results = asyncio.run(_run_all(tasks))
-            except RuntimeError as _loop_err:
-                if "event loop is already running" in str(_loop_err).lower():
-                    try:
-                        import nest_asyncio
-                        nest_asyncio.apply()
-                        results = asyncio.get_event_loop().run_until_complete(_run_all(tasks))
-                        print("[*] VoiceAgent: Used nest_asyncio for Jupyter/Colab compatibility.")
-                    except ImportError:
-                        # nest_asyncio not installed → run in a separate thread with its own loop
-                        import concurrent.futures as _cf
-                        def _run_in_new_loop():
-                            loop = asyncio.new_event_loop()
-                            asyncio.set_event_loop(loop)
-                            try:
-                                return loop.run_until_complete(_run_all(tasks))
-                            finally:
-                                loop.close()
-                        with _cf.ThreadPoolExecutor(max_workers=1) as _exe:
-                            results = _exe.submit(_run_in_new_loop).result()
-                        print("[*] VoiceAgent: Used ThreadPoolExecutor for Jupyter/Colab compatibility.")
-                else:
-                    raise
+            results = self._run_async(_run_all(tasks))
             for i, result in enumerate(results):
                 if isinstance(result, Exception):
                     print(f"[WARN] VoiceAgent: Block {i} TTS failed: {result}")
@@ -580,15 +568,20 @@ class VoiceAgent:
 
     def _prepare_tts_text(self, text: str) -> str:
         """Normalize script text so Edge TTS / F5-TTS reads narration naturally."""
-        try:
-            from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
-            text = replace_numbers_with_burmese(text)
-            text = transliterate_english_acronyms(text)
-        except Exception as e:
-            print(f"[WARN] VoiceAgent: Failed to normalize text with burmese_utils: {e}")
+        is_burmese = str(self.voice).startswith("my-") or getattr(self, "language", "") == "burmese"
+        if is_burmese:
+            try:
+                from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
+                text = replace_numbers_with_burmese(text)
+                text = transliterate_english_acronyms(text)
+            except Exception as e:
+                print(f"[WARN] VoiceAgent: Failed to normalize text with burmese_utils: {e}")
 
         text = re.sub(r'[\*#_~`]', '', str(text))
-        text = text.replace("…", "။")
+        if is_burmese:
+            text = text.replace("…", "။")
+        else:
+            text = text.replace("…", "...")
         
         # English letter handling for Myanmar TTS
         if str(self.voice).startswith("my-"):
@@ -609,11 +602,17 @@ class VoiceAgent:
         if not text:
             return ""
 
-        text = re.sub(r'\s*([,;:])\s*', r'၊ ', text)
-        text = re.sub(r'\s*([!?])\s*', r'။ ', text)
-        text = re.sub(r'\s*([.])\s*', r'။ ', text)
+        if is_burmese:
+            text = re.sub(r'\s*([,;:])\s*', r'၊ ', text)
+            text = re.sub(r'\s*([!?])\s*', r'။ ', text)
+            text = re.sub(r'(?<!\d)\.(?!\d)', '။ ', text)
+            text = re.sub(r'\s*\.\s*$', r'။', text)
+            parts = [p.strip() for p in re.split(r'(?<=[။!?])\s+', text) if self._has_meaningful_text(p)]
+        else:
+            text = re.sub(r'\s*([,;:])\s*', r', ', text)
+            text = re.sub(r'\s*([!?])\s*', r'\1 ', text)
+            parts = [p.strip() for p in re.split(r'(?<=[.!?])\s+', text) if p.strip()]
 
-        parts = [p.strip() for p in re.split(r'(?<=[။!?])\s+', text) if self._has_meaningful_text(p)]
         if not parts:
             parts = [text]
 
@@ -623,13 +622,15 @@ class VoiceAgent:
                 normalized_parts.append(part)
                 continue
 
-            clauses = [c.strip() for c in re.split(r'\s*([၊])\s*', part) if c and c.strip()]
+            split_pattern = r'\s*([၊])\s*' if is_burmese else r'\s*([,])\s*'
+            clauses = [c.strip() for c in re.split(split_pattern, part) if c and c.strip()]
             if len(clauses) > 1:
                 rebuilt = []
                 current = ""
+                comma_char = "၊" if is_burmese else ","
                 for clause in clauses:
-                    if clause == "၊":
-                        current = current.rstrip() + "၊"
+                    if clause == comma_char:
+                        current = current.rstrip() + comma_char
                         continue
                     candidate = f"{current} {clause}".strip() if current else clause
                     if len(candidate) > 80 and current:
@@ -644,8 +645,12 @@ class VoiceAgent:
                 normalized_parts.extend(self._chunk_text(part, 70))
 
         text = "\n".join(normalized_parts)
-        if text and text[-1] not in "။!?":
-            text += "။"
+        if is_burmese:
+            if text and text[-1] not in "။!?":
+                text += "။"
+        else:
+            if text and text[-1] not in ".!?":
+                text += "."
         return text
 
     def _chunk_text(self, text: str, chunk_size: int) -> list[str]:
