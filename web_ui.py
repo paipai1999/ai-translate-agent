@@ -1630,6 +1630,15 @@ async def clear_cache():
                 except Exception:
                     pass
 
+    # Clean any MoviePy intermediate temp files in root/cwd
+    for f in os.listdir("."):
+        if "TEMP_MPY" in f and (f.endswith(".mp4") or f.endswith(".wav")):
+            try:
+                os.remove(f)
+                cleared += 1
+            except Exception:
+                pass
+
     return {"success": True, "cleared_items": cleared}
 
 @app.api_route("/api/config", methods=["GET", "POST"])

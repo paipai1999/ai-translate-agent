@@ -268,7 +268,9 @@ class QAAgent:
         recap_working_key = None
         preview_path_to_clean = None
 
-        if os.path.exists(recap_video_path):
+        skip_video_qa = qa_cfg.get("skip_video_qa", False) or not qa_cfg.get("review_output", True)
+
+        if os.path.exists(recap_video_path) and not skip_video_qa:
             file_size_mb = os.path.getsize(recap_video_path) / (1024 * 1024)
             upload_target_path = recap_video_path
             # If video is larger than 50MB, create lightweight 360p preview for Gemini to prevent SSL EOF/timeouts
@@ -278,14 +280,20 @@ class QAAgent:
                 if preview_f and os.path.exists(preview_f):
                     upload_target_path = preview_f
                     preview_path_to_clean = preview_f
+                else:
+                    print(f"[!] QAAgent: Preview creation failed for heavy video ({file_size_mb:.1f} MB). Skipping heavy video upload to protect pipeline.")
+                    upload_target_path = None
 
-            try:
-                target_mb = os.path.getsize(upload_target_path) / (1024 * 1024)
-                print(f"[*] QAAgent: Uploading video ({target_mb:.1f} MB) to Gemini...")
-                recap_file_name, recap_working_key = upload_video_file(upload_target_path, api_key)
-                print(f"[OK] QAAgent: Video uploaded -> {recap_file_name}")
-            except Exception as e:
-                print(f"[!] QAAgent: Video upload failed: {e}. Gracefully falling back to script QA.")
+            if upload_target_path:
+                try:
+                    target_mb = os.path.getsize(upload_target_path) / (1024 * 1024)
+                    print(f"[*] QAAgent: Uploading video ({target_mb:.1f} MB) to Gemini...")
+                    recap_file_name, recap_working_key = upload_video_file(upload_target_path, api_key)
+                    print(f"[OK] QAAgent: Video uploaded -> {recap_file_name}")
+                except Exception as e:
+                    print(f"[!] QAAgent: Video upload failed: {e}. Gracefully falling back to script QA.")
+        elif skip_video_qa:
+            print("[*] QAAgent: Video upload review skipped by configuration. Proceeding to language and script quality verification.")
 
         try:
             if recap_file_name:

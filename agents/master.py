@@ -834,7 +834,14 @@ class MasterAgent:
                 # Demucs vocals.wav / extracted audio in temp/<project>/audio/ were never removed)
                 for root, dirs, files in os.walk(temp_dir, topdown=False):
                     for item in files:
-                        if item.endswith((".wav", ".mp3", ".tmp", ".part", ".ass")) or item.startswith("temp_"):
+                        if (
+                            item.endswith((".wav", ".mp3", ".tmp", ".part", ".ass"))
+                            or item.startswith(("temp_", "tmp_"))
+                            or "_clean.mp4" in item
+                            or "_qa_preview" in item
+                            or "_preview" in item
+                            or "TEMP_MPY" in item
+                        ):
                             item_path = os.path.join(root, item)
                             try:
                                 size = os.path.getsize(item_path)
@@ -849,6 +856,16 @@ class MasterAgent:
                             os.rmdir(root)
                     except Exception:
                         pass
+                # Also clean up any MoviePy intermediate temp files left in root/cwd
+                for f in os.listdir("."):
+                    if "TEMP_MPY" in f and (f.endswith(".mp4") or f.endswith(".wav")):
+                        try:
+                            size = os.path.getsize(f)
+                            os.remove(f)
+                            cleaned_count += 1
+                            cleaned_bytes += size
+                        except Exception:
+                            pass
                 if cleaned_count > 0:
                     mb = cleaned_bytes / (1024 * 1024)
                     print(f"[*] Disk Optimizer: Cleaned up {cleaned_count} temp files ({mb:.1f} MB freed).")

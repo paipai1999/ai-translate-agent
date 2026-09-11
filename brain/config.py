@@ -5,6 +5,7 @@ import os
 DEFAULT_CONFIG = {
     "pipeline": {
         "language": "burmese",            # burmese (မြန်မာ - Thiha Voice) | english (အင်္ဂလိပ် - Guy Voice)
+        "script_engine": "recap",         # "recap" (Natural Storyteller) | "translate" (Direct 1:1)
         "video_format": "both",            # "both" (16:9 + 9:16) | "16:9" (YouTube Landscape) | "9:16" (Facebook Reels / TikTok)
         "whisper_model": "base",          # small | base | medium | large (base matches the shipped config)
         "scene_threshold": 30.0,           # PySceneDetect sensitivity (lower = more scenes)
@@ -22,7 +23,6 @@ DEFAULT_CONFIG = {
         "model_limits": {
             "gemini-3.5-flash-lite": 1000,
             "gemini-3.1-flash-lite": 1000,
-            "gemini-2.5-flash-lite": 1000,
             "gemini-flash-lite-latest": 1000,
             "gemini-flash-latest": 500,
             "gemini-3.5-flash": 500,
@@ -90,7 +90,10 @@ DEFAULT_CONFIG = {
         "text": "PAI AI Movie Translate",
         "opacity": 0.5,
         "margin": 30,
-        "font_size": 40
+        "font_size": 40,
+        "position": "top_right",
+        "style": "text",
+        "logo_path": "assets/watermark.png"
     },
     "subtitle_overlay": {
         "enabled": True,
@@ -134,7 +137,8 @@ DEFAULT_CONFIG = {
     "qa": {
         "enabled": True,
         "auto_rewrite_threshold": 6,
-        "review_output": True
+        "review_output": True,
+        "skip_video_qa": False
     }
 }
 
