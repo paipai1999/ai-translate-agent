@@ -69,8 +69,10 @@ class DownloaderAgent:
             if os.path.exists(c_file) and os.path.getsize(c_file) > 10:
                 active_cookie = c_file
                 has_cookies = True
-                print(f"[*] DownloaderAgent: Using cookies authentication from -> {c_file}", flush=True)
+                print(f"[*] DownloaderAgent: Using cookies authentication from -> {c_file} ({os.path.getsize(c_file)} bytes)", flush=True)
                 break
+        if not active_cookie:
+            print("[!] DownloaderAgent: No cookies.txt found in search paths. Using anonymous datacenter bypass mode...", flush=True)
 
         # Configure yt-dlp options prioritizing 1080p / 720p Full HD resolution
         ydl_opts = {
@@ -109,7 +111,12 @@ class DownloaderAgent:
         import shutil
         node_bin = shutil.which("node") or shutil.which("nodejs") or shutil.which("deno")
         if node_bin:
-            ydl_opts['js_runtimes'] = {'node': {'path': node_bin} if 'node' in node_bin else {}}
+            ydl_opts['js_runtimes'] = {'node': {'path': node_bin} if 'node' in node_bin else {'deno': {'path': node_bin}}}
+
+        ydl_opts['http_headers'] = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        }
 
         max_attempts = 4
         last_error = None
@@ -118,28 +125,31 @@ class DownloaderAgent:
             try:
                 current_opts = dict(ydl_opts)
                 if attempt == 1:
-                    # Attempt 1: Apple VisionOS client (Apple Vision Pro HLS m3u8 stream, up to 1080p Full HD, bypasses Datacenter IP bot detection)
-                    print(f"[*] DownloaderAgent: Fetching 1080p stream with Apple VisionOS client (Attempt 1/{max_attempts})...", flush=True)
-                    current_opts['extractor_args'] = {'youtube': {'player_client': ['visionos']}}
                     if active_cookie:
+                        # Attempt 1 (With Cookies): Web/MWeb/TV client natively supports cookies
+                        print(f"[*] DownloaderAgent: Fetching with authenticated Web/TV client using {os.path.basename(active_cookie)} (Attempt 1/{max_attempts})...", flush=True)
+                        current_opts['extractor_args'] = {'youtube': {'player_client': ['web', 'mweb', 'tv']}}
                         current_opts['cookiefile'] = active_cookie
+                    else:
+                        # Attempt 1 (No Cookies): VisionOS HLS client (bypasses datacenter IP bot checks)
+                        print(f"[*] DownloaderAgent: Fetching 1080p stream with Apple VisionOS client (Attempt 1/{max_attempts})...", flush=True)
+                        current_opts['extractor_args'] = {'youtube': {'player_client': ['visionos']}}
                 elif attempt == 2:
-                    # Attempt 2: Pure VisionOS client without cookies (clean anonymous session in case cookies were challenged by Google)
-                    print(f"[*] DownloaderAgent: Retrying with Pure VisionOS client without cookies (Attempt 2/{max_attempts})...", flush=True)
+                    # Attempt 2: Anonymous VisionOS fallback (drops cookies if they were expired or rejected)
+                    print(f"[*] DownloaderAgent: Retrying with Pure VisionOS anonymous client (Attempt 2/{max_attempts})...", flush=True)
                     current_opts.pop('cookiefile', None)
                     current_opts['extractor_args'] = {'youtube': {'player_client': ['visionos']}}
                 elif attempt == 3:
-                    # Attempt 3: Android mobile client (bypasses web bot checks)
+                    # Attempt 3: Android mobile client without cookies (avoids cookie-mismatch check)
                     print(f"[*] DownloaderAgent: Retrying with Android mobile client (Attempt 3/{max_attempts})...", flush=True)
-                    current_opts['extractor_args'] = {'youtube': {'player_client': ['android']}}
-                    current_opts['format'] = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best/18/22'
-                    if active_cookie:
-                        current_opts['cookiefile'] = active_cookie
-                elif attempt == 4:
-                    # Attempt 4: Android progressive stream fallback (Bulletproof direct stream)
-                    print(f"[*] DownloaderAgent: Retrying with Android progressive fallback (Attempt 4/{max_attempts})...", flush=True)
                     current_opts.pop('cookiefile', None)
                     current_opts['extractor_args'] = {'youtube': {'player_client': ['android']}}
+                    current_opts['format'] = 'bestvideo[height<=1080]+bestaudio/best[height<=1080]/best/18/22'
+                elif attempt == 4:
+                    # Attempt 4: iOS + Android progressive stream fallback
+                    print(f"[*] DownloaderAgent: Retrying with iOS/Android direct progressive fallback (Attempt 4/{max_attempts})...", flush=True)
+                    current_opts.pop('cookiefile', None)
+                    current_opts['extractor_args'] = {'youtube': {'player_client': ['ios', 'android']}}
                     current_opts['format'] = 'best/18/22/bestvideo+bestaudio'
 
                 with yt_dlp.YoutubeDL(current_opts) as ydl:

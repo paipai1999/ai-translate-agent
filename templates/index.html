@@ -833,9 +833,9 @@
                 <input class="url-input" type="text" id="input-source"
                     placeholder="Paste YouTube / DramaBox URL or local video path...">
                 
-                <input type="file" id="file-upload" accept="video/*" style="display: none;" onchange="handleFileUpload(this)">
-                <button class="btn-primary" id="btn-upload" style="background: white; border: 1px solid rgba(0,0,0,0.1); color: var(--text); box-shadow: 0 4px 10px rgba(0,0,0,0.03);" onclick="document.getElementById('file-upload').click()" title="Upload a video file from your computer">
-                    <span id="btn-upload-text">📁 Upload</span>
+                <input type="file" id="file-upload" accept="video/*,.txt" style="display: none;" onchange="handleFileUpload(this)">
+                <button class="btn-primary" id="btn-upload" style="background: white; border: 1px solid rgba(0,0,0,0.1); color: var(--text); box-shadow: 0 4px 10px rgba(0,0,0,0.03);" onclick="document.getElementById('file-upload').click()" title="Upload a video file or cookies.txt from your computer">
+                    <span id="btn-upload-text">📁 Upload Video / Cookies</span>
                 </button>
                 <select class="lang-select" id="select-lang">
                     <option value="burmese" selected>🇲🇲 မြန်မာ (Auto Multi-Voice 👫)</option>
@@ -2557,6 +2557,41 @@
             }
         } catch (e) {
             showToast(`❌ Rename request failed: ${e.message}`, 'error');
+        }
+    }
+
+    async function handleFileUpload(input) {
+        if (!input.files || !input.files[0]) return;
+        const file = input.files[0];
+        const formData = new FormData();
+        formData.append('video', file);
+
+        const btnText = document.getElementById('btn-upload-text');
+        const origText = btnText ? btnText.textContent : '📁 Upload Video / Cookies';
+        if (btnText) btnText.textContent = '⏳ Uploading...';
+
+        try {
+            const res = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                if (data.filename === 'cookies.txt') {
+                    showToast('🍪 YouTube Cookies.txt uploaded and installed successfully! ✅', 'success');
+                } else {
+                    showToast(`🎬 Video uploaded: ${data.filename} ✅`, 'success');
+                    document.getElementById('input-source').value = 'movies/' + data.filename;
+                    loadMovies();
+                }
+            } else {
+                showToast(`❌ Upload failed: ${data.detail || data.error || 'Unknown error'}`, 'error');
+            }
+        } catch (e) {
+            showToast(`❌ Upload error: ${e.message}`, 'error');
+        } finally {
+            if (btnText) btnText.textContent = origText;
+            input.value = '';
         }
     }
 

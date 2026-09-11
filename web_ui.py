@@ -861,6 +861,14 @@ async def upload_file(video: UploadFile = File(...)):
                     print("[*] Upload: cookies.txt permanently saved to Google Drive!")
                 except Exception:
                     pass
+            for kp in ["/kaggle/working/cookies.txt", "/kaggle/working/ai-translate-agent/cookies.txt"]:
+                if os.path.exists(os.path.dirname(kp)):
+                    try:
+                        with open(kp, "wb") as kf:
+                            kf.write(content)
+                        print(f"[*] Upload: cookies.txt saved to {kp}!")
+                    except Exception:
+                        pass
             print("[*] Upload: cookies.txt installed successfully into root and assets/!")
             return {"success": True, "filename": "cookies.txt", "message": "YouTube cookies installed successfully!"}
 
