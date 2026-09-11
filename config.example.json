@@ -82,8 +82,8 @@
     "font_size": 40,
     "bold": true,
     "border_style": 3,
-    "outline_width": 4,
-    "margin_bottom": 55,
+    "outline_width": 3,
+    "margin_bottom": 50,
     "max_chars_per_line": 28
   },
   "reels": {
@@ -105,6 +105,11 @@
     "enabled": true,
     "duck_volume": 0.12,
     "ambient_volume": 0.35
+  },
+  "qa": {
+    "enabled": true,
+    "auto_rewrite_threshold": 6,
+    "review_output": true
   },
   "thumbnail_intro": {
     "enabled": false,
