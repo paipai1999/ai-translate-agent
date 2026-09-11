@@ -40,9 +40,11 @@ class VoiceAgent:
         self.f5_cfg = voice_cfg.get("f5_tts", {})
         self.f5_engine = None
         if self.engine == "f5_tts":
-            is_burmese = str(self.voice).startswith("my-") or config_data.get("pipeline", {}).get("language", "").lower() == "burmese"
-            if is_burmese:
-                print("[*] VoiceAgent: Burmese language detected. Routing to Microsoft Neural Edge-TTS for authentic Myanmar narration.")
+            force_f5 = self.f5_cfg.get("force_engine", False) or self.f5_cfg.get("allow_burmese", False)
+            is_burmese = str(self.voice).startswith("my-") or config_data.get("pipeline", {}).get("language", "").lower() in ("burmese", "mm", "myanmar")
+            if is_burmese and not force_f5:
+                print("[*] VoiceAgent: Burmese language detected with default F5-TTS model (pretrained for EN/ZH). Routing to Microsoft Neural Edge-TTS for authentic Myanmar narration.")
+                print("    💡 Tip: To force F5-TTS anyway (e.g. with custom fine-tuned Myanmar weights), set \"force_engine\": true under \"voice.f5_tts\" in config.json.")
                 self.engine = "edge_tts"
                 self.tts_engine = "edge_tts"
             else:
@@ -242,13 +244,14 @@ class VoiceAgent:
         # Check if F5-TTS engine is requested
         use_f5 = self.engine == "f5_tts"
         if use_f5:
-            # F5-TTS flow-matching model is trained strictly for English & Chinese.
-            # For Burmese narration, Microsoft Neural Edge-TTS (Thiha / Nilar) is the dedicated high-quality engine.
+            force_f5 = self.f5_cfg.get("force_engine", False) or self.f5_cfg.get("allow_burmese", False)
             sample_text = "".join([str(item.get("narration", "")) for item in (state.generated_script or [])[:5]])
-            has_burmese = any('\u1000' <= char <= '\u109F' or '\uAA60' <= char <= '\uAA7F' for char in sample_text) or getattr(state, "language", "").lower() == "burmese"
-            if has_burmese:
-                print("[*] VoiceAgent: Burmese narration detected. F5-TTS model is trained for English/Chinese.")
-                print("[*] VoiceAgent: Automatically routing to Microsoft Neural Edge-TTS (my-MM-ThihaNeural / my-MM-NilarNeural) for natural, fluent Myanmar voiceover.")
+            burmese_chars = sum(1 for char in sample_text if ('\u1000' <= char <= '\u109F' or '\uAA60' <= char <= '\uAA7F'))
+            is_majority_burmese = (len(sample_text) > 0 and (burmese_chars / len(sample_text) > 0.3)) or getattr(state, "language", "").lower() in ("burmese", "mm", "myanmar")
+            if is_majority_burmese and not force_f5:
+                print("[*] VoiceAgent: Burmese narration detected with default F5-TTS model.")
+                print("[*] VoiceAgent: Automatically routing to Microsoft Neural Edge-TTS (my-MM-ThihaNeural / my-MM-NilarNeural) for natural Myanmar voiceover.")
+                print("    💡 Tip: Set voice.f5_tts.force_engine=true in config.json to force custom F5-TTS.")
                 use_f5 = False
             elif not self.f5_engine or not self.f5_engine.is_available():
                 print("[WARN] VoiceAgent: F5-TTS is requested but not installed. Falling back to Edge TTS.")

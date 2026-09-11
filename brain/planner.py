@@ -29,12 +29,16 @@ class BatchProcessor:
         resume: bool = True,
         cancel_event=None,
         output_dir: str = None,
+        skip_demucs: bool = None,
+        detect_scenes: bool = None,
     ):
         self.movies_folder = movies_folder
         self.output_dir = output_dir or cfg.load_config().get("paths", {}).get("output_dir", "outputs")
         self.skip_completed = skip_completed
         self.resume = bool(resume)
         self.cancel_event = cancel_event
+        self.skip_demucs = skip_demucs
+        self.detect_scenes = detect_scenes
         self.language = language
         self.source_language = source_language or "auto"
         self.script_engine = script_engine or "recap"
@@ -154,6 +158,8 @@ class BatchProcessor:
                     script_engine=self.script_engine,
                     resume=self.resume,
                     cancel_event=self.cancel_event,
+                    skip_demucs=self.skip_demucs,
+                    detect_scenes=self.detect_scenes,
                 )
                 master.run_pipeline()
                 pipeline_status = getattr(master.state, "pipeline_status", "COMPLETED")

@@ -118,6 +118,56 @@ jobs_lock = threading.RLock()
 cancel_events = {}
 JOB_RETENTION_SECONDS = 7200  # Clean up finished jobs after 2 hours
 
+# FIFO Job Queue
+job_queue = []
+queue_lock = threading.RLock()
+_dispatcher_thread = None
+
+def _queue_dispatcher():
+    """Background worker that pulls jobs from FIFO queue sequentially."""
+    while True:
+        job_to_run = None
+        with jobs_lock:
+            running = any(j.get('status') == 'running' for j in jobs.values())
+        if not running:
+            with queue_lock:
+                if job_queue:
+                    job_to_run = job_queue.pop(0)
+        if job_to_run:
+            jid = job_to_run["job_id"]
+            should_start = False
+            with jobs_lock:
+                if jid in jobs and jobs[jid].get("status") == "queued":
+                    jobs[jid]["status"] = "running"
+                    jobs[jid]["phase"] = "Starting..."
+                    should_start = True
+                    try:
+                        from brain.sqlite_store import update_job
+                        update_job(jid, status="running", phase="Starting...")
+                    except Exception:
+                        pass
+                else:
+                    print(f"[*] Queue Dispatcher: Skipping job {jid} (status: {jobs.get(jid, {}).get('status')})")
+            if should_start:
+                print(f"[*] Queue Dispatcher: Starting next queued job: {jid} ({job_to_run.get('name', 'video')})")
+                t = threading.Thread(
+                    target=job_to_run["target"],
+                    args=job_to_run["args"],
+                    daemon=True
+                )
+                t.start()
+        time.sleep(1.0)
+
+def _ensure_queue_dispatcher():
+    global _dispatcher_thread
+    with queue_lock:
+        if _dispatcher_thread is None or not _dispatcher_thread.is_alive():
+            _dispatcher_thread = threading.Thread(target=_queue_dispatcher, daemon=True)
+            _dispatcher_thread.start()
+
+# Launch queue dispatcher on module load
+_ensure_queue_dispatcher()
+
 def _cleanup_old_jobs():
     """Remove completed/error jobs older than JOB_RETENTION_SECONDS to prevent memory growth."""
     now = time.time()
@@ -354,10 +404,13 @@ def pipeline_worker(
             script_engine=script_engine,
             resume=resume,
             cancel_event=cancel_events.get(job_id),
+            skip_demucs=skip_demucs,
+            detect_scenes=detect_scenes,
         )
         master.run_pipeline()
         
-        if os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+        job_cancel_ev = cancel_events.get(job_id)
+        if (job_cancel_ev and job_cancel_ev.is_set()) or os.environ.get("CURRENT_JOB_CANCELLED") == "1":
             with jobs_lock:
                 jobs[job_id]['status'] = 'cancelled'
                 jobs[job_id]['phase'] = 'Stopped by user'
@@ -373,7 +426,8 @@ def pipeline_worker(
             except Exception:
                 pass
     except Exception as e:
-        is_cancel = isinstance(e, (InterruptedError, KeyboardInterrupt)) or (os.environ.get("CURRENT_JOB_CANCELLED") == "1")
+        job_cancel_ev = cancel_events.get(job_id)
+        is_cancel = isinstance(e, (InterruptedError, KeyboardInterrupt)) or (job_cancel_ev and job_cancel_ev.is_set()) or (os.environ.get("CURRENT_JOB_CANCELLED") == "1")
         if is_cancel:
             print(f"\n🛑 [STOP] Job {job_id} was force-stopped by user.")
             with jobs_lock:
@@ -507,11 +561,14 @@ def batch_worker(
             script_engine=script_engine,
             resume=resume,
             cancel_event=cancel_events.get(job_id),
+            skip_demucs=skip_demucs,
+            detect_scenes=detect_scenes,
         )
         print(f"[*] Batch Mode: Starting batch run for {len(inputs_list)} item(s)...")
         processor.process_all(url_list=urls, local_paths=local_paths)
         
-        if os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+        job_cancel_ev = cancel_events.get(job_id)
+        if (job_cancel_ev and job_cancel_ev.is_set()) or os.environ.get("CURRENT_JOB_CANCELLED") == "1":
             with jobs_lock:
                 jobs[job_id]['status'] = 'cancelled'
                 jobs[job_id]['phase'] = 'Stopped by user'
@@ -527,7 +584,8 @@ def batch_worker(
             except Exception:
                 pass
     except Exception as e:
-        is_cancel = isinstance(e, (InterruptedError, KeyboardInterrupt)) or (os.environ.get("CURRENT_JOB_CANCELLED") == "1")
+        job_cancel_ev = cancel_events.get(job_id)
+        is_cancel = isinstance(e, (InterruptedError, KeyboardInterrupt)) or (job_cancel_ev and job_cancel_ev.is_set()) or (os.environ.get("CURRENT_JOB_CANCELLED") == "1")
         if is_cancel:
             print(f"\n🛑 [STOP] Batch job {job_id} was force-stopped by user.")
             with jobs_lock:
@@ -631,6 +689,130 @@ def system_info():
         "active_jobs": active
     }
 
+@app.get("/api/system/health-check")
+async def system_health_check():
+    """Performs a comprehensive diagnostic on FFmpeg, GPU Encoder, Gemini Keys, Edge-TTS, and Disk."""
+    import urllib.request, shutil
+
+    results = {
+        "status": "ok",
+        "timestamp": time.time(),
+        "checks": {}
+    }
+
+    # 1. FFmpeg & Hardware Encoder
+    try:
+        from agents.video_merger_agent import detect_hardware_encoder, _get_ffmpeg_bin
+        ff_bin = _get_ffmpeg_bin()
+        enc = detect_hardware_encoder()
+        results["checks"]["ffmpeg"] = {
+            "status": "ok",
+            "installed": bool(ff_bin),
+            "binary": os.path.basename(ff_bin) if ff_bin else "not_found",
+            "encoder": enc.get("label", "CPU"),
+            "codec": enc.get("codec", "libx264"),
+            "type": enc.get("type", "cpu"),
+            "is_gpu": enc.get("type") == "gpu",
+            "details": f"{enc.get('label', 'CPU')} ({enc.get('codec', 'libx264')})"
+        }
+    except Exception as e:
+        results["checks"]["ffmpeg"] = {"status": "error", "installed": False, "healthy": False, "error": str(e), "details": str(e)}
+        results["status"] = "warning"
+
+    # 2. Gemini API Keys Health
+    try:
+        c = cfg.load_config()
+        keys = c.get("gemini", {}).get("api_keys", []) or []
+        env_k = os.getenv("GEMINI_API_KEYS") or os.getenv("GEMINI_API_KEY")
+        if env_k:
+            for ek in env_k.replace(";", ",").split(","):
+                if ek.strip() and ek.strip() not in keys:
+                    keys.append(ek.strip())
+
+        key_reports = []
+        valid_keys = 0
+        for k in keys:
+            k = str(k).strip()
+            if not k:
+                continue
+            masked = (k[:6] + "..." + k[-4:]) if len(k) > 10 else "***"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={k}"
+            try:
+                req = urllib.request.Request(url, method="GET")
+                with urllib.request.urlopen(req, timeout=4.0) as resp:
+                    if resp.status == 200:
+                        key_reports.append({"key": masked, "key_preview": masked, "status": "active", "code": 200})
+                        valid_keys += 1
+                    else:
+                        key_reports.append({"key": masked, "key_preview": masked, "status": "unexpected", "code": resp.status})
+            except urllib.error.HTTPError as he:
+                if he.code == 429:
+                    key_reports.append({"key": masked, "key_preview": masked, "status": "rate_limited", "code": 429})
+                elif he.code in (400, 403):
+                    key_reports.append({"key": masked, "key_preview": masked, "status": "invalid_key", "code": he.code})
+                else:
+                    key_reports.append({"key": masked, "key_preview": masked, "status": f"http_{he.code}", "code": he.code})
+            except Exception as ex:
+                key_reports.append({"key": masked, "key_preview": masked, "status": "connection_error", "error": str(ex)[:60], "code": 0})
+
+        gemini_healthy = valid_keys > 0
+        gemini_status = "ok" if gemini_healthy else ("rate_limited" if any(r.get("status") == "rate_limited" for r in key_reports) else "warning")
+        results["checks"]["gemini"] = {
+            "status": gemini_status,
+            "healthy": gemini_healthy,
+            "total_keys": len(key_reports),
+            "valid_keys": valid_keys,
+            "results": key_reports,
+            "details": key_reports
+        }
+        if not gemini_healthy:
+            results["status"] = "warning"
+    except Exception as e:
+        results["checks"]["gemini"] = {"status": "error", "healthy": False, "error": str(e), "total_keys": 0, "valid_keys": 0}
+        results["status"] = "warning"
+
+    # 3. Edge-TTS Connectivity
+    try:
+        import edge_tts
+        import asyncio
+        t0 = time.time()
+        async def _check_tts():
+            voices = await edge_tts.list_voices()
+            return any(v.get("ShortName") == "my-MM-ThihaNeural" for v in voices)
+        has_voice = await asyncio.wait_for(_check_tts(), timeout=7.0)
+        elapsed = round((time.time() - t0) * 1000, 1)
+        results["checks"]["edge_tts"] = {
+            "status": "ok",
+            "healthy": True,
+            "myanmar_voice_available": has_voice,
+            "latency_ms": elapsed,
+            "details": f"Online (Latency: {elapsed}ms, Myanmar voice ready: {has_voice})"
+        }
+    except Exception as e:
+        results["checks"]["edge_tts"] = {"status": "error", "healthy": False, "error": str(e)[:80], "details": str(e)[:80]}
+        results["status"] = "warning"
+
+    # 4. Disk Space Check
+    try:
+        du = shutil.disk_usage(".")
+        free_gb = round(du.free / (1024 ** 3), 2)
+        total_gb = round(du.total / (1024 ** 3), 2)
+        disk_healthy = free_gb >= 5.0
+        results["checks"]["disk"] = {
+            "status": "ok" if disk_healthy else "low_disk",
+            "healthy": disk_healthy,
+            "free_gb": free_gb,
+            "total_gb": total_gb,
+            "percent_free": round((du.free / du.total) * 100, 1),
+            "details": f"{free_gb} GB free of {total_gb} GB ({round((du.free / du.total) * 100, 1)}% available)"
+        }
+        if not disk_healthy:
+            results["status"] = "warning"
+    except Exception as e:
+        results["checks"]["disk"] = {"status": "error", "healthy": False, "error": str(e), "details": str(e)}
+
+    return results
+
 @app.get("/api/jobs/active")
 def get_active_job():
     with jobs_lock:
@@ -638,6 +820,10 @@ def get_active_job():
             if jdata.get("status") == "running":
                 return {
                     "job_id": jid,
+                    "name": jdata.get("name", "video"),
+                    "source": jdata.get("source") or jdata.get("name", "video"),
+                    "language": jdata.get("language", "burmese"),
+                    "tts_engine": jdata.get("tts_engine", "edge_tts"),
                     "status": "running",
                     "phase": jdata.get("phase", "Running..."),
                     "created_at": jdata.get("created_at")
@@ -716,19 +902,30 @@ async def start_pipeline(req: StartRequest):
     
     _cleanup_old_jobs()
     with jobs_lock:
-        if _has_running_job():
-            raise HTTPException(status_code=409, detail="A pipeline job is already running. Wait for it to finish first.")
         job_id = str(uuid.uuid4())
+        is_running = _has_running_job()
+        initial_status = "running" if not is_running else "queued"
+        initial_phase = "Starting..." if not is_running else "Queued in background"
         jobs[job_id] = {
-            "status": "running",
-            "phase": "Starting...",
+            "status": initial_status,
+            "phase": initial_phase,
             "buffer": None,
-            "created_at": time.time()
+            "created_at": time.time(),
+            "name": str(input_source),
+            "source": str(input_source),
+            "language": str(language),
+            "tts_engine": str(tts_engine or "edge_tts")
         }
-    
-    t = threading.Thread(
-        target=pipeline_worker,
-        args=(
+        try:
+            from brain.sqlite_store import create_job
+            create_job(job_id, str(input_source), phase=initial_phase, status=initial_status)
+        except Exception:
+            pass
+
+    job_entry = {
+        "job_id": job_id,
+        "target": pipeline_worker,
+        "args": (
             job_id,
             input_source,
             language,
@@ -750,10 +947,23 @@ async def start_pipeline(req: StartRequest):
             req.tts_voice,
             req.script_engine or "recap",
         ),
-        daemon=True,
-    )
-    t.start()
-    return {"job_id": job_id}
+        "name": str(input_source),
+        "source": str(input_source),
+        "language": str(language),
+        "tts_engine": str(tts_engine or "edge_tts"),
+        "created_at": time.time()
+    }
+
+    with queue_lock:
+        if not is_running:
+            t = threading.Thread(target=job_entry["target"], args=job_entry["args"], daemon=True)
+            t.start()
+            return {"job_id": job_id, "status": "running"}
+        else:
+            job_queue.append(job_entry)
+            _ensure_queue_dispatcher()
+            pos = len(job_queue)
+            return {"job_id": job_id, "status": "queued", "position": pos, "message": f"Job queued at position #{pos}"}
 
 @app.post("/api/batch/start")
 async def start_batch_pipeline(req: BatchStartRequest):
@@ -774,19 +984,30 @@ async def start_batch_pipeline(req: BatchStartRequest):
         
     _cleanup_old_jobs()
     with jobs_lock:
-        if _has_running_job():
-            raise HTTPException(status_code=409, detail="A pipeline job is already running. Wait for it to finish first.")
         job_id = str(uuid.uuid4())
+        is_running = _has_running_job()
+        initial_status = "running" if not is_running else "queued"
+        initial_phase = "Batch Mode Starting..." if not is_running else "Batch Queued in background"
         jobs[job_id] = {
-            "status": "running",
-            "phase": "Batch Mode Starting...",
+            "status": initial_status,
+            "phase": initial_phase,
             "buffer": None,
-            "created_at": time.time()
+            "created_at": time.time(),
+            "name": f"Batch ({len(inputs)} items)",
+            "source": f"Batch ({len(inputs)} items)",
+            "language": str(language),
+            "tts_engine": str(tts_engine or "edge_tts")
         }
-    
-    t = threading.Thread(
-        target=batch_worker,
-        args=(
+        try:
+            from brain.sqlite_store import create_job
+            create_job(job_id, f"Batch ({len(inputs)} items)", phase=initial_phase, status=initial_status)
+        except Exception:
+            pass
+
+    job_entry = {
+        "job_id": job_id,
+        "target": batch_worker,
+        "args": (
             job_id,
             inputs,
             language,
@@ -808,10 +1029,71 @@ async def start_batch_pipeline(req: BatchStartRequest):
             req.tts_voice,
             req.script_engine or "recap",
         ),
-        daemon=True,
-    )
-    t.start()
-    return {"job_id": job_id}
+        "name": f"Batch ({len(inputs)} items)",
+        "source": f"Batch ({len(inputs)} items)",
+        "language": str(language),
+        "tts_engine": str(tts_engine or "edge_tts"),
+        "created_at": time.time()
+    }
+
+    with queue_lock:
+        if not is_running:
+            t = threading.Thread(target=job_entry["target"], args=job_entry["args"], daemon=True)
+            t.start()
+            return {"job_id": job_id, "status": "running"}
+        else:
+            job_queue.append(job_entry)
+            _ensure_queue_dispatcher()
+            pos = len(job_queue)
+            return {"job_id": job_id, "status": "queued", "position": pos, "message": f"Batch job queued at position #{pos}"}
+
+@app.get("/api/queue")
+def get_job_queue():
+    """Returns list of currently queued jobs and positions."""
+    with queue_lock:
+        items = []
+        for idx, item in enumerate(job_queue):
+            kwargs = item.get("kwargs", {})
+            items.append({
+                "job_id": item["job_id"],
+                "name": item.get("name", "video"),
+                "source": item.get("source") or kwargs.get("input") or item.get("name", "video"),
+                "language": item.get("language") or kwargs.get("language", "burmese"),
+                "tts_engine": item.get("tts_engine") or kwargs.get("tts_engine", "edge_tts"),
+                "position": idx + 1,
+                "status": "queued",
+                "created_at": item.get("created_at")
+            })
+    active_info = get_active_job()
+    return {
+        "queue": items,
+        "total": len(items),
+        "queue_length": len(items),
+        "active_job": active_info if active_info and active_info.get("job_id") else None
+    }
+
+@app.delete("/api/queue/{job_id}")
+def delete_from_queue(job_id: str):
+    """Cancels and removes a pending job from the FIFO queue."""
+    removed = False
+    with queue_lock:
+        for idx, item in enumerate(list(job_queue)):
+            if item["job_id"] == job_id:
+                job_queue.pop(idx)
+                removed = True
+                break
+    with jobs_lock:
+        if job_id in jobs and jobs[job_id].get("status") == "queued":
+            jobs[job_id]["status"] = "cancelled"
+            jobs[job_id]["phase"] = "Cancelled from queue"
+            try:
+                from brain.sqlite_store import update_job
+                update_job(job_id, status="cancelled", phase="Cancelled from queue")
+            except Exception:
+                pass
+    if removed:
+        return {"success": True, "message": f"Job {job_id} removed from queue."}
+    raise HTTPException(status_code=404, detail="Job not found in queue")
 
 @app.post("/api/stop")
 @app.post("/api/cancel")
@@ -822,7 +1104,11 @@ async def stop_pipeline(job_id: Optional[str] = None):
     os.environ["CURRENT_JOB_CANCELLED"] = "1"
     
     with jobs_lock:
-        target_jids = [job_id] if (job_id and job_id in jobs) else [jid for jid, j in jobs.items() if j.get("status") == "running"]
+        if job_id:
+            target_jids = [job_id]
+        else:
+            target_jids = [jid for jid, j in jobs.items() if j.get("status") in ("running", "queued")]
+            
         for jid in target_jids:
             if jid in jobs:
                 cancel_events.setdefault(jid, threading.Event()).set()
@@ -835,6 +1121,18 @@ async def stop_pipeline(job_id: Optional[str] = None):
                 except Exception:
                     pass
                 print(f"\n🛑 [STOP] Force-stop signal received! Cancelled job {jid}.")
+
+    with queue_lock:
+        if job_id:
+            job_queue[:] = [q for q in job_queue if q.get("job_id") != job_id]
+        else:
+            for q in list(job_queue):
+                q_jid = q.get("job_id")
+                with jobs_lock:
+                    if q_jid in jobs:
+                        jobs[q_jid]["status"] = "cancelled"
+                        jobs[q_jid]["phase"] = "Stopped by user"
+            job_queue.clear()
 
     # Safely terminate child processes (ffmpeg, ffprobe, yt-dlp, demucs) spawned by THIS process tree only
     try:

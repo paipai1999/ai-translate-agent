@@ -103,12 +103,17 @@ class MasterAgent:
         script_engine: str = "recap",
         resume: bool = True,
         cancel_event=None,
+        skip_demucs: bool = None,
+        detect_scenes: bool = None,
     ):
         self.movie_path = movie_path
         self.resume = bool(resume)
         self.cancel_event = cancel_event
         movie_name = os.path.splitext(os.path.basename(movie_path))[0]
         cfg = config.load_config()
+
+        self.skip_demucs = skip_demucs if skip_demucs is not None else (os.getenv("SKIP_DEMUCS") == "true" or not cfg.get("pipeline", {}).get("use_demucs", True))
+        self.detect_scenes = detect_scenes
 
         self.subtitle_mode = str(subtitle_mode or "burn").lower()
         self.subtitle_style = str(subtitle_style or os.getenv("SUBTITLE_STYLE") or cfg.get("subtitle_overlay", {}).get("style_preset", "box_black")).lower()
@@ -127,6 +132,7 @@ class MasterAgent:
 
         self.state = MovieState(movie_name=movie_name)
         self.state.movie_path = movie_path
+        self.state.skip_demucs = self.skip_demucs
         self.state.subtitle_mode = self.subtitle_mode
         self.state.subtitle_style_preset = self.subtitle_style
         self.state.resolution = self.resolution
@@ -431,7 +437,7 @@ class MasterAgent:
                     if not run_p2:
                         print(f"[*] MasterAgent: Reusing cached transcript ({len(getattr(state, 'transcript', []) or [])} segments)...")
                         return state
-                    state = self.audio_agent.extract_audio(state, temp_audio_dir)
+                    state = self.audio_agent.extract_audio(state, temp_audio_dir, skip_demucs=self.skip_demucs)
                     if getattr(state, "transcript", None) and len(state.transcript) > 0:
                         print(f"[*] MasterAgent: Reusing cached transcript ({len(state.transcript)} segments)...")
                         return state
@@ -451,7 +457,10 @@ class MasterAgent:
                         return state
                     cfg_data = config.load_config()
                     scene_cfg = cfg_data.get("pipeline", {}).get("scene_detection", False)
-                    skip_scenes = os.environ.get("SKIP_SCENES", "").lower() in ("1", "true", "yes") or not scene_cfg
+                    if self.detect_scenes is not None:
+                        skip_scenes = not self.detect_scenes
+                    else:
+                        skip_scenes = os.environ.get("SKIP_SCENES", "").lower() in ("1", "true", "yes") or not scene_cfg
                     if skip_scenes:
                         print("[*] MasterAgent: Scene detection skipped (1:1 dialogue mode uses Whisper timestamps). Populating fallback macro scene.")
                         dur = getattr(state, "duration_sec", 0.0) or getattr(state, "video_duration", 0.0) or 0.0

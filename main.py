@@ -368,6 +368,8 @@ def main():
     thumb_intro = True if args.thumbnail_intro else (False if args.no_thumbnail_intro else None)
     should_resume = not args.fresh
 
+    detect_scenes_flag = True if args.detect_scenes else (False if args.skip_scenes else None)
+
     # Single video or URL
     chosen_input = (args.input_flag or args.input_source or "").strip()
     if chosen_input:
@@ -406,6 +408,8 @@ def main():
                 source_language=args.source_lang,
                 script_engine=args.script_engine,
                 resume=should_resume,
+                skip_demucs=args.skip_demucs,
+                detect_scenes=detect_scenes_flag,
             )
             master.run_pipeline()
         except Exception as e:
@@ -437,6 +441,8 @@ def main():
             source_language=args.source_lang,
             script_engine=args.script_engine,
             resume=should_resume,
+            skip_demucs=args.skip_demucs,
+            detect_scenes=detect_scenes_flag,
         ).process_all()
 
     # Batch: URL list
@@ -462,6 +468,8 @@ def main():
             source_language=args.source_lang,
             script_engine=args.script_engine,
             resume=should_resume,
+            skip_demucs=args.skip_demucs,
+            detect_scenes=detect_scenes_flag,
         ).process_all(url_list=args.urls, local_paths=[])
     else:
         parser.print_help()

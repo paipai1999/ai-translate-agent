@@ -5,7 +5,7 @@ class AudioAgent:
     def __init__(self, movie_path: str):
         self.movie_path = movie_path
 
-    def extract_audio(self, state: MovieState, output_dir: str) -> MovieState:
+    def extract_audio(self, state: MovieState, output_dir: str, skip_demucs: bool = None) -> MovieState:
         """Extracts audio from video file into a standalone WAV file using MoviePy or FFmpeg fallback."""
         print(f"[*] AudioAgent: Extracting audio from {self.movie_path}...")
         os.makedirs(output_dir, exist_ok=True)
@@ -43,18 +43,19 @@ class AudioAgent:
                 print(f"[!] AudioAgent: MoviePy fallback failed ({e}). Transcription will be skipped.")
 
         if getattr(state, 'audio_path', None):
-            state.audio_path = self.separate_vocals(state.audio_path, output_dir)
+            should_skip = skip_demucs if skip_demucs is not None else getattr(state, 'skip_demucs', None)
+            state.audio_path = self.separate_vocals(state.audio_path, output_dir, skip_demucs=should_skip)
 
         return state
 
-    def separate_vocals(self, audio_path: str, output_dir: str) -> str:
+    def separate_vocals(self, audio_path: str, output_dir: str, skip_demucs: bool = None) -> str:
         """Separates vocals from background music using Demucs to improve Whisper accuracy."""
         import subprocess, shutil, sys
 
         import brain.config as cfg
         config_data = cfg.load_config()
         use_demucs_cfg = config_data.get("pipeline", {}).get("use_demucs", True)
-        if os.getenv("SKIP_DEMUCS") == "true" or not use_demucs_cfg:
+        if skip_demucs is True or (skip_demucs is None and (os.getenv("SKIP_DEMUCS") == "true" or not use_demucs_cfg)):
             print("[*] AudioAgent: Skipping vocal separation (Demucs disabled) -> using direct audio for Whisper.")
             return audio_path
 

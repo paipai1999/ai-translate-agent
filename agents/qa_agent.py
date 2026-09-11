@@ -205,6 +205,42 @@ class QAAgent:
             state.qa_results["language"] = lang_result
         return state
 
+    def _create_qa_preview(self, input_video_path: str, output_dir: str) -> str:
+        """Compresses a heavy recap video into a fast 360p lightweight preview (~15-25MB) for Gemini QA."""
+        import subprocess, shutil
+        if not input_video_path or not os.path.exists(input_video_path):
+            return None
+        preview_path = os.path.join(output_dir, "temp_qa_preview_360p.mp4")
+        ffmpeg_bin = shutil.which("ffmpeg") or os.environ.get("IMAGEIO_FFMPEG_EXE")
+        if not ffmpeg_bin:
+            try:
+                from imageio_ffmpeg import get_ffmpeg_exe
+                ffmpeg_bin = get_ffmpeg_exe()
+            except Exception:
+                ffmpeg_bin = "ffmpeg"
+        cmd = [
+            ffmpeg_bin, "-y",
+            "-i", input_video_path,
+            "-vf", "scale=-2:360",
+            "-c:v", "libx264",
+            "-crf", "32",
+            "-preset", "veryfast",
+            "-c:a", "aac",
+            "-b:a", "64k",
+            "-movflags", "+faststart",
+            preview_path
+        ]
+        try:
+            print(f"[*] QAAgent: Creating lightweight 360p QA preview video from {os.path.basename(input_video_path)}...")
+            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
+            if res.returncode == 0 and os.path.exists(preview_path) and os.path.getsize(preview_path) > 1000:
+                mb = os.path.getsize(preview_path) / (1024 * 1024)
+                print(f"[OK] QAAgent: 360p QA preview ready ({mb:.1f} MB) for ultra-fast Gemini upload.")
+                return preview_path
+        except Exception as e:
+            print(f"[WARN] QAAgent: Preview video creation failed: {e}")
+        return None
+
     def review(self, state: MovieState, original_video_path: str, recap_video_path: str) -> MovieState:
         print("\n--- [Phase 7: QA Review --- Gemini Video Analysis] ---")
 
@@ -230,13 +266,26 @@ class QAAgent:
         # Avoids double-uploading the same file to Gemini File API
         recap_file_name = None
         recap_working_key = None
+        preview_path_to_clean = None
+
         if os.path.exists(recap_video_path):
+            file_size_mb = os.path.getsize(recap_video_path) / (1024 * 1024)
+            upload_target_path = recap_video_path
+            # If video is larger than 50MB, create lightweight 360p preview for Gemini to prevent SSL EOF/timeouts
+            if file_size_mb > 50.0:
+                project_out = os.path.join(self.output_dir, state.project_dir)
+                preview_f = self._create_qa_preview(recap_video_path, project_out)
+                if preview_f and os.path.exists(preview_f):
+                    upload_target_path = preview_f
+                    preview_path_to_clean = preview_f
+
             try:
-                print("[*] QAAgent: Uploading output video to Gemini (single upload for all QA tasks)...")
-                recap_file_name, recap_working_key = upload_video_file(recap_video_path, api_key)
+                target_mb = os.path.getsize(upload_target_path) / (1024 * 1024)
+                print(f"[*] QAAgent: Uploading video ({target_mb:.1f} MB) to Gemini...")
+                recap_file_name, recap_working_key = upload_video_file(upload_target_path, api_key)
                 print(f"[OK] QAAgent: Video uploaded -> {recap_file_name}")
             except Exception as e:
-                print(f"[!] QAAgent: Video upload failed: {e}")
+                print(f"[!] QAAgent: Video upload failed: {e}. Gracefully falling back to script QA.")
 
         try:
             if recap_file_name:
@@ -263,6 +312,11 @@ class QAAgent:
             if recap_file_name and recap_working_key:
                 try:
                     delete_video_file(recap_file_name, recap_working_key)
+                except Exception:
+                    pass
+            if preview_path_to_clean and os.path.exists(preview_path_to_clean):
+                try:
+                    os.remove(preview_path_to_clean)
                 except Exception:
                     pass
 
