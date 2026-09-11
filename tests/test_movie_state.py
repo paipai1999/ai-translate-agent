@@ -1,0 +1,75 @@
+import os
+import sys
+import unittest
+import tempfile
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from brain.memory import MovieState
+
+class TestMovieState(unittest.TestCase):
+
+    def test_state_critical_attributes_exist(self):
+        """Verify all attributes required by MasterAgent and WebUI exist on MovieState."""
+        state = MovieState(movie_name="Sample_Movie")
+        self.assertTrue(hasattr(state, "errors"), "MovieState must have 'errors' attribute")
+        self.assertTrue(hasattr(state, "warnings"), "MovieState must have 'warnings' attribute")
+        self.assertTrue(hasattr(state, "phase_statuses"), "MovieState must have 'phase_statuses' attribute")
+        self.assertTrue(hasattr(state, "pipeline_status"), "MovieState must have 'pipeline_status' attribute")
+        self.assertTrue(hasattr(state, "phase_durations"), "MovieState must have 'phase_durations' attribute")
+        self.assertTrue(hasattr(state, "total_duration_sec"), "MovieState must have 'total_duration_sec' attribute")
+        self.assertTrue(hasattr(state, "total_duration_formatted"), "MovieState must have 'total_duration_formatted' attribute")
+        self.assertTrue(hasattr(state, "clean_video_path"), "MovieState must have 'clean_video_path' attribute")
+        self.assertTrue(hasattr(state, "reels_video_path"), "MovieState must have 'reels_video_path' attribute")
+
+    def test_state_initial_values(self):
+        """Verify MovieState default values are correctly typed."""
+        state = MovieState(movie_name="Sample_Movie")
+        self.assertEqual(state.pipeline_status, "QUEUED")
+        self.assertEqual(state.progress, 0)
+        self.assertIsInstance(state.errors, list)
+        self.assertIsInstance(state.warnings, list)
+        self.assertIsInstance(state.phase_statuses, dict)
+        self.assertIsInstance(state.phase_durations, dict)
+
+    def test_phase_tracking_lifecycle(self):
+        """Verify phase completion tracking and targeted reset."""
+        state = MovieState(movie_name="Sample_Movie")
+        self.assertFalse(state.is_phase_completed("Phase 1"))
+        state.mark_phase_completed("Phase 1", {"summary": "Done"})
+        self.assertTrue(state.is_phase_completed("Phase 1"))
+        self.assertEqual(state.get_last_completed_phase(), "Phase 1")
+
+        state.mark_phase_completed("Phase 2")
+        state.mark_phase_completed("Phase 3")
+        self.assertEqual(state.get_last_completed_phase(), "Phase 3")
+
+        # Reset from Phase 2 should remove Phase 2 and Phase 3
+        state.reset_from_phase("Phase 2")
+        self.assertTrue(state.is_phase_completed("Phase 1"))
+        self.assertFalse(state.is_phase_completed("Phase 2"))
+        self.assertFalse(state.is_phase_completed("Phase 3"))
+
+    def test_state_json_save_and_load(self):
+        """Verify MovieState saves to JSON and reloads with 100% fidelity."""
+        state = MovieState(movie_name="Persistence_Test")
+        state.errors.append("Test error")
+        state.warnings.append("Test warning")
+        state.phase_statuses["Phase 1"] = "COMPLETED"
+        state.pipeline_status = "COMPLETED"
+
+        with tempfile.TemporaryDirectory() as td:
+            filepath = os.path.join(td, "state.json")
+            state.save_to_json(filepath)
+            self.assertTrue(os.path.exists(filepath))
+
+            loaded = MovieState.load_from_json(filepath)
+            self.assertIsNotNone(loaded)
+            self.assertEqual(loaded.movie_name, "Persistence_Test")
+            self.assertEqual(loaded.errors, ["Test error"])
+            self.assertEqual(loaded.warnings, ["Test warning"])
+            self.assertEqual(loaded.pipeline_status, "COMPLETED")
+            self.assertEqual(loaded.phase_statuses.get("Phase 1"), "COMPLETED")
+
+if __name__ == "__main__":
+    unittest.main()

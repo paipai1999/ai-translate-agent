@@ -806,6 +806,9 @@ class VideoMergerAgent:
                         sp_cmd, cwd=ass_dir, capture_output=True, text=True,
                         timeout=dyn_timeout, encoding="utf-8", errors="replace"
                     )
+                    if os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+                        print("\n🛑 [STOP] VideoMerger: FFmpeg single-pass cancelled by user.")
+                        raise InterruptedError("Video rendering was cancelled by user.")
                     if res.returncode == 0 and os.path.exists(final_output) and os.path.getsize(final_output) > 1000:
                         single_pass_success = True
                         try:
@@ -823,6 +826,9 @@ class VideoMergerAgent:
                             fb_cmd, cwd=ass_dir, capture_output=True, text=True,
                             timeout=dyn_timeout, encoding="utf-8", errors="replace"
                         )
+                        if os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+                            print("\n🛑 [STOP] VideoMerger: FFmpeg CPU single-pass cancelled by user.")
+                            raise InterruptedError("Video rendering was cancelled by user.")
                         if res_cpu.returncode == 0 and os.path.exists(final_output) and os.path.getsize(final_output) > 1000:
                             single_pass_success = True
                             try:
@@ -2398,6 +2404,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         timeout_sec = max(600, int((duration_sec or 600.0) * 1.5))
         try:
             res = subprocess.run(cmd, cwd=temp_dir, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout_sec)
+            if os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+                print("\n🛑 [STOP] ReelsExporter: FFmpeg cancelled by user.")
+                raise InterruptedError("Reels rendering was cancelled by user.")
             if res.returncode == 0 and os.path.exists(temp_reels_out) and os.path.getsize(temp_reels_out) > 10_000:
                 shutil.move(temp_reels_out, reels_output)
                 print(f"🎉 [OK] ReelsExporter: Successfully created 9:16 Facebook Reels video -> {reels_output}")
@@ -2428,6 +2437,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     temp_reels_out
                 ]
                 res2 = subprocess.run(cmd_fallback, cwd=temp_dir, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout_sec)
+                if os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+                    print("\n🛑 [STOP] ReelsExporter: FFmpeg CPU fallback cancelled by user.")
+                    raise InterruptedError("Reels rendering was cancelled by user.")
                 if res2.returncode == 0 and os.path.exists(temp_reels_out) and os.path.getsize(temp_reels_out) > 10_000:
                     shutil.move(temp_reels_out, reels_output)
                     print(f"🎉 [OK] ReelsExporter: Created 9:16 Reels video via fallback -> {reels_output}")
