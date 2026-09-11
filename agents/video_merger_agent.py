@@ -2251,10 +2251,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 print("[*] ReelsExporter: Source video already contains burned subtitles. Skipping duplicate subtitle burn.")
                 burn_reels_subs = False
 
+        thumb_offset = 0.0
+        if getattr(state, "thumbnail_intro_enabled", False):
+            thumb_cfg = config_data.get("thumbnail_intro", {})
+            thumb_offset = float(thumb_cfg.get("duration_sec", 3.0))
+
         if burn_reels_subs and subtitle_timings:
             for item in subtitle_timings:
                 try:
-                    start_s = float(item[0])
+                    start_s = float(item[0]) + thumb_offset
                     dur_s   = float(item[1])
                     raw_txt = str(item[2]).strip()
                     if not raw_txt: continue

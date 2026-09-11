@@ -657,6 +657,14 @@ class MasterAgent:
                                 state=self.state,
                             )
                             self.state.reels_video_path = reels_path
+                            if reels_path and os.path.exists(reels_path) and self.video_format == "9:16":
+                                recap_16_9 = os.path.join(self.output_dir, self.state.project_dir, "final_recap.mp4")
+                                if os.path.exists(recap_16_9):
+                                    try:
+                                        os.remove(recap_16_9)
+                                        print("[*] MasterAgent: Video format '9:16' (Vertical Only) -> Kept only final_reels.mp4.")
+                                    except Exception:
+                                        pass
                         except Exception as e:
                             print(f"[WARN] MasterAgent: Failed to generate Reels video: {e}")
                             self.state.warnings.append(f"Reels generation failed: {e}")
