@@ -805,6 +805,9 @@
         <button class="btn-nav" id="btn-queue-badge" onclick="openQueueModal()" style="display:none; background:rgba(255,107,129,0.12); border-color:rgba(255,107,129,0.3); color:var(--accent); font-weight:600;" title="View background queued jobs">
             📥 Queue (<span id="queue-badge-count">0</span>)
         </button>
+        <button class="btn-nav" id="btn-cookies-badge" onclick="openCookiesModal()" style="background:rgba(255,165,2,0.12); border-color:rgba(255,165,2,0.3); color:var(--warn); font-weight:600;" title="YouTube Anti-Bot Cookies Manager">
+            🍪 Cookies: <span id="cookies-nav-status">Checking...</span>
+        </button>
         <button class="btn-nav" style="background:rgba(46,213,115,0.12); border-color:rgba(46,213,115,0.3); color:var(--success); font-weight:600;" onclick="openHealthModal()" title="System and service readiness diagnostic">
             🩺 Health Check
         </button>
@@ -833,9 +836,12 @@
                 <input class="url-input" type="text" id="input-source"
                     placeholder="Paste YouTube / DramaBox URL or local video path...">
                 
-                <input type="file" id="file-upload" accept="video/*,.txt" style="display: none;" onchange="handleFileUpload(this)">
-                <button class="btn-primary" id="btn-upload" style="background: white; border: 1px solid rgba(0,0,0,0.1); color: var(--text); box-shadow: 0 4px 10px rgba(0,0,0,0.03);" onclick="document.getElementById('file-upload').click()" title="Upload a video file or cookies.txt from your computer">
-                    <span id="btn-upload-text">📁 Upload Video / Cookies</span>
+                <input type="file" id="file-upload" accept="video/*,.txt" style="display: none;" onchange="handleVideoUpload(this)">
+                <button class="btn-primary" id="btn-upload" style="background: white; border: 1px solid rgba(0,0,0,0.1); color: var(--text); box-shadow: 0 4px 10px rgba(0,0,0,0.03);" onclick="document.getElementById('file-upload').click()" title="Upload a video file from your computer">
+                    <span id="btn-upload-text">📁 Upload</span>
+                </button>
+                <button class="btn-primary" id="btn-cookies-quick" type="button" style="background: rgba(255,165,2,0.14); border: 1px solid rgba(255,165,2,0.35); color: #d97706; font-weight:700; padding:0.5rem 0.9rem;" onclick="openCookiesModal()" title="Manage YouTube Anti-Bot Cookies">
+                    🍪 Cookies
                 </button>
                 <select class="lang-select" id="select-lang">
                     <option value="burmese" selected>🇲🇲 မြန်မာ (Auto Multi-Voice 👫)</option>
@@ -1242,13 +1248,227 @@
     </div>
 </div>
 
+<!-- ══ MODAL: YOUTUBE COOKIES MANAGER ══ -->
+<div id="cookies-modal-backdrop" class="modal-backdrop" onclick="if(event.target===this) closeCookiesModal()">
+    <div class="modal-dialog" style="max-width: 580px;">
+        <div class="modal-header">
+            <div class="modal-title">
+                <span>🍪 YouTube Anti-Bot Cookies Manager</span>
+            </div>
+            <button class="modal-close" onclick="closeCookiesModal()" title="Close">✕</button>
+        </div>
+        <div id="cookies-modal-body" style="padding: 1.25rem 0;">
+            <!-- Status Card -->
+            <div id="cookies-status-card" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; padding: 1rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <div style="font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <span>Status:</span>
+                        <span id="cookies-status-badge" class="health-badge warn">Checking...</span>
+                    </div>
+                    <div id="cookies-status-details" style="font-size: 0.8rem; color: var(--muted); margin-top: 0.35rem;">
+                        Scanning cookie paths...
+                    </div>
+                </div>
+                <button id="btn-delete-cookies" class="btn-delete" style="display:none; padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="deleteCookies()">
+                    🗑️ Delete Cookies
+                </button>
+            </div>
+
+            <!-- Upload / Paste Tabs -->
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                <button id="tab-cookies-upload" class="tab-btn active" style="flex:1; padding: 0.5rem; font-size: 0.85rem;" onclick="switchCookiesTab('upload')">📁 1-Click File Upload</button>
+                <button id="tab-cookies-paste" class="tab-btn" style="flex:1; padding: 0.5rem; font-size: 0.85rem;" onclick="switchCookiesTab('paste')">📝 Direct Paste Text</button>
+            </div>
+
+            <!-- Tab 1: Upload File -->
+            <div id="cookies-tab-upload-content">
+                <div style="border: 2px dashed rgba(255,165,2,0.4); border-radius: 12px; padding: 2rem; text-align: center; background: rgba(255,165,2,0.04); cursor: pointer;" onclick="document.getElementById('cookies-file-input').click()">
+                    <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">🍪</div>
+                    <div style="font-weight: 700; font-size: 0.95rem; color: var(--text);">Click here to select <code>cookies.txt</code></div>
+                    <div style="font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem;">Supports Netscape HTTP cookie format exported from Chrome / Firefox</div>
+                    <input type="file" id="cookies-file-input" accept=".txt" style="display:none;" onchange="handleCookiesFileUpload(this)">
+                </div>
+            </div>
+
+            <!-- Tab 2: Paste Text -->
+            <div id="cookies-tab-paste-content" style="display: none;">
+                <textarea id="cookies-paste-textarea" style="width: 100%; height: 160px; background: white; border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 0.75rem; font-family: monospace; font-size: 0.8rem; resize: vertical;" placeholder="# Netscape HTTP Cookie File&#10;.youtube.com TRUE / TRUE ...&#10;Paste exported cookies here..."></textarea>
+                <button class="btn-primary" style="margin-top: 0.75rem; width: 100%; padding: 0.6rem; font-weight: 700;" onclick="saveCookiesFromText()">
+                    💾 Save Cookies
+                </button>
+            </div>
+
+            <!-- Help / Instructions -->
+            <div style="margin-top: 1.25rem; background: rgba(0,0,0,0.02); border-radius: 8px; padding: 0.85rem; font-size: 0.78rem; color: var(--muted); line-height: 1.5;">
+                💡 <b>Cookies ရယူနည်း:</b><br>
+                ၁။ Chrome Browser တွင် Extension <code>Get cookies.txt LOCALLY</code> ကို Install ပြုလုပ်ပါ။<br>
+                ၂။ <a href="https://www.youtube.com" target="_blank" style="color:var(--accent);">youtube.com</a> သို့သွား၍ Login ဝင်ထားကြောင်း သေချာပါစေ။<br>
+                ၃။ Extension Icon ကိုနှိပ်ပြီး <b>Export</b> လုပ်ထားသော <code>cookies.txt</code> ဖိုင်ကို ဤနေရာတွင် တင်ပေးပါ သို့မဟုတ် စာသားများကို ကူးယူ၍ Paste ထည့်ပါ ခင်ဗျာ။
+            </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:0.5rem; border-top:1px solid rgba(0,0,0,0.06); padding-top:1rem;">
+            <button class="btn-nav" onclick="checkCookiesStatus()">🔄 Refresh Status</button>
+            <button class="btn-primary" style="padding:0.45rem 1.2rem; font-size:0.85rem;" onclick="closeCookiesModal()">Close</button>
+        </div>
+    </div>
+</div>
+
 <script>
-    async function handleFileUpload(inputElement) {
+    function openCookiesModal() {
+        const modal = document.getElementById('cookies-modal-backdrop');
+        if (modal) modal.classList.add('active');
+        checkCookiesStatus();
+    }
+
+    function closeCookiesModal() {
+        const modal = document.getElementById('cookies-modal-backdrop');
+        if (modal) modal.classList.remove('active');
+    }
+
+    function switchCookiesTab(tab) {
+        const upTab = document.getElementById('tab-cookies-upload');
+        const psTab = document.getElementById('tab-cookies-paste');
+        const upContent = document.getElementById('cookies-tab-upload-content');
+        const psContent = document.getElementById('cookies-tab-paste-content');
+        if (tab === 'upload') {
+            upTab.classList.add('active'); psTab.classList.remove('active');
+            upContent.style.display = 'block'; psContent.style.display = 'none';
+        } else {
+            psTab.classList.add('active'); upTab.classList.remove('active');
+            psContent.style.display = 'none'; psContent.style.display = 'block';
+        }
+    }
+
+    async function checkCookiesStatus() {
+        try {
+            const res = await fetch('/api/cookies/status');
+            if (!res.ok) return;
+            const data = await res.json();
+            
+            // Nav badge
+            const navStatus = document.getElementById('cookies-nav-status');
+            const navBtn = document.getElementById('btn-cookies-badge');
+            if (navStatus && navBtn) {
+                if (data.installed && data.has_youtube) {
+                    navStatus.textContent = 'Active ✅';
+                    navBtn.style.background = 'rgba(46,213,115,0.12)';
+                    navBtn.style.borderColor = 'rgba(46,213,115,0.3)';
+                    navBtn.style.color = 'var(--success)';
+                } else if (data.installed) {
+                    navStatus.textContent = 'Installed ⚠️';
+                    navBtn.style.background = 'rgba(255,165,2,0.12)';
+                    navBtn.style.borderColor = 'rgba(255,165,2,0.3)';
+                    navBtn.style.color = 'var(--warn)';
+                } else {
+                    navStatus.textContent = 'Not Set ❌';
+                    navBtn.style.background = 'rgba(255,71,87,0.12)';
+                    navBtn.style.borderColor = 'rgba(255,71,87,0.3)';
+                    navBtn.style.color = 'var(--error)';
+                }
+            }
+
+            // Modal elements
+            const badge = document.getElementById('cookies-status-badge');
+            const details = document.getElementById('cookies-status-details');
+            const delBtn = document.getElementById('btn-delete-cookies');
+            if (badge && details) {
+                if (data.installed) {
+                    badge.className = data.has_youtube ? 'health-badge ok' : 'health-badge warn';
+                    badge.textContent = data.has_youtube ? 'YouTube Authenticated ✅' : 'Installed (No YouTube) ⚠️';
+                    details.innerHTML = `📁 <b>File:</b> <code>${data.path}</code> (${data.size_kb} KB, ${data.cookie_count} cookies)<br>⏱️ Last modified: ${data.last_modified || 'Unknown'}`;
+                    if (delBtn) delBtn.style.display = 'inline-block';
+                } else {
+                    badge.className = 'health-badge err';
+                    badge.textContent = 'No Cookies Installed ❌';
+                    details.textContent = 'YouTube cookies.txt is missing. Upload or paste below to bypass datacenter IP bot detection!';
+                    if (delBtn) delBtn.style.display = 'none';
+                }
+            }
+        } catch (e) {
+            console.error('Cookies status check error:', e);
+        }
+    }
+
+    async function handleCookiesFileUpload(input) {
+        if (!input.files || !input.files[0]) return;
+        const file = input.files[0];
+        const formData = new FormData();
+        formData.append('video', file);
+
+        showToast('⏳ Uploading cookies.txt...', 'info');
+        try {
+            const res = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                showToast('🍪 YouTube Cookies uploaded and installed successfully! ✅', 'success');
+                checkCookiesStatus();
+            } else {
+                showToast(`❌ Cookie upload failed: ${data.detail || data.error || 'Unknown error'}`, 'error');
+            }
+        } catch (e) {
+            showToast(`❌ Cookie upload error: ${e.message}`, 'error');
+        } finally {
+            input.value = '';
+        }
+    }
+
+    async function saveCookiesFromText() {
+        const text = document.getElementById('cookies-paste-textarea').value.trim();
+        if (!text) {
+            showToast('❌ Please paste cookies text first!', 'error');
+            return;
+        }
+        showToast('⏳ Saving cookies...', 'info');
+        try {
+            const res = await fetch('/api/cookies/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: text })
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                showToast(`🍪 ${data.message} ✅`, 'success');
+                document.getElementById('cookies-paste-textarea').value = '';
+                checkCookiesStatus();
+            } else {
+                showToast(`❌ Save failed: ${data.detail || data.error}`, 'error');
+            }
+        } catch (e) {
+            showToast(`❌ Save error: ${e.message}`, 'error');
+        }
+    }
+
+    async function deleteCookies() {
+        if (!confirm('Are you sure you want to delete the active cookies.txt?')) return;
+        try {
+            const res = await fetch('/api/cookies', { method: 'DELETE' });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                showToast('🗑️ Cookies removed successfully!', 'info');
+                checkCookiesStatus();
+            } else {
+                showToast('❌ Failed to delete cookies', 'error');
+            }
+        } catch (e) {
+            showToast(`❌ Error: ${e.message}`, 'error');
+        }
+    }
+
+    async function handleVideoUpload(inputElement) {
         if (!inputElement.files || inputElement.files.length === 0) return;
         const file = inputElement.files[0];
         
+        // Auto-detect if user picked cookies.txt in video upload
+        if (file.name.toLowerCase().endsWith('.txt') || file.name.toLowerCase().includes('cookie')) {
+            handleCookiesFileUpload(inputElement);
+            return;
+        }
+
         if (!file.type.startsWith('video/') && !file.name.match(/\.(mp4|mkv|avi|mov|webm|flv|m4v)$/i)) {
-            alert("Please select a valid video file.");
+            alert("Please select a valid video file or cookies.txt.");
             inputElement.value = '';
             return;
         }
@@ -1257,8 +1477,8 @@
         formData.append('video', file);
         
         const uploadBtnText = document.getElementById('btn-upload-text');
-        const origText = uploadBtnText.innerText;
-        uploadBtnText.innerText = "⏳ Uploading...";
+        const origText = uploadBtnText ? uploadBtnText.innerText : "📁 Upload";
+        if (uploadBtnText) uploadBtnText.innerText = "⏳ Uploading Video...";
         document.getElementById('btn-upload').disabled = true;
         
         try {
@@ -1268,7 +1488,8 @@
             });
             const data = await res.json();
             if (res.ok && data.success) {
-                document.getElementById('input-source').value = data.filename;
+                showToast(`🎬 Video uploaded: ${data.filename} ✅`, 'success');
+                document.getElementById('input-source').value = 'movies/' + data.filename;
                 loadMovies();
             } else {
                 alert("Upload failed: " + (data.error || "Unknown error"));
@@ -1276,7 +1497,7 @@
         } catch (err) {
             alert("Upload error: " + err);
         } finally {
-            uploadBtnText.innerText = origText;
+            if (uploadBtnText) uploadBtnText.innerText = origText;
             document.getElementById('btn-upload').disabled = false;
             inputElement.value = '';
         }
@@ -3014,6 +3235,7 @@
     initializeLightCanvas();
     loadBrandingSettings();
     loadSubStyleSettings();
+    checkCookiesStatus();
 </script>
 </body>
 </html>

@@ -673,6 +673,9 @@ class RenameRequest(BaseModel):
 class SaveKeysRequest(BaseModel):
     keys: List[str]
 
+class CookieSaveRequest(BaseModel):
+    content: str
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse(request=request, name="index.html")
@@ -829,6 +832,111 @@ def get_active_job():
                     "created_at": jdata.get("created_at")
                 }
     return {"job_id": None, "status": "idle"}
+
+def _get_cookie_paths():
+    return [
+        "cookies.txt",
+        os.path.join("assets", "cookies.txt"),
+        "/kaggle/working/cookies.txt",
+        "/kaggle/working/ai-translate-agent/cookies.txt",
+        "/content/cookies.txt",
+        "/content/drive/MyDrive/MovieRecapOutputs/cookies.txt"
+    ]
+
+def _save_cookie_content(content_bytes: bytes):
+    saved_paths = []
+    # 1. Local and assets/
+    for p in ["cookies.txt", os.path.join("assets", "cookies.txt")]:
+        try:
+            os.makedirs(os.path.dirname(os.path.abspath(p)), exist_ok=True)
+            with open(p, "wb") as f:
+                f.write(content_bytes)
+            saved_paths.append(p)
+        except Exception:
+            pass
+    # 2. Google Drive for Colab
+    drive_out = "/content/drive/MyDrive/MovieRecapOutputs"
+    if os.path.exists(drive_out):
+        try:
+            dp = os.path.join(drive_out, "cookies.txt")
+            with open(dp, "wb") as df:
+                df.write(content_bytes)
+            saved_paths.append(dp)
+        except Exception:
+            pass
+    # 3. Kaggle working directory
+    for kp in ["/kaggle/working/cookies.txt", "/kaggle/working/ai-translate-agent/cookies.txt"]:
+        if os.path.exists(os.path.dirname(kp)):
+            try:
+                with open(kp, "wb") as kf:
+                    kf.write(content_bytes)
+                saved_paths.append(kp)
+            except Exception:
+                pass
+    return saved_paths
+
+@app.get("/api/cookies/status")
+def get_cookies_status():
+    candidates = _get_cookie_paths()
+    import glob
+    for k_match in glob.glob('/kaggle/input/**/cookies*.txt', recursive=True):
+        candidates.append(k_match)
+
+    found_path = None
+    file_size = 0
+    mtime = None
+    has_youtube = False
+    cookie_count = 0
+
+    for c in candidates:
+        if os.path.exists(c) and os.path.getsize(c) > 10:
+            found_path = c
+            file_size = os.path.getsize(c)
+            try:
+                mtime = time.ctime(os.path.getmtime(c))
+                with open(c, "r", encoding="utf-8", errors="ignore") as f:
+                    text = f.read()
+                has_youtube = "youtube.com" in text.lower()
+                cookie_count = len([line for line in text.splitlines() if line.strip() and not line.startswith("#")])
+            except Exception:
+                pass
+            break
+
+    return {
+        "installed": bool(found_path),
+        "path": found_path,
+        "size_bytes": file_size,
+        "size_kb": round(file_size / 1024, 2),
+        "has_youtube": has_youtube,
+        "cookie_count": cookie_count,
+        "last_modified": mtime
+    }
+
+@app.post("/api/cookies/save")
+def save_cookies_text(req: CookieSaveRequest):
+    content = (req.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Cookies content is empty")
+    content_bytes = content.encode("utf-8")
+    saved_paths = _save_cookie_content(content_bytes)
+    return {
+        "success": True,
+        "message": f"Cookies saved successfully to {len(saved_paths)} location(s)!",
+        "saved_paths": saved_paths,
+        "bytes": len(content_bytes)
+    }
+
+@app.delete("/api/cookies")
+def delete_cookies():
+    deleted = []
+    for c in _get_cookie_paths():
+        if os.path.exists(c):
+            try:
+                os.remove(c)
+                deleted.append(c)
+            except Exception:
+                pass
+    return {"success": True, "deleted": deleted}
 
 @app.post("/api/upload")
 async def upload_file(video: UploadFile = File(...)):
