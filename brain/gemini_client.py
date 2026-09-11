@@ -21,16 +21,14 @@ def _mask_key(key: str) -> str:
 # 6. gemini-3.7-flash         : Advanced reasoning & translation (5 RPM)
 _FALLBACK_MODELS = [
     "gemini-3.5-flash-lite",
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
+    "gemini-2.5-flash-lite",
     "gemini-3.1-flash-lite",
     "gemini-3.5-flash",
     "gemini-3.6-flash",
-    "gemini-3.8-flash",
     "gemini-3.7-flash",
-    "gemini-flash-lite-latest",
-    "gemini-flash-latest",
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
+    "gemini-3.8-flash",
 ]
 
 # How many seconds to wait when ALL keys are rate-limited before retrying.
@@ -216,15 +214,22 @@ def call_gemini(
         if attempt < 2:
             is_rate_limit = (
                 isinstance(last_err, urllib.error.HTTPError)
-                and last_err.code == 429
+                and last_err.code in (429, 503)
             )
             if is_rate_limit:
-                wait_time = 30 if getattr(last_err, "is_quota", False) else _RPM_WAIT_SEC
-                print(
-                    f"[!] All API keys hit 429 Rate Limit! "
-                    f"Waiting {wait_time}s for quota window to reset "
-                    f"(attempt {attempt + 1}/3)..."
-                )
+                if getattr(last_err, "code", None) == 503:
+                    wait_time = 10
+                    print(
+                        f"[!] Gemini models temporarily overloaded (HTTP 503). "
+                        f"Waiting {wait_time}s before retrying (attempt {attempt + 1}/3)..."
+                    )
+                else:
+                    wait_time = 30 if getattr(last_err, "is_quota", False) else _RPM_WAIT_SEC
+                    print(
+                        f"[!] All API keys hit 429 Rate Limit! "
+                        f"Waiting {wait_time}s for quota window to reset "
+                        f"(attempt {attempt + 1}/3)..."
+                    )
                 time.sleep(wait_time)
             else:
                 break   # non-transient error — stop retrying
