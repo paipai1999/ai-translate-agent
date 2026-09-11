@@ -27,8 +27,10 @@ class BatchProcessor:
         source_language: str = "auto",
         resume: bool = True,
         cancel_event=None,
+        output_dir: str = None,
     ):
         self.movies_folder = movies_folder
+        self.output_dir = output_dir or cfg.load_config().get("paths", {}).get("output_dir", "outputs")
         self.skip_completed = skip_completed
         self.resume = bool(resume)
         self.cancel_event = cancel_event
@@ -53,8 +55,7 @@ class BatchProcessor:
         try:
             movie_name = os.path.splitext(os.path.basename(movie_path))[0]
             project_dir = MovieState(movie_name=movie_name).project_dir
-            output_dir = cfg.load_config().get("paths", {}).get("output_dir", "outputs")
-            state_file = os.path.join(output_dir, project_dir, "state.json")
+            state_file = os.path.join(self.output_dir, project_dir, "state.json")
             if not os.path.exists(state_file):
                 return False
             # Verify the state file is valid JSON and pipeline reached 100%
@@ -197,8 +198,8 @@ class BatchProcessor:
         print(f"{'='*55}")
 
         # Save summary to JSON
-        summary_path = os.path.join("outputs", "batch_summary.json")
-        os.makedirs("outputs", exist_ok=True)
+        summary_path = os.path.join(self.output_dir, "batch_summary.json")
+        os.makedirs(self.output_dir, exist_ok=True)
         with open(summary_path, "w", encoding="utf-8") as f:
             json.dump(self.results, f, indent=4)
         print(f"[SAVED] Batch summary saved -> {summary_path}")

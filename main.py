@@ -40,7 +40,11 @@ def run_interactive_cleanup():
         if not os.path.exists(out_dir) or not os.listdir(out_dir):
             print("[INFO] No outputs found.")
             return
-        items = sorted(os.listdir(out_dir))
+        PROTECTED_SYSTEM_FILES = {"api_usage_db.json", "movie_metadata.db"}
+        items = sorted([f for f in os.listdir(out_dir) if f not in PROTECTED_SYSTEM_FILES])
+        if not items:
+            print("[INFO] No project outputs found to delete.")
+            return
         for i, name in enumerate(items, 1):
             print(f"  {i}. {name}")
         sel = input("\nEnter number to delete (or 'all' for everything, 0 to cancel): ").strip().lower()
@@ -55,6 +59,8 @@ def run_interactive_cleanup():
                         except Exception: pass
 
                 for name in items:
+                    if name in PROTECTED_SYSTEM_FILES:
+                        continue
                     _safe_remove_path(os.path.join("outputs", name))
                     _safe_remove_path(os.path.join("temp", name))
                 print("[OK] All outputs and associated temp files deleted!")
