@@ -28,9 +28,9 @@
     "whisper_model": "base",
     "scene_threshold": 30.0,
     "max_characters": 6,
-    "max_scenes_for_llm": 50,
+    "max_scenes_for_llm": 30,
     "parallel_processing": true,
-    "use_demucs": true,
+    "use_demucs": false,
     "scene_detection": false
   },
   "voice": {
@@ -68,7 +68,7 @@
   "watermark": {
     "enabled": true,
     "text": "PAI AI Movie Translate",
-    "opacity": 0.4,
+    "opacity": 0.5,
     "margin": 30,
     "font_size": 40,
     "position": "bottom_left",

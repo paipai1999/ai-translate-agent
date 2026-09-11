@@ -257,8 +257,8 @@ def load_config() -> dict:
             
         merged = _deep_merge(DEFAULT_CONFIG, user_config)
 
-        # Auto-detect environment GEMINI_API_KEY or GEMINI_API_KEYS
-        env_keys = os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEYS")
+        # Auto-detect environment GEMINI_API_KEYS or GEMINI_API_KEY
+        env_keys = os.getenv("GEMINI_API_KEYS") or os.getenv("GEMINI_API_KEY")
         if env_keys:
             parsed_env = [k.strip() for k in env_keys.replace("\r\n", ",").replace("\n", ",").replace(";", ",").split(",") if k.strip()]
             if parsed_env:

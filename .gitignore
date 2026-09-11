@@ -26,3 +26,7 @@ assets/cookies.txt
 private/
 
 .tmp.driveupload/
+temp_test*/
+*.tmp
+SYSTEM_AUDIT*.md
+system_audit*.md

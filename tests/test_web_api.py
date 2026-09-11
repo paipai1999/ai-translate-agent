@@ -79,6 +79,41 @@ class TestWebAPISecurityAndLifecycle(unittest.TestCase):
             # Clean up
             jobs.pop("test_recent_cancelled_job", None)
 
+    def test_cors_credentials_disabled(self):
+        """Verify CORS allow_credentials is False to comply with W3C spec for wildcard origins."""
+        from web_ui import app
+        cors_middlewares = [m for m in app.user_middleware if "CORSMiddleware" in str(m.cls)]
+        if cors_middlewares:
+            cors_kw = cors_middlewares[0].kwargs
+            self.assertFalse(cors_kw.get("allow_credentials", True))
+
+    def test_web_ui_password_auth_protection(self):
+        """Verify WEB_UI_PASSWORD blocks unauthenticated requests with HTTP 401."""
+        from web_ui import app
+        from fastapi.testclient import TestClient
+        client = TestClient(app)
+        
+        old_pw = os.environ.get("WEB_UI_PASSWORD")
+        try:
+            os.environ["WEB_UI_PASSWORD"] = "SecretPassword123"
+            
+            # Unauthenticated request should get 401
+            res = client.get("/api/config")
+            self.assertEqual(res.status_code, 401)
+
+            # Authenticated with query param
+            res_auth = client.get("/api/config?token=SecretPassword123")
+            self.assertEqual(res_auth.status_code, 200)
+
+            # Authenticated with Bearer header
+            res_hdr = client.get("/api/config", headers={"Authorization": "Bearer SecretPassword123"})
+            self.assertEqual(res_hdr.status_code, 200)
+        finally:
+            if old_pw:
+                os.environ["WEB_UI_PASSWORD"] = old_pw
+            else:
+                os.environ.pop("WEB_UI_PASSWORD", None)
+
 
 if __name__ == "__main__":
     unittest.main()

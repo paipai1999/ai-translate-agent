@@ -13,7 +13,7 @@ from urllib.parse import quote
 from typing import Optional, List
 
 from fastapi import FastAPI, Request, UploadFile, File, HTTPException, Query
-from fastapi.responses import HTMLResponse, FileResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, FileResponse, PlainTextResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -48,10 +48,66 @@ app = FastAPI(title="AI Movie Recap API", version="2.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def _is_authenticated(request: Request) -> bool:
+    auth_secret = os.getenv("WEB_UI_PASSWORD") or os.getenv("WEB_UI_TOKEN")
+    if not auth_secret:
+        return True
+
+    # 1. Bearer token in Authorization header
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+        if token == auth_secret:
+            return True
+
+    # 2. Custom header
+    if request.headers.get("x-auth-token", "").strip() == auth_secret:
+        return True
+
+    # 3. Query param (for testing or direct browser links)
+    q_token = request.query_params.get("token") or request.query_params.get("auth") or request.query_params.get("password")
+    if q_token and q_token.strip() == auth_secret:
+        return True
+
+    # 4. Cookie
+    if request.cookies.get("web_ui_token", "").strip() == auth_secret:
+        return True
+
+    return False
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    auth_secret = os.getenv("WEB_UI_PASSWORD") or os.getenv("WEB_UI_TOKEN")
+    if auth_secret:
+        path = request.url.path
+        exempt = path in ["/api/login", "/api/auth/status", "/favicon.ico"] or path.startswith("/static")
+        if not exempt and not _is_authenticated(request):
+            if path.startswith("/api/"):
+                return JSONResponse(status_code=401, content={"status": "error", "detail": "Unauthorized: Password or Token required"})
+            return HTMLResponse(
+                content="""<!DOCTYPE html><html><head><title>Dashboard Login</title><meta name='viewport' content='width=device-width, initial-scale=1'>
+<style>body{font-family:-apple-system,sans-serif;background:#0d1117;color:#c9d1d9;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
+.box{background:#161b22;padding:32px;border-radius:12px;border:1px solid #30363d;max-width:360px;width:90%;text-align:center;}
+input{width:100%;box-sizing:border-box;padding:12px;margin:16px 0;background:#0d1117;border:1px solid #30363d;color:#fff;border-radius:6px;font-size:15px;}
+button{width:100%;padding:12px;background:#238636;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:bold;font-size:15px;}
+button:hover{background:#2ea043;}
+</style></head><body><div class='box'><h2>🔒 Login Required</h2><p style='color:#8b949e;font-size:14px;'>This Movie Recap Web UI is password-protected.</p>
+<form method='GET' action='/'><input type='password' name='token' placeholder='Enter Password / Token' required/><button type='submit'>Access Dashboard</button></form>
+</div></body></html>""",
+                status_code=401
+            )
+
+    response = await call_next(request)
+    if auth_secret and _is_authenticated(request):
+        q_token = request.query_params.get("token") or request.query_params.get("auth") or request.query_params.get("password")
+        if q_token and q_token.strip() == auth_secret:
+            response.set_cookie("web_ui_token", auth_secret, max_age=86400 * 7, httponly=True, samesite="lax")
+    return response
 
 templates = Jinja2Templates(directory="templates")
 
