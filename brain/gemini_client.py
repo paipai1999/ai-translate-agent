@@ -111,7 +111,7 @@ def call_gemini(
     # Up to 3 full rotation attempts (with 65-second RPM-reset waits in between)
     for attempt in range(3):
         for m in models_to_try:
-            limit = int(model_limits.get(m, 20))
+            limit = int(model_limits.get(m, 500 if "flash" in m else 50))
             model_404 = False  # FIX-W2: track per-model 404 to skip whole model
             for key in api_keys:
                 if model_404:
@@ -266,7 +266,7 @@ def call_gemini_vision(
 
     for attempt in range(3):
         for m in models_to_try:
-            limit = int(model_limits.get(m, 20))
+            limit = int(model_limits.get(m, 500 if "flash" in m else 50))
             model_404 = False  # FIX-W2: track per-model 404
             for key in api_keys:
                 if model_404:
