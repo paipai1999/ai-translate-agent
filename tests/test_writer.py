@@ -59,6 +59,24 @@ class TestLanguagePreservation(unittest.TestCase):
         self.assertIn("100", rewritten)
         self.assertNotIn("ဗွီအိုင်ပီ", rewritten)
 
+    def test_qa_agent_auto_rewrite_recognizes_mm_alias(self):
+        """Verify QAAgent applies Burmese transliteration when state.language is 'mm'."""
+        qa = QAAgent()
+        state = MovieState(movie_name="test_mm_movie")
+        state.language = "mm"
+        state.generated_script = [
+            {"scene_id": "scene_1", "narration": "အခန်း 105 VIP ဧည့်သည် ရောက်လာပါပြီ။"}
+        ]
+        lang_result = {
+            "blocks": [
+                {"scene_id": "scene_1", "score": 4, "suggested_rewrite": "အခန်း 105 VIP ဧည့်သည် ရောက်လာပါပြီ။"}
+            ]
+        }
+        state = qa._apply_rewrites(state, lang_result, threshold=6)
+        rewritten = state.generated_script[0]["narration"]
+        self.assertIn("တစ်ရာ့ငါး", rewritten)
+        self.assertIn("ဗွီအိုင်ပီ", rewritten)
+
 
 if __name__ == "__main__":
     unittest.main()

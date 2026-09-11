@@ -260,22 +260,22 @@ def pipeline_worker(
                 tts_voice_override = "en-US-GuyNeural"
             elif tts_voice_override in ["jenny", "english_jenny"]:
                 tts_voice_override = "en-US-JennyNeural"
-        elif language == "burmese_thiha":
+        elif language in ["burmese_thiha", "thiha"]:
             clean_lang = "burmese"
             tts_voice_override = "my-MM-ThihaNeural"
-        elif language == "burmese_nilar":
+        elif language in ["burmese_nilar", "nilar"]:
             clean_lang = "burmese"
             tts_voice_override = "my-MM-NilarNeural"
-        elif language == "burmese":
+        elif language in ["burmese", "mm", "myanmar"]:
             clean_lang = "burmese"
             tts_voice_override = "my-MM-ThihaNeural"  # Auto multi-voice enabled
-        elif language == "english_guy":
+        elif language in ["english_guy", "guy"]:
             clean_lang = "english"
             tts_voice_override = "en-US-GuyNeural"
-        elif language == "english_jenny":
+        elif language in ["english_jenny", "jenny"]:
             clean_lang = "english"
             tts_voice_override = "en-US-JennyNeural"
-        elif language == "english":
+        elif language in ["english", "en"]:
             clean_lang = "english"
             tts_voice_override = "en-US-GuyNeural"    # Auto multi-voice enabled
 
@@ -410,22 +410,22 @@ def batch_worker(
                 tts_voice_override = "en-US-GuyNeural"
             elif tts_voice_override in ["jenny", "english_jenny"]:
                 tts_voice_override = "en-US-JennyNeural"
-        elif language == "burmese_thiha":
+        elif language in ["burmese_thiha", "thiha"]:
             clean_lang = "burmese"
             tts_voice_override = "my-MM-ThihaNeural"
-        elif language == "burmese_nilar":
+        elif language in ["burmese_nilar", "nilar"]:
             clean_lang = "burmese"
             tts_voice_override = "my-MM-NilarNeural"
-        elif language == "burmese":
+        elif language in ["burmese", "mm", "myanmar"]:
             clean_lang = "burmese"
             tts_voice_override = "my-MM-ThihaNeural"
-        elif language == "english_guy":
+        elif language in ["english_guy", "guy"]:
             clean_lang = "english"
             tts_voice_override = "en-US-GuyNeural"
-        elif language == "english_jenny":
+        elif language in ["english_jenny", "jenny"]:
             clean_lang = "english"
             tts_voice_override = "en-US-JennyNeural"
-        elif language == "english":
+        elif language in ["english", "en"]:
             clean_lang = "english"
             tts_voice_override = "en-US-GuyNeural"
 

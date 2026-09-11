@@ -299,7 +299,7 @@ class WriterAgent:
                     emotion = str(item.get("emotion", "normal")).strip()
                     gender = str(item.get("gender", "male")).strip().lower()
                     character = str(item.get("character", "Narrator")).strip()
-                    if getattr(self, "language", "burmese").lower() == "burmese":
+                    if getattr(self, "language", "burmese").lower() in ["burmese", "mm", "myanmar"]:
                         try:
                             from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
                             narration = replace_numbers_with_burmese(narration)
@@ -325,7 +325,7 @@ class WriterAgent:
                             )
                             clean_line = line_res.strip().strip('"').strip("'").strip()
                             if clean_line and not any(bad in clean_line.lower() for bad in ["json", "```", "here is", "here's"]):
-                                if getattr(self, "language", "burmese").lower() == "burmese":
+                                if getattr(self, "language", "burmese").lower() in ["burmese", "mm", "myanmar"]:
                                     try:
                                         from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
                                         clean_line = replace_numbers_with_burmese(clean_line)
@@ -454,7 +454,7 @@ class WriterAgent:
                         pass
                 txt = txt.strip().strip('"').strip("'").strip()
                 if txt and len(txt) > 4:
-                    if getattr(self, "language", "burmese").lower() == "burmese":
+                    if getattr(self, "language", "burmese").lower() in ["burmese", "mm", "myanmar"]:
                         try:
                             from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
                             txt = replace_numbers_with_burmese(txt)

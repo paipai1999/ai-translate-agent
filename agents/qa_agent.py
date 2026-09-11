@@ -163,7 +163,7 @@ class QAAgent:
 
                         if new_text and str(new_text).strip():
                             new_text = str(new_text).strip()
-                            if getattr(state, "language", "burmese").lower() == "burmese":
+                            if getattr(state, "language", "burmese").lower() in ["burmese", "mm", "myanmar"]:
                                 new_text = replace_numbers_with_burmese(new_text)
                                 new_text = transliterate_english_acronyms(new_text)
                             state.generated_script[idx]["narration"] = new_text
@@ -370,7 +370,7 @@ class QAAgent:
             if sid in rewrite_map:
                 old = block.get("narration", "")
                 rewritten_text = str(rewrite_map[sid]).strip()
-                if getattr(state, "language", "burmese").lower() == "burmese":
+                if getattr(state, "language", "burmese").lower() in ["burmese", "mm", "myanmar"]:
                     rewritten_text = replace_numbers_with_burmese(rewritten_text)
                     rewritten_text = transliterate_english_acronyms(rewritten_text)
                 block["narration"] = rewritten_text
