@@ -764,7 +764,7 @@
             </div>
             <div style="display:inline-flex; align-items:center; gap:0.5rem;">
                 <span class="strip-title" style="color:var(--muted); font-weight:700;">🎙️ Script Engine:</span>
-                <select class="lang-select" id="select-script-engine" style="padding:0.35rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600; color:#00ffcc; border-color:rgba(0,255,204,0.3);">
+                <select class="lang-select" id="select-script-engine" onchange="updateScriptEngineSetting(this.value)" style="padding:0.35rem 0.75rem; font-size:0.82rem; border-radius:8px; font-weight:600; color:#00ffcc; border-color:rgba(0,255,204,0.3);">
                     <option value="recap" selected>🎬 Recap Engine (ဇာတ်လမ်းပြောပြသူ စတိုင်)</option>
                     <option value="translate">🗣️ Translate Engine (၁:၁ တိုက်ရိုက် စကားပြန်စတိုင်)</option>
                 </select>
@@ -2240,6 +2240,20 @@
                 const chkScene = document.getElementById('chk-scene-detect');
                 if (chkScene) chkScene.checked = !!cfg.pipeline.scene_detection;
             }
+            if (cfg.pipeline && cfg.pipeline.script_engine) {
+                const selEngine = document.getElementById('select-script-engine');
+                if (selEngine) selEngine.value = cfg.pipeline.script_engine;
+            }
+        } catch (e) { console.error(e); }
+    }
+
+    async function updateScriptEngineSetting(engine) {
+        try {
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script_engine: engine })
+            });
         } catch (e) { console.error(e); }
     }
 

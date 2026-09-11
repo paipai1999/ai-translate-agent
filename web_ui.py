@@ -1260,6 +1260,11 @@ async def handle_config(request: Request):
                 config_data["pipeline"] = {}
             config_data["pipeline"]["scene_detection"] = bool(data["scene_detection"])
             cfg.save_config(config_data)
+        if "script_engine" in data:
+            if "pipeline" not in config_data:
+                config_data["pipeline"] = {}
+            config_data["pipeline"]["script_engine"] = str(data["script_engine"]).strip().lower()
+            cfg.save_config(config_data)
         public_config = json.loads(json.dumps(config_data))
         public_config.get("gemini", {}).pop("api_keys", None)
         return {"success": True, "config": public_config}
