@@ -10,13 +10,6 @@ class ThumbnailAgent:
         config_data = cfg.load_config()
         self.output_dir = config_data.get("paths", {}).get("output_dir", "outputs")
 
-    def generate_thumbnail(self, state: MovieState, movie_path: str) -> MovieState:
-        """Legacy synchronous wrapper."""
-        temp_base = self.extract_base_frame(state, movie_path)
-        if temp_base:
-            return self.overlay_text(state, temp_base)
-        return state
-
     def extract_base_frame(self, state: MovieState, movie_path: str) -> str:
         """Extracts a frame from the movie and applies background gradient/blur. Returns temp_base path."""
         print(f"[*] ThumbnailAgent: Extracting base frame for '{state.movie_name}'...")
