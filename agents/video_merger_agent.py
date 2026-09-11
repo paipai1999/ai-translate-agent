@@ -674,8 +674,9 @@ class VideoMergerAgent:
 
             # --- FILTERGRAPH GENERATOR (Modular for safe fallbacks) ---
             def _build_filtergraph(include_blur: bool):
+                scale_flt = "scale=-2:720," if self.resolution == "720p" else ""
                 flt_parts = [
-                    "[0:v]crop=w='trunc(iw/2)*2':h='trunc(ih/2)*2'[v_base]"
+                    f"[0:v]{scale_flt}crop=w='trunc(iw/2)*2':h='trunc(ih/2)*2'[v_base]"
                 ]
                 last_v = "[v_base]"
 
@@ -771,7 +772,7 @@ class VideoMergerAgent:
                 return ";".join(flt_parts), r_stream
 
             dur_sec = video_dur if video_dur > 0 else (getattr(state, "duration_sec", 0.0) if state else 0.0)
-            dyn_timeout = max(1200, int((dur_sec or 600.0) * 2.5))
+            dyn_timeout = max(2400, int((dur_sec or 600.0) * 4.0))
 
             def _build_sp_cmd(curr_codec, curr_preset, curr_quality, curr_blur):
                 flt_str, r_stream = _build_filtergraph(curr_blur)
