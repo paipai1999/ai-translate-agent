@@ -551,10 +551,9 @@
             color: var(--success);
             border: 1px solid rgba(46, 213, 115, 0.2);
             border-radius: 20px; font-weight: 600;
-        }
-        .keys-grid {
+        }        .keys-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
             gap: 1rem;
         }
         .key-card {
@@ -569,7 +568,7 @@
         /* ── Outputs / Movies Grid ── */
         .outputs-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
             gap: 1.25rem;
             margin-top: 1.25rem;
         }
@@ -584,6 +583,7 @@
         .output-card:hover { border-color: var(--accent); transform: translateY(-4px); box-shadow: 0 24px 48px rgba(0,0,0,0.08); }
         .output-card h3 {
             color: var(--accent); font-size: 1.05rem; margin-bottom: 0.5rem;
+            word-break: break-word;
         }
         .file-link {
             display: flex; align-items: center; gap: 0.4rem;
@@ -592,10 +592,11 @@
             border-bottom: 1px solid rgba(0,0,0,0.04);
             font-size: 0.85rem;
             transition: color 0.2s;
+            word-break: break-all;
         }
         .file-link:hover { color: var(--accent); }
         audio { width: 100%; margin-top: 0.4rem; height: 34px; }
-        video { border-radius: 10px; background: #000; }
+        video { border-radius: 10px; background: #000; width: 100%; height: auto; max-height: 480px; }
 
         .video-wrap {
             margin: 0.75rem 0;
@@ -607,6 +608,7 @@
         .video-title {
             font-size: 0.88rem; font-weight: 700; color: var(--accent);
             margin-bottom: 0.6rem;
+            word-break: break-word;
         }
         .download-btn {
             display: inline-flex; align-items: center; gap: 0.4rem;
@@ -660,20 +662,21 @@
         .log-box::-webkit-scrollbar, .phase-steps::-webkit-scrollbar { height: 6px; width: 6px; }
         .log-box::-webkit-scrollbar-thumb, .phase-steps::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
 
-        /* Responsive */
-        @media(max-width: 640px) {
-            nav { padding: 0.75rem 1.25rem; }
-            .page { padding: 1.5rem 1rem 3rem; }
-            .input-row { flex-direction: column; }
-            .input-row > * { width: 100%; }
-            .phase-connector { width: 24px; }
+        /* ── Branding Strip ── */
+        .branding-strip {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+            gap: 1rem;
+            margin-top: 1.25rem;
+            padding-top: 1rem;
+            border-top: 1px dashed rgba(0,0,0,0.08);
         }
 
-        /* Modal Dialog Styles */
+        /* ── Modal Dialog Styles ── */
         .modal-backdrop {
             position: fixed;
             inset: 0;
-            background: rgba(15, 23, 42, 0.6);
+            background: rgba(15, 23, 42, 0.65);
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
             z-index: 1000;
@@ -692,8 +695,9 @@
             box-shadow: 0 25px 60px rgba(0, 0, 0, 0.25);
             width: 100%;
             max-width: 640px;
-            max-height: 85vh;
+            max-height: 86vh;
             overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
             padding: 1.75rem 2rem;
             position: relative;
             animation: fadeUp 0.3s ease-out;
@@ -705,6 +709,7 @@
             margin-bottom: 1.25rem;
             border-bottom: 1px solid rgba(0, 0, 0, 0.06);
             padding-bottom: 0.75rem;
+            gap: 0.75rem;
         }
         .modal-title {
             font-size: 1.15rem;
@@ -713,24 +718,36 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            flex-wrap: wrap;
         }
         .modal-close {
             background: rgba(0, 0, 0, 0.05);
             border: none;
             border-radius: 50%;
-            width: 32px;
-            height: 32px;
-            font-size: 1rem;
+            width: 34px;
+            height: 34px;
+            min-width: 34px;
+            font-size: 1.05rem;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             color: var(--muted);
-            transition: background 0.2s, color 0.2s;
+            transition: background 0.2s, color 0.2s, transform 0.2s;
         }
         .modal-close:hover {
             background: rgba(239, 68, 68, 0.15);
             color: var(--error);
+            transform: scale(1.05);
+        }
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            margin-top: 1.25rem;
+            border-top: 1px solid rgba(0, 0, 0, 0.06);
+            padding-top: 1rem;
+            flex-wrap: wrap;
         }
         .health-card-item {
             background: rgba(0, 0, 0, 0.02);
@@ -742,13 +759,20 @@
             justify-content: space-between;
             align-items: center;
             gap: 1rem;
+            transition: background 0.2s;
+        }
+        .health-card-item:hover {
+            background: rgba(0, 0, 0, 0.035);
         }
         .health-badge {
-            padding: 0.3rem 0.8rem;
+            padding: 0.35rem 0.85rem;
             border-radius: 20px;
             font-size: 0.78rem;
             font-weight: 700;
             white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
         }
         .health-badge.ok {
             background: rgba(46, 213, 115, 0.15);
@@ -776,6 +800,413 @@
             align-items: center;
             gap: 0.8rem;
         }
+        .cookies-status-card {
+            background: rgba(0, 0, 0, 0.03);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1.25rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        /* ── Toast Notifications ── */
+        .toast-container {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 999999;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 420px;
+            pointer-events: none;
+        }
+        .toast-item {
+            color: #ffffff;
+            padding: 12px 18px;
+            border-radius: 12px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.28);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.25);
+            transform: translateY(-12px);
+            opacity: 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: auto;
+            word-break: break-word;
+        }
+        .toast-item.visible {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        /* ══════════════════════════════════════════════════
+           COMPREHENSIVE RESPONSIVE LAYOUT SYSTEM
+           ══════════════════════════════════════════════════ */
+
+        /* ── Tablet & Small Laptops (768px to 1024px) ── */
+        @media (max-width: 1024px) {
+            nav {
+                padding: 0.85rem 1.5rem;
+                flex-wrap: wrap;
+                gap: 0.75rem;
+            }
+            .nav-brand {
+                flex: 0 0 auto;
+            }
+            .nav-actions {
+                flex: 1 1 auto;
+                justify-content: flex-end;
+                flex-wrap: wrap;
+                gap: 0.45rem;
+            }
+            .page {
+                padding: 2rem 1.25rem 3.5rem;
+            }
+            .hero-card {
+                padding: 1.75rem 1.75rem;
+            }
+            .input-row {
+                flex-wrap: wrap;
+                gap: 0.65rem;
+            }
+            .url-input {
+                flex: 1 1 300px;
+            }
+            .options-strip {
+                gap: 1rem;
+            }
+            .branding-strip {
+                grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            }
+            .outputs-grid {
+                grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+            }
+        }
+
+        /* ── Phablets & Mobile Landscape (641px to 767px) ── */
+        @media (max-width: 767px) {
+            nav {
+                padding: 0.75rem 1rem;
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.65rem;
+            }
+            .nav-brand {
+                width: 100%;
+                justify-content: flex-start;
+            }
+            .nav-brand h1 {
+                font-size: 1.12rem;
+            }
+            .nav-actions {
+                width: 100%;
+                justify-content: flex-start;
+                flex-wrap: wrap;
+                gap: 0.4rem;
+            }
+            .nav-actions .btn-nav, .nav-actions .nav-model-pill {
+                font-size: 0.76rem;
+                padding: 0.38rem 0.75rem;
+            }
+            .page {
+                padding: 1.25rem 0.85rem 3rem;
+            }
+            .hero-card {
+                padding: 1.25rem 1rem;
+                border-radius: 20px;
+            }
+            .section-card {
+                padding: 1.25rem 1rem;
+                border-radius: 20px;
+            }
+            .section-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.65rem;
+            }
+            .section-header > div {
+                width: 100%;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+            }
+            .section-header h2 {
+                font-size: 1.1rem;
+            }
+            .options-strip {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                gap: 0.65rem;
+                padding: 0.85rem 1rem;
+            }
+            .branding-strip {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ── Mobile Phones (<= 640px) ── */
+        @media (max-width: 640px) {
+            body {
+                font-size: 14px;
+            }
+            nav {
+                padding: 0.65rem 0.85rem;
+                gap: 0.5rem;
+            }
+            .nav-brand .logo {
+                width: 32px;
+                height: 32px;
+                font-size: 0.95rem;
+            }
+            .nav-brand h1 {
+                font-size: 1.05rem;
+            }
+            .nav-brand span {
+                font-size: 0.66rem;
+            }
+            .nav-actions {
+                gap: 0.35rem;
+            }
+            .nav-actions .btn-nav, .nav-actions .nav-model-pill {
+                font-size: 0.72rem;
+                padding: 0.32rem 0.6rem;
+                border-radius: 10px;
+            }
+
+            /* Main Page & Hero Card */
+            .page {
+                padding: 1rem 0.75rem 2.5rem;
+            }
+            .hero-card {
+                padding: 1.25rem 0.85rem;
+                border-radius: 18px;
+                margin-bottom: 1.25rem;
+            }
+            .section-label {
+                font-size: 0.7rem;
+                margin-bottom: 0.85rem;
+            }
+            .tabs {
+                width: 100%;
+                display: flex;
+            }
+            .tab-btn {
+                flex: 1;
+                text-align: center;
+                padding: 0.5rem 0.5rem;
+                font-size: 0.82rem;
+            }
+
+            /* Single input stack */
+            .input-row {
+                display: flex;
+                flex-direction: column;
+                gap: 0.65rem;
+            }
+            .input-row > * {
+                width: 100% !important;
+                box-sizing: border-box;
+            }
+            .url-input {
+                font-size: 15px;
+                padding: 0.85rem 1rem;
+            }
+            select.lang-select {
+                font-size: 15px;
+                padding: 0.8rem 0.85rem;
+                width: 100%;
+            }
+            .btn-primary {
+                width: 100%;
+                justify-content: center;
+                padding: 0.85rem 1.2rem;
+                font-size: 0.92rem;
+            }
+            #btn-start {
+                padding: 0.95rem 1.5rem;
+                font-size: 1rem;
+                font-weight: 800;
+                box-shadow: 0 8px 24px var(--accent-glow);
+            }
+
+            /* Options Strip Mobile Grid */
+            .options-strip {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 0.55rem;
+                padding: 0.75rem;
+                border-radius: 14px;
+            }
+            .options-strip > div {
+                display: flex !important;
+                justify-content: space-between;
+                align-items: center;
+                width: 100%;
+                padding: 0.45rem 0.6rem;
+                background: rgba(0, 0, 0, 0.02);
+                border: 1px solid rgba(0, 0, 0, 0.04);
+                border-radius: 8px;
+                box-sizing: border-box;
+            }
+            .options-strip label {
+                font-size: 0.8rem;
+                width: 100%;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+            }
+
+            /* Branding & Watermark Strip */
+            .branding-strip {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
+            }
+            #watermark-inputs-wrap {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.5rem;
+            }
+            #watermark-inputs-wrap input,
+            #watermark-inputs-wrap select {
+                width: 100%;
+                box-sizing: border-box;
+            }
+
+            /* Progress Card & Phase Steps */
+            .progress-card {
+                padding: 1.25rem 0.85rem;
+                border-radius: 18px;
+            }
+            .phase-steps {
+                padding-bottom: 0.65rem;
+                margin-bottom: 1rem;
+            }
+            .phase-circle {
+                width: 28px;
+                height: 28px;
+                font-size: 0.68rem;
+            }
+            .phase-connector {
+                width: 18px;
+                bottom: 8px;
+            }
+            .phase-label {
+                font-size: 0.64rem;
+            }
+            .log-box {
+                height: 150px;
+                font-size: 0.75rem;
+                padding: 0.75rem 0.85rem;
+            }
+
+            /* Outputs Grid & Cards */
+            .outputs-grid {
+                grid-template-columns: 1fr;
+                gap: 0.85rem;
+            }
+            .output-card {
+                padding: 0.85rem;
+                border-radius: 16px;
+            }
+            .video-wrap {
+                padding: 0.65rem;
+                border-radius: 12px;
+            }
+            .keys-grid {
+                grid-template-columns: 1fr;
+            }
+
+            /* Modals Mobile Adaptation */
+            .modal-backdrop {
+                padding: 0.5rem;
+                align-items: center;
+            }
+            .modal-dialog {
+                padding: 1.25rem 1rem;
+                border-radius: 18px;
+                max-height: 90vh;
+                max-width: 100%;
+            }
+            .modal-header {
+                margin-bottom: 0.85rem;
+                padding-bottom: 0.6rem;
+            }
+            .modal-title {
+                font-size: 1rem;
+                gap: 0.35rem;
+            }
+            .modal-footer {
+                flex-direction: column-reverse;
+                gap: 0.5rem;
+            }
+            .modal-footer > * {
+                width: 100%;
+                text-align: center;
+                justify-content: center;
+            }
+            .health-card-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+                padding: 0.75rem 0.85rem;
+            }
+            .health-card-item .health-badge {
+                align-self: flex-start;
+            }
+            .queue-item-card {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+            .queue-item-card button {
+                align-self: flex-end;
+            }
+            .cookies-status-card {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .cookies-status-card #btn-delete-cookies {
+                align-self: flex-start;
+                margin-top: 0.5rem;
+            }
+
+            /* Toast Mobile */
+            .toast-container {
+                top: 12px;
+                left: 12px;
+                right: 12px;
+                max-width: none;
+            }
+            .toast-item {
+                font-size: 0.82rem;
+                padding: 10px 14px;
+                text-align: center;
+            }
+        }
+
+        /* ── Extra Small Screens (<= 380px) ── */
+        @media (max-width: 380px) {
+            .page {
+                padding: 0.75rem 0.5rem 2rem;
+            }
+            .hero-card, .section-card, .progress-card {
+                padding: 1rem 0.65rem;
+                border-radius: 14px;
+            }
+            .nav-actions .btn-nav {
+                font-size: 0.68rem;
+                padding: 0.3rem 0.5rem;
+            }
+            .modal-dialog {
+                padding: 1rem 0.75rem;
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -963,7 +1394,7 @@
         </div>
 
         <!-- ── Thumbnail Title & Watermark Branding Strip ── -->
-        <div class="branding-strip" style="margin-top:1.25rem; padding-top:1rem; border-top:1px dashed rgba(255,255,255,0.12); display:grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap:1rem;">
+        <div class="branding-strip">
             <!-- Thumbnail Title Section -->
             <div style="background:rgba(255,255,255,0.03); padding:0.75rem 1rem; border-radius:10px; border:1px solid rgba(255,255,255,0.08);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
@@ -1208,7 +1639,7 @@
                 <span id="health-disk-badge" class="health-badge ok">Checking</span>
             </div>
         </div>
-        <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:1.5rem; border-top:1px solid rgba(0,0,0,0.06); padding-top:1rem;">
+        <div class="modal-footer">
             <button class="btn-nav" onclick="runHealthCheck()">🔄 Re-run Diagnostic</button>
             <button class="btn-primary" style="padding:0.45rem 1.2rem; font-size:0.85rem;" onclick="closeHealthModal()">Close</button>
         </div>
@@ -1241,7 +1672,7 @@
                 <div class="empty-state" style="padding:1.5rem 0;">No queued videos waiting.</div>
             </div>
         </div>
-        <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:1.5rem; border-top:1px solid rgba(0,0,0,0.06); padding-top:1rem;">
+        <div class="modal-footer">
             <button class="btn-nav" onclick="checkQueueStatus(true)">🔄 Refresh</button>
             <button class="btn-primary" style="padding:0.45rem 1.2rem; font-size:0.85rem;" onclick="closeQueueModal()">Close</button>
         </div>
@@ -1259,7 +1690,7 @@
         </div>
         <div id="cookies-modal-body" style="padding: 1.25rem 0;">
             <!-- Status Card -->
-            <div id="cookies-status-card" style="background: rgba(0,0,0,0.03); border: 1px solid rgba(0,0,0,0.08); border-radius: 12px; padding: 1rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+            <div id="cookies-status-card" class="cookies-status-card">
                 <div>
                     <div style="font-weight: 700; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
                         <span>Status:</span>
@@ -1306,7 +1737,7 @@
                 ၃။ Extension Icon ကိုနှိပ်ပြီး <b>Export</b> လုပ်ထားသော <code>cookies.txt</code> ဖိုင်ကို ဤနေရာတွင် တင်ပေးပါ သို့မဟုတ် စာသားများကို ကူးယူ၍ Paste ထည့်ပါ ခင်ဗျာ။
             </div>
         </div>
-        <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:0.5rem; border-top:1px solid rgba(0,0,0,0.06); padding-top:1rem;">
+        <div class="modal-footer">
             <button class="btn-nav" onclick="checkCookiesStatus()">🔄 Refresh Status</button>
             <button class="btn-primary" style="padding:0.45rem 1.2rem; font-size:0.85rem;" onclick="closeCookiesModal()">Close</button>
         </div>
@@ -2860,26 +3291,27 @@
         if (!container) {
             container = document.createElement('div');
             container.id = 'toast-container';
-            container.style.cssText = 'position:fixed; top:24px; right:24px; z-index:999999; display:flex; flex-direction:column; gap:10px; max-width:420px; pointer-events:none;';
+            container.className = 'toast-container';
             document.body.appendChild(container);
         }
         const toast = document.createElement('div');
+        toast.className = 'toast-item';
         const bg = (type === 'success' || msg.includes('✅')) ? 'linear-gradient(135deg, rgba(16,185,129,0.95), rgba(5,150,105,0.95))'
                  : (type === 'error' || msg.includes('❌') || msg.includes('Error') || msg.includes('Failed')) ? 'linear-gradient(135deg, rgba(239,68,68,0.95), rgba(220,38,38,0.95))'
                  : 'linear-gradient(135deg, rgba(124,58,237,0.95), rgba(109,40,217,0.95))';
-        toast.style.cssText = `background:${bg}; color:#ffffff; padding:12px 20px; border-radius:10px; font-size:0.88rem; font-weight:600; box-shadow:0 10px 30px rgba(0,0,0,0.5); backdrop-filter:blur(10px); border:1px solid rgba(255,255,255,0.2); transform:translateY(-15px); opacity:0; transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1); pointer-events:auto;`;
+        toast.style.background = bg;
         toast.textContent = msg;
         container.appendChild(toast);
 
         requestAnimationFrame(() => {
-            toast.style.transform = 'translateY(0)';
-            toast.style.opacity = '1';
+            toast.classList.add('visible');
         });
 
         setTimeout(() => {
-            toast.style.transform = 'translateY(-15px)';
-            toast.style.opacity = '0';
-            setTimeout(() => toast.remove(), 300);
+            toast.classList.remove('visible');
+            setTimeout(() => {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 300);
         }, 4000);
     }
 
