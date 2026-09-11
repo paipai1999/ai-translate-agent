@@ -32,7 +32,7 @@ DEFAULT_CONFIG = {
             "gemini-3.7-flash": 500
         },
         "models": {
-            "heavy": "gemini-flash-latest",
+            "heavy": "gemini-3.5-flash",
             "workhorse": "gemini-3.5-flash-lite",
             "polish": "gemini-3.1-flash-lite"
         }

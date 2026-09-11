@@ -415,7 +415,7 @@ print(f"[Whisper] Transcribed {len(results)} segments in language: {detected_lan
             if not api_key:
                 return state
                 
-            model = gemini_cfg.get("model", "gemini-2.5-flash")
+            model = gemini_cfg.get("model", "gemini-3.5-flash-lite")
             CHUNK_SIZE = 80
             total_segments = len(state.transcript)
             all_corrected_segments = []

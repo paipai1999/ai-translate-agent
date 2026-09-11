@@ -20,7 +20,7 @@ class TestAuditFixes(unittest.TestCase):
 
     def test_gemini_fallback_models_include_production(self):
         """Verify _FALLBACK_MODELS includes standard Google AI Studio production models."""
-        for required_model in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
+        for required_model in ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash"]:
             self.assertIn(required_model, _FALLBACK_MODELS)
 
     def test_qa_agent_scene_id_collision_prevention(self):
