@@ -150,7 +150,7 @@ class DownloaderAgent:
                     filename = ydl.prepare_filename(info_dict)
                     
                     # If extension changed during merging, ensure we point to the existing file
-                    if not os.path.exists(filename):
+                    if filename and not os.path.exists(filename):
                         base, _ = os.path.splitext(filename)
                         for ext in ['.mp4', '.mkv', '.webm', '.m4v', '.mov', '.avi', '.ts']:
                             if os.path.exists(base + ext):
@@ -196,7 +196,7 @@ class DownloaderAgent:
                 time.sleep(5)
 
         # Verify downloaded file actually exists before returning
-        if not os.path.exists(filename):
+        if not filename or not os.path.exists(filename):
             raise FileNotFoundError(
                 f"[ERROR] DownloaderAgent: Download seemed to succeed but file not found: {filename}\n"
                 f"Possible cause: yt-dlp merged into a different extension. Check '{self.output_dir}/' manually."

@@ -2101,6 +2101,8 @@ class VideoMergerAgent:
 
             if result.returncode == 0 and os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 100_000:
                 os.replace(tmp_path, video_path)
+                if do_subtitles and state is not None:
+                    state.subtitles_burned = True
                 print("[OK] PostProcess: Copyright-safe single-pass post-processing complete!")
             else:
                 print(f"[WARN] PostProcess: FFmpeg returned exit code {result.returncode}.")
@@ -2244,7 +2246,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if not is_clean_source and burn_reels_subs:
             # If source video is already hard-subbed (e.g. fallback when clean video was deleted),
             # prevent burning duplicate overlapping subtitles
-            if getattr(state, "subtitles_burned", True) or sub_mode not in ["none", "off", "no"]:
+            if getattr(state, "subtitles_burned", False):
                 print("[*] ReelsExporter: Source video already contains burned subtitles. Skipping duplicate subtitle burn.")
                 burn_reels_subs = False
 

@@ -492,8 +492,12 @@ class MasterAgent:
                         audio_state = audio_future.result()
                         scene_state = scene_future.result()
 
-                        self.state = audio_state
-                        self.state.timeline = scene_state.timeline
+                        self.state.transcript = getattr(audio_state, "transcript", self.state.transcript)
+                        if hasattr(audio_state, "speaker_transcript") and audio_state.speaker_transcript:
+                            self.state.speaker_transcript = audio_state.speaker_transcript
+                        if hasattr(audio_state, "characters") and audio_state.characters:
+                            self.state.characters = audio_state.characters
+                        self.state.timeline = getattr(scene_state, "timeline", self.state.timeline)
                     except Exception as e:
                         print(f"[CRITICAL ERROR] MasterAgent: Audio/Scene pipeline failed: {e}")
                         self.state.current_phase = "Error"

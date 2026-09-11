@@ -304,7 +304,7 @@ class VoiceAgent:
 
             scene_id = item.get("scene_id", idx + 1)
             speaker = item.get("character", "Narrator")
-            out_file = os.path.join(audio_out_dir, f"scene_{scene_id:03d}.mp3")
+            out_file = os.path.join(audio_out_dir, f"scene_{(idx+1):04d}.mp3")
 
             target_dur = None
             if item.get("end_sec") and item.get("start_sec"):

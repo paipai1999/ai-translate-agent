@@ -906,6 +906,25 @@ async def stream_job_logs(job_id: str, request: Request):
                     job_status = current_job.get('status')
 
                 if job_status in ('done', 'error', 'cancelled'):
+                    # Drain any pending log chunks in queue before sending done event
+                    while not q.empty():
+                        try:
+                            chunk = q.get_nowait()
+                            lines = chunk.replace('\r', '\n').split('\n')
+                            for l in lines:
+                                if l.strip():
+                                    yield {
+                                        "event": "log",
+                                        "data": json.dumps({
+                                            "line": l,
+                                            "phase": "Done" if job_status == "done" else "Completed",
+                                            "batch_status": None,
+                                            "status": job_status
+                                        })
+                                    }
+                        except Exception:
+                            break
+
                     yield {
                         "event": "done",
                         "data": json.dumps({"status": job_status, "error": current_job.get("error")})

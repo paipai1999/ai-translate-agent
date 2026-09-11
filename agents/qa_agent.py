@@ -134,26 +134,29 @@ class QAAgent:
                         for k in ["scene_id", "id", "block", "scene"]:
                             val = item.get(k)
                             if val is not None:
-                                m = re.search(r'\d+', str(val))
-                                if m:
-                                    cand_id = m.group(0)
-                                    break
+                                cand_id = str(val).strip()
+                                break
 
                         if cand_id:
                             rewrite_map[cand_id] = narration
+                            rewrite_map[cand_id.lower()] = narration
+                            if cand_id.lower().startswith("block "):
+                                sub_id = cand_id[6:].strip()
+                                rewrite_map[sub_id] = narration
+                                rewrite_map[sub_id.lower()] = narration
+                            elif cand_id.lower().startswith("scene "):
+                                sub_id = cand_id[6:].strip()
+                                rewrite_map[sub_id] = narration
+                                rewrite_map[sub_id.lower()] = narration
                         elif item_idx < len(batch):
-                            b_id = str(batch[item_idx]["scene_id"])
-                            b_m = re.search(r'\d+', b_id)
-                            k = b_m.group(0) if b_m else b_id
-                            rewrite_map[k] = narration
+                            b_id = str(batch[item_idx]["scene_id"]).strip()
+                            rewrite_map[b_id] = narration
 
                     for b_pos, b in enumerate(batch):
                         idx = b["index"]
-                        scene_id_raw = str(b["scene_id"])
-                        m = re.search(r'\d+', scene_id_raw)
-                        clean_id = m.group(0) if m else scene_id_raw
+                        scene_id_raw = str(b["scene_id"]).strip()
 
-                        new_text = rewrite_map.get(clean_id)
+                        new_text = rewrite_map.get(scene_id_raw) or rewrite_map.get(scene_id_raw.lower())
                         if not new_text and b_pos < len(parsed) and isinstance(parsed[b_pos], dict):
                             new_text = (
                                 parsed[b_pos].get("rewritten_narration")

@@ -397,14 +397,15 @@ print(f"[Whisper] Transcribed {len(results)} segments in language: {detected_lan
         return state
 
     def correct_transcript(self, state: MovieState) -> MovieState:
-        """Uses LLM to correct spelling and character names in the transcript."""
+        """Uses LLM to correct spelling and character names in the transcript without truncating dialogue."""
         if not state.transcript:
             return state
 
-        print("[*] AudioAgent: Running LLM error correction on transcript...")
+        print(f"[*] AudioAgent: Running LLM error correction on {len(state.transcript)} transcript segments...")
         try:
             from brain.gemini_client import call_gemini
             from brain import config as cfg
+            import json, re
             config_data = cfg.load_config()
             gemini_cfg = config_data.get("gemini", {})
             if not gemini_cfg.get("enabled", False):
@@ -414,56 +415,66 @@ print(f"[Whisper] Transcribed {len(results)} segments in language: {detected_lan
             if not api_key:
                 return state
                 
-            # Convert transcript to text block (limit length to prevent context overflow)
-            full_text = "\n".join([f"[{s.start}-{s.end}] {s.text}" for s in state.transcript])
-            if len(full_text) > 40000:
-                print("[!] AudioAgent: Transcript too long for correction, taking first 40000 chars.")
-                full_text = full_text[:40000]
-                
-            sys_prompt = "You are an AI assistant that corrects movie transcripts."
-            user_prompt = (
-                f"Correct obvious spelling errors and ensure character names are spelled correctly for the movie '{state.movie_name}'. "
-                f"Return ONLY valid JSON as an array of objects. Each object must have keys "
-                f"'start' (number), 'end' (number), and 'text' (string). "
-                f"Keep the original timestamps intact and do not add markdown blocks.\n\n"
-                f"{full_text}"
-            )
-            
-            raw, _ = call_gemini(sys_prompt, user_prompt, api_key, model=gemini_cfg.get("model", "gemini-3.5-flash-lite"), temperature=0.1)
+            model = gemini_cfg.get("model", "gemini-2.5-flash")
+            CHUNK_SIZE = 80
+            total_segments = len(state.transcript)
+            all_corrected_segments = []
 
-            import re, json
-            corrected_segments = []
-            cleaned = raw.strip().strip("`")
-            if cleaned.lower().startswith("json"):
-                cleaned = cleaned[4:].strip()
+            for start_idx in range(0, total_segments, CHUNK_SIZE):
+                chunk = state.transcript[start_idx:start_idx + CHUNK_SIZE]
+                chunk_text = "\n".join([f"[{s.start:.2f}-{s.end:.2f}] {s.text}" for s in chunk])
 
-            try:
-                parsed = json.loads(cleaned)
-                if isinstance(parsed, dict):
-                    parsed = parsed.get("segments", [])
-                if isinstance(parsed, list):
-                    for item in parsed:
-                        if not isinstance(item, dict):
-                            continue
-                        try:
-                            corrected_segments.append(
-                                TranscriptSegment(
-                                    start=float(item["start"]),
-                                    end=float(item["end"]),
-                                    text=str(item["text"]).strip(),
-                                )
-                            )
-                        except Exception:
-                            continue
-            except Exception:
-                for line in raw.split("\n"):
-                    m = re.match(r'\[([\d.]+)-([\d.]+)\]\s*(.*)', line.strip())
-                    if m:
-                        corrected_segments.append(TranscriptSegment(start=float(m.group(1)), end=float(m.group(2)), text=m.group(3).strip()))
+                sys_prompt = "You are an AI assistant that corrects movie transcripts."
+                user_prompt = (
+                    f"Correct obvious spelling errors and ensure character names are spelled correctly for the movie '{state.movie_name}'. "
+                    f"Return ONLY valid JSON as an array of objects. Each object must have keys "
+                    f"'start' (number), 'end' (number), and 'text' (string). "
+                    f"Keep the original timestamps intact and do not add markdown blocks.\n\n"
+                    f"{chunk_text}"
+                )
 
-            if corrected_segments:
-                state.transcript = corrected_segments
-                print(f"[*] AudioAgent: Transcript corrected successfully ({len(corrected_segments)} segments).")
+                chunk_corrected = []
+                try:
+                    raw, _ = call_gemini(sys_prompt, user_prompt, api_key, model=model, temperature=0.1)
+                    cleaned = raw.strip().strip("`")
+                    if cleaned.lower().startswith("json"):
+                        cleaned = cleaned[4:].strip()
+
+                    try:
+                        parsed = json.loads(cleaned)
+                        if isinstance(parsed, dict):
+                            parsed = parsed.get("segments", [])
+                        if isinstance(parsed, list):
+                            for item in parsed:
+                                if not isinstance(item, dict):
+                                    continue
+                                try:
+                                    chunk_corrected.append(
+                                        TranscriptSegment(
+                                            start=float(item["start"]),
+                                            end=float(item["end"]),
+                                            text=str(item["text"]).strip(),
+                                        )
+                                    )
+                                except Exception:
+                                    continue
+                    except Exception:
+                        for line in raw.split("\n"):
+                            m = re.match(r'\[([\d.]+)-([\d.]+)\]\s*(.*)', line.strip())
+                            if m:
+                                chunk_corrected.append(TranscriptSegment(start=float(m.group(1)), end=float(m.group(2)), text=m.group(3).strip()))
+                except Exception as chunk_err:
+                    print(f"    [!] AudioAgent: Batch correction error for segments {start_idx+1}-{start_idx+len(chunk)}: {chunk_err}")
+
+                # If LLM correction succeeded and has segments, use it; otherwise fallback to original chunk
+                if chunk_corrected and len(chunk_corrected) >= int(len(chunk) * 0.7):
+                    all_corrected_segments.extend(chunk_corrected)
+                else:
+                    all_corrected_segments.extend(chunk)
+
+            if all_corrected_segments:
+                state.transcript = all_corrected_segments
+                print(f"[OK] AudioAgent: Transcript corrected successfully ({len(all_corrected_segments)} segments preserved).")
         except Exception as e:
             print(f"[!] AudioAgent: Transcript correction failed: {e}")
             
