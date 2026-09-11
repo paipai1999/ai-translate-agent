@@ -173,8 +173,6 @@ class MasterAgent:
                     self.state.duration_sec = prev_state.duration_sec
                 if getattr(prev_state, "video_duration", 0) > 0:
                     self.state.video_duration = prev_state.video_duration
-                if getattr(prev_state, "resolution", None):
-                    self.state.resolution = prev_state.resolution
                 if getattr(prev_state, "transcript", None) and len(prev_state.transcript) > 0:
                     self.state.transcript = prev_state.transcript
                 if getattr(prev_state, "timeline", None) and isinstance(prev_state.timeline, list) and len(prev_state.timeline) > 0:
@@ -186,30 +184,84 @@ class MasterAgent:
                 restored_movie = self._portable_path(getattr(prev_state, "movie_path", None))
                 if restored_movie and os.path.exists(restored_movie):
                     self.movie_path = restored_movie
-                if getattr(prev_state, "generated_script", None) and len(prev_state.generated_script) > 0:
-                    self.state.generated_script = prev_state.generated_script
-                if getattr(prev_state, "seo_metadata", None):
-                    self.state.seo_metadata = prev_state.seo_metadata
-                if getattr(prev_state, "custom_thumb_title", None):
-                    self.state.custom_thumb_title = prev_state.custom_thumb_title
-                if getattr(prev_state, "thumbnail_path", None) and os.path.exists(prev_state.thumbnail_path):
-                    self.state.thumbnail_path = prev_state.thumbnail_path
-                if getattr(prev_state, "phase_durations", None):
-                    self.state.phase_durations = prev_state.phase_durations
-                if getattr(prev_state, "script_engine", None):
-                    self.state.script_engine = prev_state.script_engine
-                    self.script_engine = prev_state.script_engine
 
-                # Check checkpoint.json to ensure any completed phases are synchronized
+                # Track changes between saved state and current invocation parameters
+                prev_engine = getattr(prev_state, "script_engine", None)
+                prev_res = getattr(prev_state, "resolution", None)
+                prev_fmt = getattr(prev_state, "video_format", None)
+                prev_title = getattr(prev_state, "custom_thumb_title", None)
+                prev_voice = getattr(prev_state, "tts_voice", None)
+
+                # Prioritize explicit parameters over prev_state
+                if not resolution and prev_res:
+                    self.state.resolution = prev_res
+                    self.resolution = prev_res
+                if not custom_thumb_title and prev_title:
+                    self.state.custom_thumb_title = prev_title
+                    self.custom_thumb_title = prev_title
+                if not script_engine and prev_engine:
+                    self.state.script_engine = prev_engine
+                    self.script_engine = prev_engine
+                if not video_format and prev_fmt:
+                    self.state.video_format = prev_fmt
+                    self.video_format = prev_fmt
+
+                engine_changed = bool(prev_engine and (prev_engine != self.script_engine))
+                title_changed = bool(self.custom_thumb_title and prev_title and (prev_title != self.custom_thumb_title))
+                res_changed = bool(prev_res and (prev_res != self.resolution))
+                fmt_changed = bool(prev_fmt and (prev_fmt != self.video_format))
+                voice_changed = bool(tts_voice and prev_voice and (prev_voice != tts_voice))
+
+                # Invalidate phases based on parameter changes
+                invalidated_phases = set()
+                if engine_changed:
+                    print(f"[*] MasterAgent: Script engine changed ({prev_engine} -> {self.script_engine}). Invalidating Phase 4+ checkpoints.")
+                    invalidated_phases.update([PHASE_4_SCRIPT, PHASE_5_VOICE, PHASE_6_MERGE, PHASE_7_QA])
+                    self.state.generated_script = []
+                    self.state.audio_path = None
+                    self.state.clean_video_path = None
+                    self.state.reels_video_path = None
+                else:
+                    if getattr(prev_state, "generated_script", None) and len(prev_state.generated_script) > 0:
+                        self.state.generated_script = prev_state.generated_script
+                    if getattr(prev_state, "seo_metadata", None):
+                        self.state.seo_metadata = prev_state.seo_metadata
+
+                if voice_changed:
+                    print(f"[*] MasterAgent: TTS voice changed ({prev_voice} -> {tts_voice}). Invalidating Phase 5+ checkpoints.")
+                    invalidated_phases.update([PHASE_5_VOICE, PHASE_6_MERGE, PHASE_7_QA])
+                    self.state.clean_video_path = None
+                    self.state.reels_video_path = None
+
+                if title_changed:
+                    print(f"[*] MasterAgent: Custom thumbnail title changed. Invalidating Phase 4, 6, 7.")
+                    invalidated_phases.update([PHASE_4_SCRIPT, PHASE_6_MERGE, PHASE_7_QA])
+                    self.state.thumbnail_path = None
+                elif getattr(prev_state, "thumbnail_path", None) and os.path.exists(prev_state.thumbnail_path):
+                    self.state.thumbnail_path = prev_state.thumbnail_path
+
+                if res_changed or fmt_changed:
+                    print(f"[*] MasterAgent: Resolution or format changed ({prev_res}/{prev_fmt} -> {self.resolution}/{self.video_format}). Invalidating Phase 6 & 7.")
+                    invalidated_phases.update([PHASE_6_MERGE, PHASE_7_QA])
+                    self.state.clean_video_path = None
+                    self.state.reels_video_path = None
+
+                # Filter completed phases
+                self.state.completed_phases = [p for p in self.state.completed_phases if p not in invalidated_phases]
+
+                # Check checkpoint.json to ensure any completed phases are synchronized, but respect invalidated phases
                 if os.path.exists(ckpt_file):
                     try:
                         with open(ckpt_file, "r", encoding="utf-8") as cf:
                             cdata = json.load(cf)
                         for ph in cdata.get("completed_phases", []):
-                            if ph not in self.state.completed_phases:
+                            if ph not in self.state.completed_phases and ph not in invalidated_phases:
                                 self.state.completed_phases.append(ph)
                     except Exception:
                         pass
+
+                if getattr(prev_state, "phase_durations", None):
+                    self.state.phase_durations = prev_state.phase_durations
 
                 print(f"[*] MasterAgent: Checkpoint Resume loaded. Completed phases: {self.state.completed_phases}")
             except Exception as e:
@@ -662,9 +714,15 @@ class MasterAgent:
                                 if os.path.exists(recap_16_9):
                                     try:
                                         os.remove(recap_16_9)
-                                        print("[*] MasterAgent: Video format '9:16' (Vertical Only) -> Kept only final_reels.mp4.")
                                     except Exception:
                                         pass
+                                recap_clean = os.path.join(self.output_dir, self.state.project_dir, "final_recap_clean.mp4")
+                                if os.path.exists(recap_clean):
+                                    try:
+                                        os.remove(recap_clean)
+                                    except Exception:
+                                        pass
+                                print("[*] MasterAgent: Video format '9:16' (Vertical Only) -> Kept only final_reels.mp4.")
                         except Exception as e:
                             print(f"[WARN] MasterAgent: Failed to generate Reels video: {e}")
                             self.state.warnings.append(f"Reels generation failed: {e}")
