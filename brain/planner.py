@@ -25,6 +25,7 @@ class BatchProcessor:
         subtitle_style: str = None,
         thumbnail_intro: bool = None,
         source_language: str = "auto",
+        script_engine: str = "recap",
         resume: bool = True,
         cancel_event=None,
         output_dir: str = None,
@@ -36,6 +37,7 @@ class BatchProcessor:
         self.cancel_event = cancel_event
         self.language = language
         self.source_language = source_language or "auto"
+        self.script_engine = script_engine or "recap"
         self.subtitle_mode = subtitle_mode
         self.subtitle_style = subtitle_style
         self.resolution = resolution or "1080p"
@@ -149,6 +151,7 @@ class BatchProcessor:
                     subtitle_style=self.subtitle_style,
                     thumbnail_intro=self.thumbnail_intro,
                     source_language=self.source_language,
+                    script_engine=self.script_engine,
                     resume=self.resume,
                     cancel_event=self.cancel_event,
                 )

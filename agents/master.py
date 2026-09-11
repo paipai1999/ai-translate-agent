@@ -100,6 +100,7 @@ class MasterAgent:
         subtitle_style: str = None,
         thumbnail_intro: bool = None,
         source_language: str = "auto",
+        script_engine: str = "recap",
         resume: bool = True,
         cancel_event=None,
     ):
@@ -121,6 +122,9 @@ class MasterAgent:
         else:
             self.video_format = "both"
 
+        raw_engine = str(script_engine or os.getenv("SCRIPT_ENGINE") or cfg.get("pipeline", {}).get("script_engine", "recap")).lower()
+        self.script_engine = "translate" if raw_engine in ["translate", "dubbing", "1:1"] else "recap"
+
         self.state = MovieState(movie_name=movie_name)
         self.state.movie_path = movie_path
         self.state.subtitle_mode = self.subtitle_mode
@@ -128,6 +132,7 @@ class MasterAgent:
         self.state.resolution = self.resolution
         self.state.video_format = self.video_format
         self.state.source_language = str(source_language or "auto").lower().strip()
+        self.state.script_engine = self.script_engine
         if thumbnail_intro is not None:
             self.state.thumbnail_intro_enabled = bool(thumbnail_intro)
         else:
@@ -185,6 +190,9 @@ class MasterAgent:
                     self.state.thumbnail_path = prev_state.thumbnail_path
                 if getattr(prev_state, "phase_durations", None):
                     self.state.phase_durations = prev_state.phase_durations
+                if getattr(prev_state, "script_engine", None):
+                    self.state.script_engine = prev_state.script_engine
+                    self.script_engine = prev_state.script_engine
 
                 # Check checkpoint.json to ensure any completed phases are synchronized
                 if os.path.exists(ckpt_file):
@@ -232,7 +240,7 @@ class MasterAgent:
         # Instantiate all agents
         self.video_agent     = VideoAgent(movie_path=self.movie_path)
         self.audio_agent     = AudioAgent(movie_path=self.movie_path)
-        self.writer_agent    = WriterAgent(language=self.language)
+        self.writer_agent    = WriterAgent(language=self.language, script_engine=self.script_engine)
         self.seo_agent       = SEOAgent(language=self.language)
         self.voice_agent     = VoiceAgent(
             voice=self.tts_voice,

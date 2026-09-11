@@ -239,3 +239,52 @@ def transliterate_english_acronyms(text: str) -> str:
 
     text = re.sub(r'\b[A-Z]{2,6}\b', letter_replacer, text)
     return text
+
+
+def sanitize_burmese_narration(text: str) -> str:
+    """
+    Sanitizes Burmese narration text to eliminate foreign character leakage,
+    tokenizer glitches, and punctuation anomalies:
+    1. Replaces known homoglyphs (e.g. Georgian 'კ' -> Myanmar 'က').
+    2. Strips stray non-Burmese Unicode scripts (Cyrillic, Georgian, Greek, etc.)
+       while strictly preserving Myanmar Unicode, ASCII alphanumeric, and punctuation.
+    3. Normalizes Myanmar punctuation (dandas, commas, repeated symbols).
+    """
+    if not text:
+        return ""
+
+    s = str(text)
+
+    # 1. Homoglyphs & lookalike correction
+    homoglyphs = {
+        '\u10d9': 'က',  # Georgian 'კ' -> Burmese 'က'
+        '\u10e1': 'ဒ',  # Georgian 'ს' -> Burmese 'ဒ'
+        '\u10eb': 'ဆ',  # Georgian 'ძ' -> Burmese 'ဆ'
+        '\u043e': 'o',  # Cyrillic 'о'
+        '\u0430': 'a',  # Cyrillic 'а'
+    }
+    for bad_ch, good_ch in homoglyphs.items():
+        s = s.replace(bad_ch, good_ch)
+
+    # 2. Filter stray foreign scripts outside Burmese, Latin, common digits & punctuation
+    # Burmese Unicode range: \u1000-\u109F, \uAA60-\uAA7F, \uA9E0-\uA9FF
+    # Punctuation & symbols: \u2000-\u206F (general punctuation), \uFE00-\uFE0F
+    allowed_pattern = re.compile(
+        r'[\u1000-\u109F\uAA60-\uAA7F\uA9E0-\uA9FF'  # Myanmar blocks
+        r'a-zA-Z0-9'                                 # Latin alphanumeric
+        r'\s'                                        # Whitespace
+        r'.,!?:;\'"“”‘’()/\-_—%&@#$*+=\[\]{}~`|'     # Common punctuation
+        r'\u200B\u200C\u200D'                        # Zero-width joiners/spaces
+        r']+'
+    )
+    matches = allowed_pattern.findall(s)
+    s = "".join(matches)
+
+    # 3. Normalize punctuation anomalies
+    s = re.sub(r'၊\s*၊+', '၊ ', s)
+    s = re.sub(r'။\s*။+', '။ ', s)
+    s = re.sub(r'၊\s*။', '။ ', s)
+    s = re.sub(r'\s{2,}', ' ', s)
+
+    return s.strip()
+

@@ -286,6 +286,13 @@ def main():
         help="Source movie audio language for Whisper STT (default: auto, or 'zh', 'en', 'th', 'ko', 'ja')"
     )
     parser.add_argument(
+        "--mode", "--script-engine",
+        dest="script_engine",
+        choices=["recap", "translate"],
+        default="recap",
+        help="Narration Script Engine: 'recap' (True Myanmar Movie Recap Storyteller) or 'translate' (1:1 Spoken Dialogue Dubbing)"
+    )
+    parser.add_argument(
         "--resume",
         action="store_true",
         default=True,
@@ -397,6 +404,7 @@ def main():
                 video_format=chosen_format,
                 thumbnail_intro=thumb_intro,
                 source_language=args.source_lang,
+                script_engine=args.script_engine,
                 resume=should_resume,
             )
             master.run_pipeline()
@@ -427,6 +435,7 @@ def main():
             video_format=chosen_format,
             thumbnail_intro=thumb_intro,
             source_language=args.source_lang,
+            script_engine=args.script_engine,
             resume=should_resume,
         ).process_all()
 
@@ -451,6 +460,7 @@ def main():
             video_format=chosen_format,
             thumbnail_intro=thumb_intro,
             source_language=args.source_lang,
+            script_engine=args.script_engine,
             resume=should_resume,
         ).process_all(url_list=args.urls, local_paths=[])
     else:

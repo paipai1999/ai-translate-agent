@@ -3,9 +3,14 @@ import math
 import os
 import re
 from brain.memory import MovieState
-from brain.prompts import FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT
+from brain.prompts import FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT, MOVIE_RECAP_STORYTELLER_SYSTEM_PROMPT
 from brain.gemini_client import call_gemini
 from brain import config as cfg
+from brain.burmese_utils import (
+    replace_numbers_with_burmese,
+    transliterate_english_acronyms,
+    sanitize_burmese_narration,
+)
 
 
 class WriterAgent:
@@ -13,20 +18,24 @@ class WriterAgent:
         self,
         language: str = "burmese",
         max_blocks: int | None = None,
+        script_engine: str = "recap",
     ):
         self.language = language
         self.max_blocks = max_blocks or (int(os.getenv("MAX_BLOCKS")) if os.getenv("MAX_BLOCKS") else None)
+        self.script_engine = (script_engine or os.getenv("SCRIPT_ENGINE") or "recap").lower()
 
     # ─────────────────────────────────────────────────────
-    # PUBLIC: generate_script (Full Movie Dialogue Translation)
+    # PUBLIC: generate_script (Full Movie Dialogue Translation / Movie Recap Storyteller)
     # ─────────────────────────────────────────────────────
     def generate_script(self, state: MovieState, movie_path: str = "") -> MovieState:
         """
-        Full Movie Dialogue Translation & Dubbing Engine.
-        Translates EVERY spoken dialogue line from Whisper STT into natural, colloquial speech in the target language.
-        Completely abolishes the 1-block-per-chapter summary recap architecture.
+        Dual Narration Engine:
+        1. 'recap' (Default): True Myanmar Movie Recap Storyteller persona with conversational
+           sentence endings, narrative bridges, and dramatic timing.
+        2. 'translate': 1:1 Complete Spoken Dialogue Translation & Dubbing.
         """
-        print(f"[*] WriterAgent: Generating FULL MOVIE DIALOGUE TRANSLATION (Lang: {self.language})...")
+        engine_label = "RECAP STORYTELLER" if self.script_engine == "recap" else "1:1 TRANSLATE DUBBING"
+        print(f"[*] WriterAgent: Generating {engine_label} SCRIPT (Lang: {self.language}, Engine: {self.script_engine.upper()})...")
 
         if not state.transcript:
             print("[!] WriterAgent: No transcript found. Skipping dialogue translation.")
@@ -247,25 +256,42 @@ class WriterAgent:
                     if b64_frame:
                         batch_images.append(b64_frame)
 
-            batch_prompt = (
-                f"Target Language: {self.language.upper()}\n"
-                f"Movie Title: {state.movie_name}\n"
-                f"Translate EVERY SINGLE movie dialogue sentence below into natural colloquial {self.language.title()} for professional dubbing.\n"
-                f"CRITICAL REQUIREMENTS:\n"
-                f"1. STRICT 1:1 TRANSLATION: Translate every single item completely. DO NOT summarize, merge, or drop any sentence.\n"
-                f"2. Translate all character names, places, events, and plot points accurately without leaving anything out.\n"
-                f"3. STRICT CHARACTER BUDGET & DURATION MATCH: Each translation's `narration` MUST STRICTLY STAY UNDER its given `max_chars` limit (Burmese TTS rate is ~11 chars/sec). Keep sentences punchy, concise, and direct so the spoken narration finishes precisely within `duration_sec` seconds! NEVER write long verbose sentences that exceed `max_chars`!\n"
-                f"4. MULTIMODAL SPEAKER DIARIZATION & GENDER ACCURACY: Observe the visual frame context and 'acoustic_gender' hint ('male', 'female', or 'unknown') for each dialogue. Determine the speaker's true 'gender' ('male' or 'female'), 'character' name/role, and 'emotion' ('normal', 'excited', 'angry', 'sad', 'scared', 'intense'). If 'acoustic_gender' is 'female' or the visual frame shows a female speaking, mark gender as 'female'!\n"
-                f"5. NATURAL CINEMATIC FLOW: Avoid repetitive sentence endings (do NOT repeat identical words like 'ပေါ့', 'ပါ', 'တယ်' in consecutive lines). Write natural storytelling movie recap dialogue.\n\n"
-                f"{json.dumps(batch, ensure_ascii=False, indent=2)}\n\n"
-                f"Output a JSON array where each object has: id, narration, start_sec, end_sec, emotion, character, gender (\"male\" or \"female\")."
-            )
+            if self.script_engine == "recap":
+                sys_prompt = MOVIE_RECAP_STORYTELLER_SYSTEM_PROMPT
+                batch_prompt = (
+                    f"Target Language: {self.language.upper()}\n"
+                    f"Movie Title: {state.movie_name}\n"
+                    f"Write suspenseful, captivating MOVIE RECAP STORYTELLER narration for each scene below in natural colloquial {self.language.title()}.\n"
+                    f"CRITICAL RECAP REQUIREMENTS:\n"
+                    f"1. TRUE RECAP STORYTELLER STYLE: Speak directly as an engaging Myanmar YouTube movie recap narrator ('ဒီဇာတ်လမ်းမှာတော့...', '...ခဲ့တာပေါ့ဗျာ'). DO NOT do dry literal 1:1 sentence dubbing.\n"
+                    f"2. CONVERSATIONAL RECAP ENDINGS: Every line MUST end with natural storytelling particles: '...ခဲ့တာပေါ့ဗျာ', '...နေခဲ့ပါတယ်', '...လိုက်ရတာပါ', '...သွားခဲ့ရတယ်', '...ဖြစ်နေတာပါ', '...ကြတာပေါ့', '...ရတော့တာပါ'. ❌ FORBIDDEN: Blunt chopped endings like '...တယ်', '...တာ', '...ဘူး'.\n"
+                    f"3. DYNAMIC NARRATIVE TRANSITIONS: Bridge scenes naturally using recap connectors ('ဇာတ်လမ်းအစမှာတော့...', 'အဲဒီအချိန်မှာပဲ...', 'မထင်မှတ်ထားဘဲ...', 'ဒီလိုနဲ့...', 'ကြည့်လိုက်တဲ့အခါမှာတော့...').\n"
+                    f"4. STRICT CHARACTER BUDGET & DURATION MATCH: Each line's `narration` MUST STRICTLY STAY UNDER its given `max_chars` limit (Burmese TTS rate is ~10 chars/sec) so audio finishes cleanly within `duration_sec` seconds! Keep phrasing punchy and exciting.\n"
+                    f"5. CLEAN BURMESE TEXT: Transliterate names and English loanwords phonetically. Never output foreign characters.\n\n"
+                    f"{json.dumps(batch, ensure_ascii=False, indent=2)}\n\n"
+                    f"Output a JSON array where each object has: id, narration, start_sec, end_sec, emotion, character, gender (\"male\" or \"female\")."
+                )
+            else:
+                sys_prompt = FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT
+                batch_prompt = (
+                    f"Target Language: {self.language.upper()}\n"
+                    f"Movie Title: {state.movie_name}\n"
+                    f"Translate EVERY SINGLE movie dialogue sentence below into natural colloquial {self.language.title()} for professional dubbing.\n"
+                    f"CRITICAL REQUIREMENTS:\n"
+                    f"1. STRICT 1:1 TRANSLATION: Translate every single item completely. DO NOT summarize, merge, or drop any sentence.\n"
+                    f"2. Translate all character names, places, events, and plot points accurately without leaving anything out.\n"
+                    f"3. STRICT CHARACTER BUDGET & DURATION MATCH: Each translation's `narration` MUST STRICTLY STAY UNDER its given `max_chars` limit (Burmese TTS rate is ~11 chars/sec). Keep sentences punchy, concise, and direct so the spoken narration finishes precisely within `duration_sec` seconds! NEVER write long verbose sentences that exceed `max_chars`!\n"
+                    f"4. MULTIMODAL SPEAKER DIARIZATION & GENDER ACCURACY: Observe the visual frame context and 'acoustic_gender' hint ('male', 'female', or 'unknown') for each dialogue. Determine the speaker's true 'gender' ('male' or 'female'), 'character' name/role, and 'emotion' ('normal', 'excited', 'angry', 'sad', 'scared', 'intense'). If 'acoustic_gender' is 'female' or the visual frame shows a female speaking, mark gender as 'female'!\n"
+                    f"5. NATURAL CINEMATIC FLOW: Avoid repetitive sentence endings (do NOT repeat identical words like 'ပေါ့', 'ပါ', 'တယ်' in consecutive lines). Write natural storytelling movie recap dialogue.\n\n"
+                    f"{json.dumps(batch, ensure_ascii=False, indent=2)}\n\n"
+                    f"Output a JSON array where each object has: id, narration, start_sec, end_sec, emotion, character, gender (\"male\" or \"female\")."
+                )
 
             batch_translated = None
             if gemini_key:
                 try:
                     raw_res, used_model = call_gemini(
-                        FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT,
+                        sys_prompt,
                         batch_prompt,
                         gemini_key,
                         model_workhorse,
@@ -301,9 +327,9 @@ class WriterAgent:
                     character = str(item.get("character", "Narrator")).strip()
                     if getattr(self, "language", "burmese").lower() in ["burmese", "mm", "myanmar"]:
                         try:
-                            from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
                             narration = replace_numbers_with_burmese(narration)
                             narration = transliterate_english_acronyms(narration)
+                            narration = sanitize_burmese_narration(narration)
                         except Exception:
                             pass
                 else:
@@ -314,9 +340,16 @@ class WriterAgent:
                     character = "Narrator"
                     if gemini_key:
                         try:
+                            if self.script_engine == "recap":
+                                fb_sys = f"You are a master movie recap storyteller into natural colloquial {self.language.title()} with lively storytelling endings."
+                                fb_prompt = f"Write natural storyteller movie recap narration in {self.language.title()} for this scene:\n'{seg['text']}'\nReturn ONLY the recap narration as plain text, without quotes or meta explanation."
+                            else:
+                                fb_sys = f"You are a professional movie dubbing translator into natural colloquial {self.language.title()}."
+                                fb_prompt = f"Translate this dialogue into natural colloquial {self.language.title()}:\n'{seg['text']}'\nReturn ONLY the translation as plain text, without quotes or meta explanation."
+
                             line_res, _ = call_gemini(
-                                f"You are a professional movie dubbing translator into natural colloquial {self.language.title()}.",
-                                f"Translate this dialogue into natural colloquial {self.language.title()}:\n'{seg['text']}'\nReturn ONLY the translation as plain text, without quotes or meta explanation.",
+                                fb_sys,
+                                fb_prompt,
                                 gemini_key,
                                 model_workhorse,
                                 temperature=0.3,
@@ -327,9 +360,9 @@ class WriterAgent:
                             if clean_line and not any(bad in clean_line.lower() for bad in ["json", "```", "here is", "here's"]):
                                 if getattr(self, "language", "burmese").lower() in ["burmese", "mm", "myanmar"]:
                                     try:
-                                        from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
                                         clean_line = replace_numbers_with_burmese(clean_line)
                                         clean_line = transliterate_english_acronyms(clean_line)
+                                        clean_line = sanitize_burmese_narration(clean_line)
                                     except Exception:
                                         pass
                                 narration = clean_line
@@ -456,9 +489,9 @@ class WriterAgent:
                 if txt and len(txt) > 4:
                     if getattr(self, "language", "burmese").lower() in ["burmese", "mm", "myanmar"]:
                         try:
-                            from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
                             txt = replace_numbers_with_burmese(txt)
                             txt = transliterate_english_acronyms(txt)
+                            txt = sanitize_burmese_narration(txt)
                         except Exception:
                             pass
                     bridge_dur = min(cand["gap_dur"] - 2.0, 5.5)

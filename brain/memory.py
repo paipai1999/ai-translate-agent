@@ -56,6 +56,7 @@ class MovieState(BaseModel):
     thumbnail_intro_enabled: Optional[bool] = False  # Whether 3-second thumbnail intro should be stitched
     skip_demucs: Optional[bool] = False  # When True, Demucs vocal separation was skipped
     source_language: Optional[str] = "auto"  # Source audio language for Whisper STT (e.g. "auto", "zh", "en", "th", "ko", "ja")
+    script_engine: Optional[str] = "recap"  # Narration Script Engine: "recap" (Storyteller) | "translate" (1:1 Dubbing)
     subtitle_timings: List[Any] = Field(default_factory=list)  # Exact (place_time, duration, text) timings synced with audio
     subtitles_burned: Optional[bool] = False  # Set to True when Myanmar ASS subtitles are burned onto video
     uploaded_video_name: Optional[str] = None  # Stores the GenAI file name (e.g. files/abc)

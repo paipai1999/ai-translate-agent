@@ -78,5 +78,44 @@ class TestLanguagePreservation(unittest.TestCase):
         self.assertIn("ဗွီအိုင်ပီ", rewritten)
 
 
+class TestDualScriptEngine(unittest.TestCase):
+
+    def test_writer_agent_default_script_engine(self):
+        from agents.writer_agent import WriterAgent
+        writer = WriterAgent()
+        self.assertEqual(writer.script_engine, "recap")
+
+    def test_writer_agent_translate_script_engine(self):
+        from agents.writer_agent import WriterAgent
+        writer = WriterAgent(script_engine="translate")
+        self.assertEqual(writer.script_engine, "translate")
+
+    def test_sanitize_burmese_narration_georgian_token_leakage(self):
+        from brain.burmese_utils import sanitize_burmese_narration
+        # Test Georgian 'კ' leakage into 'ကလောင်'
+        corrupted = "မှန်ထဲကဘီလူးက კလောင်နဲ့ လက်ကို ထိုးစိုက်တယ်။"
+        cleaned = sanitize_burmese_narration(corrupted)
+        self.assertNotIn("კ", cleaned)
+        self.assertIn("ကလောင်", cleaned)
+
+    def test_sanitize_burmese_narration_stray_scripts(self):
+        from brain.burmese_utils import sanitize_burmese_narration
+        mixed = "ဒီမစ် ရုံးခန်းထဲမှာ နေခဲ့တာပေါ့ဗျာ။ русский текст 123"
+        cleaned = sanitize_burmese_narration(mixed)
+        self.assertNotIn("русский", cleaned)
+        self.assertIn("ဒီမစ် ရုံးခန်းထဲမှာ နေခဲ့တာပေါ့ဗျာ။", cleaned)
+
+    def test_prompts_movie_recap_storyteller_rules(self):
+        from brain.prompts import MOVIE_RECAP_STORYTELLER_SYSTEM_PROMPT, FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT
+        # Recap prompt must enforce storyteller persona and conversational endings
+        self.assertIn("Myanmar Movie Recap Storyteller", MOVIE_RECAP_STORYTELLER_SYSTEM_PROMPT)
+        self.assertIn("...ခဲ့တာပေါ့ဗျာ", MOVIE_RECAP_STORYTELLER_SYSTEM_PROMPT)
+        self.assertIn("DYNAMIC NARRATIVE TRANSITIONS", MOVIE_RECAP_STORYTELLER_SYSTEM_PROMPT)
+        # Translation prompt must enforce 1:1 translation
+        self.assertIn("FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT", "FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT")
+        self.assertIn("STRICT 1:1 DIALOGUE TRANSLATION", FULL_MOVIE_TRANSLATION_SYSTEM_PROMPT)
+
+
 if __name__ == "__main__":
     unittest.main()
+

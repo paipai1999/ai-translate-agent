@@ -257,6 +257,7 @@ def pipeline_worker(
     detect_scenes=False,
     resume=True,
     tts_voice=None,
+    script_engine="recap",
 ):
     current_job_id.set(job_id)
     cancel_events[job_id] = threading.Event()
@@ -350,6 +351,7 @@ def pipeline_worker(
             video_format=video_format,
             thumbnail_intro=thumbnail_intro,
             source_language=source_language,
+            script_engine=script_engine,
             resume=resume,
             cancel_event=cancel_events.get(job_id),
         )
@@ -419,6 +421,7 @@ def batch_worker(
     detect_scenes=False,
     resume=True,
     tts_voice=None,
+    script_engine="recap",
 ):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
@@ -501,6 +504,7 @@ def batch_worker(
             video_format=video_format,
             thumbnail_intro=thumbnail_intro,
             source_language=source_language,
+            script_engine=script_engine,
             resume=resume,
             cancel_event=cancel_events.get(job_id),
         )
@@ -570,6 +574,7 @@ class StartRequest(BaseModel):
     source_language: Optional[str] = "auto"
     skip_demucs: Optional[bool] = False
     detect_scenes: Optional[bool] = False
+    script_engine: Optional[str] = "recap"
     resume: Optional[bool] = True
 
 class BatchStartRequest(BaseModel):
@@ -590,6 +595,7 @@ class BatchStartRequest(BaseModel):
     source_language: Optional[str] = "auto"
     skip_demucs: Optional[bool] = False
     detect_scenes: Optional[bool] = False
+    script_engine: Optional[str] = "recap"
     resume: Optional[bool] = True
 
 class SubtitleConfigRequest(BaseModel):
@@ -742,6 +748,7 @@ async def start_pipeline(req: StartRequest):
             req.detect_scenes or False,
             req.resume if req.resume is not None else True,
             req.tts_voice,
+            req.script_engine or "recap",
         ),
         daemon=True,
     )
@@ -799,6 +806,7 @@ async def start_batch_pipeline(req: BatchStartRequest):
             req.detect_scenes or False,
             req.resume if req.resume is not None else True,
             req.tts_voice,
+            req.script_engine or "recap",
         ),
         daemon=True,
     )
