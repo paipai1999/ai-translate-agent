@@ -47,14 +47,27 @@ def run_interactive_cleanup():
         if sel == "all":
             confirm = input("Are you sure you want to delete ALL outputs? (y/N): ").lower()
             if confirm == "y":
+                def _safe_remove_path(path: str):
+                    if os.path.isdir(path):
+                        shutil.rmtree(path, ignore_errors=True)
+                    elif os.path.isfile(path):
+                        try: os.remove(path)
+                        except Exception: pass
+
                 for name in items:
-                    shutil.rmtree(os.path.join("outputs", name), ignore_errors=True)
-                    shutil.rmtree(os.path.join("temp", name), ignore_errors=True)
+                    _safe_remove_path(os.path.join("outputs", name))
+                    _safe_remove_path(os.path.join("temp", name))
                 print("[OK] All outputs and associated temp files deleted!")
         elif sel.isdigit() and 1 <= int(sel) <= len(items):
             name = items[int(sel)-1]
-            shutil.rmtree(os.path.join("outputs", name), ignore_errors=True)
-            shutil.rmtree(os.path.join("temp", name), ignore_errors=True)
+            def _safe_remove_path(path: str):
+                if os.path.isdir(path):
+                    shutil.rmtree(path, ignore_errors=True)
+                elif os.path.isfile(path):
+                    try: os.remove(path)
+                    except Exception: pass
+            _safe_remove_path(os.path.join("outputs", name))
+            _safe_remove_path(os.path.join("temp", name))
             print(f"[OK] Deleted output: {name}")
     elif choice == "2":
         mov_dir = "movies"

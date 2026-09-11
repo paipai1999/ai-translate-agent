@@ -6,12 +6,12 @@ DEFAULT_CONFIG = {
     "pipeline": {
         "language": "burmese",            # burmese (မြန်မာ - Thiha Voice) | english (အင်္ဂလိပ် - Guy Voice)
         "video_format": "both",            # "both" (16:9 + 9:16) | "16:9" (YouTube Landscape) | "9:16" (Facebook Reels / TikTok)
-        "whisper_model": "small",         # small | base | medium | large (small is a good balance between speed and accuracy)
+        "whisper_model": "base",          # small | base | medium | large (base matches the shipped config)
         "scene_threshold": 30.0,           # PySceneDetect sensitivity (lower = more scenes)
         "max_characters": 6,               # Max character names to detect
         "max_scenes_for_llm": 30,          # Scene count cap passed to LLM (context limit)
         "parallel_processing": True,       # Run STT & Scene detection in parallel (set False for Low RAM)
-        "use_demucs": True,                # Vocal separation with Demucs (high accuracy)
+        "use_demucs": False,               # Vocal separation is opt-in because it is expensive on local machines
         "scene_detection": False           # Skip PySceneDetect in 1:1 dialogue mode (saves 10-25 mins per video)
     },
     "gemini": {
@@ -86,7 +86,7 @@ DEFAULT_CONFIG = {
     "watermark": {
         "enabled": True,
         "text": "PAI AI Movie Translate",
-        "opacity": 0.4,
+        "opacity": 0.5,
         "margin": 30,
         "font_size": 40
     },
@@ -128,6 +128,11 @@ DEFAULT_CONFIG = {
     "logging": {
         "level": "INFO",                   # DEBUG | INFO | WARNING
         "save_log_file": True
+    },
+    "qa": {
+        "enabled": True,
+        "auto_rewrite_threshold": 6,
+        "review_output": True
     }
 }
 
@@ -220,6 +225,16 @@ CONFIG_FILE = "config.json"
 _config_cache = None
 _config_cache_mtime = 0.0
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Merge nested configuration sections without dropping sibling defaults."""
+    merged = dict(base)
+    for key, value in (override or {}).items():
+        if isinstance(merged.get(key), dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
 def load_config() -> dict:
     """Loads config.json if it exists, otherwise creates it with defaults and returns defaults."""
     global _config_cache, _config_cache_mtime
@@ -237,12 +252,7 @@ def load_config() -> dict:
         except Exception:
             user_config = {}
             
-        merged = {**DEFAULT_CONFIG}
-        for section, values in user_config.items():
-            if section in merged and isinstance(merged[section], dict):
-                merged[section] = {**merged[section], **values}
-            else:
-                merged[section] = values
+        merged = _deep_merge(DEFAULT_CONFIG, user_config)
 
         # Auto-detect environment GEMINI_API_KEY or GEMINI_API_KEYS
         env_keys = os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEYS")

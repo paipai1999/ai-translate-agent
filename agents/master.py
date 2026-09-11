@@ -101,9 +101,11 @@ class MasterAgent:
         thumbnail_intro: bool = None,
         source_language: str = "auto",
         resume: bool = True,
+        cancel_event=None,
     ):
         self.movie_path = movie_path
         self.resume = bool(resume)
+        self.cancel_event = cancel_event
         movie_name = os.path.splitext(os.path.basename(movie_path))[0]
         cfg = config.load_config()
 
@@ -650,6 +652,10 @@ class MasterAgent:
                 qa_cfg = config.load_config().get("qa", {})
                 if qa_cfg.get("enabled", False):
                     final_video_path = os.path.join(self.output_dir, self.state.project_dir, "final_recap.mp4")
+                    if not os.path.exists(final_video_path):
+                        reels_candidate = os.path.join(self.output_dir, self.state.project_dir, "final_reels.mp4")
+                        if os.path.exists(reels_candidate):
+                            final_video_path = reels_candidate
                     if os.path.exists(final_video_path):
                         self.state = self.qa_agent.review(
                             state=self.state,
@@ -663,8 +669,8 @@ class MasterAgent:
                         else:
                             print("[WARN] QA did not complete successfully; Phase 7 will remain pending for resume.")
                     else:
-                        print("[!] QA: final_recap.mp4 not found — skipping QA phase.")
-                        self.state.warnings.append("QA pending: final_recap.mp4 was not found")
+                        print(f"[!] QA: No output video (recap/reels) found at '{final_video_path}' — skipping QA phase.")
+                        self.state.warnings.append("QA pending: Output video was not found")
                         self.state.phase_durations["Phase 7: QA Review"] = 0.0
                 else:
                     print("[*] QA Phase: Disabled (set qa.enabled=true in config.json to enable)")
@@ -762,9 +768,19 @@ class MasterAgent:
             sys.stdout = orig_stdout
             sys.stderr = orig_stderr
 
-    def _phase(self, label: str, progress: int = 0):
+    def _is_cancelled(self) -> bool:
+        if self.cancel_event and getattr(self.cancel_event, "is_set", lambda: False)():
+            return True
         if os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+            return True
+        return False
+
+    def _phase(self, label: str, progress: int = 0):
+        if self._is_cancelled():
             print(f"\n🛑 [STOP] MasterAgent: Pipeline force-stopped by user at {label}.")
+            self.state.pipeline_status = "CANCELLED"
+            self.state.current_phase = f"Stopped by user at {label}"
+            self.save_state()
             raise InterruptedError(f"Pipeline force-stopped by user at {label}.")
         print(f"\n--- [{label}] ---")
         self.state.current_phase = label

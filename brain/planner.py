@@ -26,10 +26,12 @@ class BatchProcessor:
         thumbnail_intro: bool = None,
         source_language: str = "auto",
         resume: bool = True,
+        cancel_event=None,
     ):
         self.movies_folder = movies_folder
         self.skip_completed = skip_completed
         self.resume = bool(resume)
+        self.cancel_event = cancel_event
         self.language = language
         self.source_language = source_language or "auto"
         self.subtitle_mode = subtitle_mode
@@ -104,7 +106,7 @@ class BatchProcessor:
 
         # Step 3: Process each movie sequentially
         for idx, movie_path in enumerate(movies, 1):
-            if os.environ.get("CURRENT_JOB_CANCELLED") == "1":
+            if (self.cancel_event and getattr(self.cancel_event, "is_set", lambda: False)()) or os.environ.get("CURRENT_JOB_CANCELLED") == "1":
                 print(f"\n🛑 [STOP] Batch processing cancelled by user at item {idx}/{total}.")
                 break
 
@@ -136,6 +138,7 @@ class BatchProcessor:
                     thumbnail_intro=self.thumbnail_intro,
                     source_language=self.source_language,
                     resume=self.resume,
+                    cancel_event=self.cancel_event,
                 )
                 master.run_pipeline()
                 pipeline_status = getattr(master.state, "pipeline_status", "COMPLETED")

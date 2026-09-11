@@ -39,7 +39,7 @@ class QAAgent:
             return state
 
         config_data = cfg.load_config()
-        api_key = config_data.get("gemini", {}).get("api_keys") or os.getenv("GEMINI_API_KEY")
+        api_key = config_data.get("gemini", {}).get("api_keys") or os.getenv("GEMINI_API_KEYS") or os.getenv("GEMINI_API_KEY")
         if not api_key:
             return state
             
@@ -185,7 +185,7 @@ class QAAgent:
         if not qa_cfg.get("enabled", False) or not qa_cfg.get("language_check", True):
             return state
 
-        api_key = config_data.get("gemini", {}).get("api_keys") or os.getenv("GEMINI_API_KEY")
+        api_key = config_data.get("gemini", {}).get("api_keys") or os.getenv("GEMINI_API_KEYS") or os.getenv("GEMINI_API_KEY")
         if not api_key:
             return state
 
@@ -207,7 +207,7 @@ class QAAgent:
         import brain.config as cfg
         config_data = cfg.load_config()
         gemini_cfg = config_data.get("gemini", {})
-        api_key = gemini_cfg.get("api_keys") or os.getenv("GEMINI_API_KEY")
+        api_key = gemini_cfg.get("api_keys") or os.getenv("GEMINI_API_KEYS") or os.getenv("GEMINI_API_KEY")
         if not api_key:
             print("[!] QAAgent: No Gemini API key. Skipping QA.")
             state.qa_results = {"status": "skipped", "reason": "missing_api_key"}

@@ -374,7 +374,6 @@ class VideoMergerAgent:
         blur_enabled    = blur_cfg.get("enabled", True)
         if self.subtitle_blur_override:
             blur_enabled = True
-        blur_region_pct = float(blur_cfg.get("region_height_pct", 0.18))   # bottom 18%
         blur_strength   = int(blur_cfg.get("blur_strength", 18))            # boxblur radius
         color_cfg       = config_data.get("color_grading", {})
         color_enabled   = color_cfg.get("enabled", True)
@@ -511,7 +510,7 @@ class VideoMergerAgent:
         if has_no_vocals and not getattr(state, "skip_demucs", False):
             bg_source_type = "demucs"
             bg_audio_file = os.path.abspath(no_vocals_path)
-            print(f"[*] VideoMerger: Found Demucs no_vocals.wav (SFX Only). Using as background audio.")
+            print("[*] VideoMerger: Found Demucs no_vocals.wav (SFX Only). Using as background audio.")
         elif getattr(state, "skip_demucs", False) or not has_no_vocals:
             print("[*] VideoMerger: Vocal separation bypassed / skip-demucs -> Muting original audio (zero English voice bleed).")
             bgm_cfg = config_data.get("bgm", {})
@@ -642,7 +641,7 @@ class VideoMergerAgent:
         single_pass_success = False
         ffmpeg_bin = _get_ffmpeg_bin()
 
-        if ffmpeg_bin and not has_thumb_intro:
+        if ffmpeg_bin:
             enc_info = detect_hardware_encoder()
             codec = enc_info.get("codec", "libx264")
             preset = enc_info.get("preset", "faster")
@@ -838,14 +837,89 @@ class VideoMergerAgent:
                 except Exception as spe:
                     print(f"[WARN] Single-pass execution exception: {spe}")
 
-        # ── 10. Fallback Legacy Path (Only if Single-Pass failed or Thumbnail Intro active) ──
-        if not single_pass_success:
-            return self._legacy_moviepy_merge(
-                state, movie_path, output_dir, final_output, persistent_clean_path, clean_video_path,
-                config_data, burn_subs, target_ass_path, subtitle_timings
-            )
+        if single_pass_success:
+            if has_thumb_intro:
+                print(f"[*] VideoMerger: Prepending {thumb_duration:.1f}s thumbnail intro with Pure FFmpeg...")
+                self._prepend_thumbnail_intro_ffmpeg(thumbnail_path, final_output, thumb_duration=thumb_duration)
+                if os.path.exists(persistent_clean_path):
+                    self._prepend_thumbnail_intro_ffmpeg(thumbnail_path, persistent_clean_path, thumb_duration=thumb_duration)
+                    try:
+                        shutil.copy2(persistent_clean_path, clean_video_path)
+                    except Exception:
+                        pass
+            return state
 
-        return state
+        # ── 10. Fallback Legacy Path (Only if Single-Pass failed) ──
+        return self._legacy_moviepy_merge(
+            state, movie_path, output_dir, final_output, persistent_clean_path, clean_video_path,
+            config_data, burn_subs, target_ass_path, subtitle_timings
+        )
+
+    @staticmethod
+    def _prepend_thumbnail_intro_ffmpeg(thumb_path: str, video_path: str, thumb_duration: float = 3.0) -> bool:
+        """Prepends a 3-second thumbnail intro to the rendered video using fast FFmpeg concat."""
+        ffmpeg_bin = _get_ffmpeg_bin()
+        if not ffmpeg_bin or not os.path.exists(thumb_path) or not os.path.exists(video_path):
+            return False
+
+        try:
+            import cv2
+            cap = cv2.VideoCapture(video_path)
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1920
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 1080
+            fps = float(cap.get(cv2.CAP_PROP_FPS) or 24.0)
+            if fps <= 0 or fps > 120:
+                fps = 24.0
+            cap.release()
+        except Exception:
+            w, h, fps = 1920, 1080, 24.0
+
+        tmp_dir = os.path.dirname(os.path.abspath(video_path))
+        base_name, _ = os.path.splitext(os.path.basename(video_path))
+        intro_ts = os.path.join(tmp_dir, f"{base_name}_intro_tmp.mp4")
+        concat_out = os.path.join(tmp_dir, f"{base_name}_with_intro.mp4")
+
+        try:
+            intro_cmd = [
+                ffmpeg_bin, "-y",
+                "-loop", "1", "-framerate", str(fps), "-t", str(thumb_duration),
+                "-i", os.path.abspath(thumb_path),
+                "-f", "lavfi", "-t", str(thumb_duration), "-i", "anullsrc=r=44100:cl=stereo",
+                "-vf", f"scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+                "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", "192k",
+                intro_ts
+            ]
+            res1 = subprocess.run(intro_cmd, capture_output=True, timeout=60)
+            if res1.returncode != 0 or not os.path.exists(intro_ts):
+                err = res1.stderr[-300:] if res1.stderr else ""
+                print(f"[WARN] Failed to generate FFmpeg thumbnail intro: {err}")
+                return False
+
+            concat_cmd = [
+                ffmpeg_bin, "-y",
+                "-i", intro_ts,
+                "-i", os.path.abspath(video_path),
+                "-filter_complex", "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[v][a]",
+                "-map", "[v]", "-map", "[a]",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                "-c:a", "aac", "-b:a", "192k",
+                "-movflags", "+faststart",
+                concat_out
+            ]
+            res2 = subprocess.run(concat_cmd, capture_output=True, timeout=300)
+            if res2.returncode == 0 and os.path.exists(concat_out) and os.path.getsize(concat_out) > 1000:
+                shutil.move(concat_out, video_path)
+                print(f"🎉 [OK] VideoMerger: Prepended {thumb_duration:.1f}s thumbnail intro with Pure FFmpeg!")
+                return True
+        except Exception as te:
+            print(f"[WARN] VideoMerger: FFmpeg thumbnail intro prepend failed: {te}")
+        finally:
+            for p in [intro_ts, concat_out]:
+                if os.path.exists(p):
+                    try: os.remove(p)
+                    except Exception: pass
+        return False
 
     def _legacy_moviepy_merge(
         self,
@@ -1145,7 +1219,10 @@ class VideoMergerAgent:
 
             if has_thumb_intro:
                 try:
-                    from moviepy.editor import ImageClip, concatenate_videoclips
+                    try:
+                        from moviepy import ImageClip, concatenate_videoclips
+                    except ImportError:
+                        from moviepy.editor import ImageClip, concatenate_videoclips
                     intro_clip = ImageClip(thumbnail_path)
                     if hasattr(intro_clip, "with_duration"):
                         intro_clip = intro_clip.with_duration(thumb_duration)
@@ -1937,7 +2014,7 @@ class VideoMergerAgent:
           Burns styled Myanmar ASS subtitles in the SAME encode pass.
         Hardware-accelerated via Intel QSV / NVIDIA NVENC with automatic libx264 CPU fallback.
         """
-        import subprocess, shutil, os
+        import subprocess, os
 
         ffmpeg_bin = _get_ffmpeg_bin()
         if not ffmpeg_bin:
@@ -2327,7 +2404,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 return reels_output
             else:
                 err_msg = (res.stderr or "")[-500:]
-                print(f"[WARN] ReelsExporter: Hardware encoding/filter failed (code={res.returncode}). Retrying with CPU fallback...")
+                print(f"[WARN] ReelsExporter: Hardware encoding/filter failed (code={res.returncode}, {err_msg}). Retrying with CPU fallback...")
                 
                 # Fallback: Retry with libx264 and clean canvas (overlay only, safe against missing libass)
                 clean_filter = (

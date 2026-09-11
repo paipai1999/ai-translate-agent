@@ -592,7 +592,15 @@ class VoiceAgent:
         
         # English letter handling for Myanmar TTS
         if str(self.voice).startswith("my-"):
-            stripped = re.sub(r'[A-Za-z]', '', text)
+            # First pass: transliterate acronyms and common movie character names
+            try:
+                from brain.burmese_utils import transliterate_english_acronyms
+                text = transliterate_english_acronyms(text)
+            except Exception:
+                pass
+            # Only strip remaining stray single latin characters if Burmese letters exist
+            # Avoids leaving awkward blank gaps in sentences
+            stripped = re.sub(r'\b[A-Za-z]{1,2}\b', '', text)
             stripped = re.sub(r'\s+', ' ', stripped).strip()
             if stripped and re.search(r'[\u1000-\u109F]', stripped):
                 text = stripped

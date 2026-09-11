@@ -69,6 +69,10 @@ class MovieState(BaseModel):
     end_time: Optional[str] = None  # ISO completion timestamp
     current_phase: str = "Initializing..."
     progress: int = 0
+    pipeline_status: str = "QUEUED"  # QUEUED | RUNNING | COMPLETED | COMPLETED_WITH_WARNINGS | QA_PENDING | FAILED | CANCELLED
+    phase_statuses: Dict[str, str] = Field(default_factory=dict)
+    warnings: List[str] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)
     completed_phases: List[str] = Field(default_factory=list)  # Tracks successfully completed pipeline phase IDs
     phase_checkpoints: Dict[str, Any] = Field(default_factory=dict)  # Metadata & artifact paths per completed phase
     speaker_profiles: Dict[str, Dict[str, Any]] = Field(default_factory=dict)  # Multimodal speaker diarization profile

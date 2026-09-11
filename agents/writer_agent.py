@@ -34,7 +34,7 @@ class WriterAgent:
 
         config_data = cfg.load_config()
         gemini_cfg = config_data.get("gemini", {})
-        gemini_key = gemini_cfg.get("api_keys") or os.getenv("GEMINI_API_KEY") or ""
+        gemini_key = gemini_cfg.get("api_keys") or os.getenv("GEMINI_API_KEYS") or os.getenv("GEMINI_API_KEY") or ""
         models_dict = gemini_cfg.get("models", {})
         model_workhorse = models_dict.get("workhorse", "gemini-3.5-flash-lite")
 

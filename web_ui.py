@@ -59,6 +59,7 @@ VIDEO_EXTENSIONS = ('.mp4', '.mkv', '.avi', '.mov', '.webm', '.flv', '.m4v')
 
 jobs = {}
 jobs_lock = threading.RLock()
+cancel_events = {}
 JOB_RETENTION_SECONDS = 7200  # Clean up finished jobs after 2 hours
 
 def _cleanup_old_jobs():
@@ -202,6 +203,7 @@ def pipeline_worker(
     tts_voice=None,
 ):
     current_job_id.set(job_id)
+    cancel_events[job_id] = threading.Event()
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
     if skip_demucs:
         os.environ["SKIP_DEMUCS"] = "true"
@@ -293,6 +295,7 @@ def pipeline_worker(
             thumbnail_intro=thumbnail_intro,
             source_language=source_language,
             resume=resume,
+            cancel_event=cancel_events.get(job_id),
         )
         master.run_pipeline()
         
@@ -363,6 +366,7 @@ def batch_worker(
 ):
     from brain.planner import BatchProcessor
     current_job_id.set(job_id)
+    cancel_events[job_id] = threading.Event()
     os.environ["CURRENT_JOB_CANCELLED"] = "0"
     if skip_demucs:
         os.environ["SKIP_DEMUCS"] = "true"
@@ -442,6 +446,7 @@ def batch_worker(
             thumbnail_intro=thumbnail_intro,
             source_language=source_language,
             resume=resume,
+            cancel_event=cancel_events.get(job_id),
         )
         print(f"[*] Batch Mode: Starting batch run for {len(inputs_list)} item(s)...")
         processor.process_all(url_list=urls, local_paths=local_paths)
@@ -756,6 +761,7 @@ async def stop_pipeline(job_id: Optional[str] = None):
         target_jids = [job_id] if (job_id and job_id in jobs) else [jid for jid, j in jobs.items() if j.get("status") == "running"]
         for jid in target_jids:
             if jid in jobs:
+                cancel_events.setdefault(jid, threading.Event()).set()
                 jobs[jid]["status"] = "cancelled"
                 jobs[jid]["phase"] = "Stopped by user"
                 stopped_count += 1

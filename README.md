@@ -1,5 +1,19 @@
 # 🎬 AI Movie Translate & Dubbing Agent (v2.2) — $0 Free Local & Cloud-Accelerated Pipeline
 
+## Secure local setup
+
+Keep Gemini credentials and YouTube session cookies outside the project directory. Set `GEMINI_API_KEYS` and, only when needed, `MOVIE_COOKIES_PATH` in the process environment. The Web UI remains local-only by default; remote access requires `WEB_UI_TOKEN`, and browser origins can be restricted with `WEB_UI_ALLOWED_ORIGINS`. API keys are never returned to the browser and are sent to Google through request headers rather than URL query strings.
+
+```powershell
+$env:GEMINI_API_KEYS="NEW_KEY_1,NEW_KEY_2"
+$env:MOVIE_COOKIES_PATH="C:\Users\wcp18\AppData\Local\MovieTranslate\cookies.txt"
+$env:WEB_UI_TOKEN="use-a-long-random-token"
+$env:WEB_UI_ALLOWED_ORIGINS="http://127.0.0.1:5000,http://localhost:5000"
+python web_ui.py
+```
+
+Rotate any credentials that were previously stored in `config.json` or `cookies.txt` before using this project again.
+
 An autonomous, end-to-end AI agentic pipeline designed to automatically translate movies, short dramas, and anime clips line-by-line into natural **Colloquial Burmese** (or English), synthesize lifelike **Multi-Voice Dubbing (Male/Female)**, and produce viral, ready-to-publish videos equipped with **9:16 Facebook Reels Canvas**, **Burned Myanmar ASS Subtitles**, **Subtitle Blur Protection**, **Custom Watermark Branding**, and **High-CTR Thumbnails**.
 
 > 📖 **v2.2 Detailed Release Notes & Changelog:** View complete architecture updates and benchmark records in [CHANGELOG.md](CHANGELOG.md).
