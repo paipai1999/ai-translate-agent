@@ -31,9 +31,11 @@ def _ensure_linux_cuda_ld_path():
     ld_candidates = [
         "/usr/lib/x86_64-linux-gnu",
         "/usr/local/cuda/lib64",
+        "/usr/local/nvidia/lib",
         "/usr/local/nvidia/lib64",
         "/usr/local/cuda/targets/x86_64-linux/lib",
         "/usr/lib/wsl/lib",
+        "/usr/lib64",
     ]
     cur_ld = os.environ.get("LD_LIBRARY_PATH", "")
     extra_ld = [p for p in ld_candidates if os.path.exists(p) and p not in cur_ld]
@@ -51,7 +53,7 @@ def _auto_setup_nvenc_linux() -> str:
     # Check if NVIDIA GPU is available
     has_nvidia = False
     try:
-        chk = subprocess.run(["nvidia-smi"], capture_output=True, timeout=3)
+        chk = subprocess.run(["nvidia-smi"], capture_output=True, timeout=5)
         if chk.returncode == 0:
             has_nvidia = True
     except Exception:
@@ -74,7 +76,7 @@ def _auto_setup_nvenc_linux() -> str:
     ffprobe_target = os.path.join(target_dir, "ffprobe")
     if os.path.exists(target) and os.path.getsize(target) > 10000000:
         try:
-            chk = subprocess.run([target, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True, timeout=4)
+            chk = subprocess.run([target, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True, timeout=15)
             if chk.returncode == 0:
                 os.environ["IMAGEIO_FFMPEG_EXE"] = target
                 global _DETECTED_ENCODER
@@ -129,7 +131,7 @@ def _auto_setup_nvenc_linux() -> str:
             pass
         os.environ["IMAGEIO_FFMPEG_EXE"] = target
         
-        chk = subprocess.run([target, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True, timeout=4)
+        chk = subprocess.run([target, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True, timeout=15)
         if chk.returncode == 0:
             print(f"🚀 [OK] NVIDIA NVENC GPU Encoder ready and active ({target})!")
             _DETECTED_ENCODER = None
@@ -156,7 +158,7 @@ def _get_ffmpeg_bin() -> str:
     # Priority 1: Pick any binary that actively supports NVIDIA NVENC
     for p in existing:
         try:
-            res = subprocess.run([p, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True, timeout=4)
+            res = subprocess.run([p, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True, timeout=15)
             if res.returncode == 0:
                 os.environ["IMAGEIO_FFMPEG_EXE"] = p
                 return p
@@ -171,7 +173,7 @@ def _get_ffmpeg_bin() -> str:
     # Priority 2: Pick any binary that supports Intel QSV
     for p in existing:
         try:
-            res = subprocess.run([p, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_qsv", "-f", "null", "-"], capture_output=True, timeout=4)
+            res = subprocess.run([p, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", "h264_qsv", "-f", "null", "-"], capture_output=True, timeout=15)
             if res.returncode == 0:
                 os.environ["IMAGEIO_FFMPEG_EXE"] = p
                 return p
@@ -209,7 +211,7 @@ def detect_hardware_encoder() -> dict:
     for c in candidates[:-1]:
         cmd = [ffmpeg_bin, "-y", "-f", "lavfi", "-i", "nullsrc=s=64x64:d=0.1", "-c:v", c["codec"], "-f", "null", "-"]
         try:
-            res = subprocess.run(cmd, capture_output=True, timeout=5)
+            res = subprocess.run(cmd, capture_output=True, timeout=15)
             if res.returncode == 0:
                 chosen = c
                 break
