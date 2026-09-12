@@ -264,10 +264,11 @@
 
         /* ── Input row ── */
         .input-row {
-            display: flex; gap: 0.75rem; margin-bottom: 1.25rem;
+            display: flex; gap: 0.75rem; margin-bottom: 1.25rem; align-items: center; flex-wrap: wrap;
         }
         .url-input {
-            flex: 1;
+            flex: 1 1 260px;
+            min-width: 200px;
             padding: 0.9rem 1.25rem;
             border-radius: 12px;
             border: 1px solid rgba(0,0,0,0.08);
@@ -1268,13 +1269,13 @@
                     placeholder="Paste YouTube / DramaBox URL or local video path...">
                 
                 <input type="file" id="file-upload" accept="video/*,.txt" style="display: none;" onchange="handleVideoUpload(this)">
-                <button class="btn-primary" id="btn-upload" style="background: white; border: 1px solid rgba(0,0,0,0.1); color: var(--text); box-shadow: 0 4px 10px rgba(0,0,0,0.03);" onclick="document.getElementById('file-upload').click()" title="Upload a video file from your computer">
+                <button class="btn-primary" id="btn-upload" style="background: white; border: 1px solid rgba(0,0,0,0.1); color: var(--text); box-shadow: 0 4px 10px rgba(0,0,0,0.03); flex-shrink: 0; white-space: nowrap;" onclick="document.getElementById('file-upload').click()" title="Upload a video file from your computer">
                     <span id="btn-upload-text">📁 Upload</span>
                 </button>
-                <button class="btn-primary" id="btn-cookies-quick" type="button" style="background: rgba(255,165,2,0.14); border: 1px solid rgba(255,165,2,0.35); color: #d97706; font-weight:700; padding:0.5rem 0.9rem;" onclick="openCookiesModal()" title="Manage YouTube Anti-Bot Cookies">
+                <button class="btn-primary" id="btn-cookies-quick" type="button" style="background: rgba(255,165,2,0.14); border: 1px solid rgba(255,165,2,0.35); color: #d97706; font-weight:700; padding:0.5rem 0.9rem; flex-shrink: 0; white-space: nowrap;" onclick="openCookiesModal()" title="Manage YouTube Anti-Bot Cookies">
                     🍪 Cookies
                 </button>
-                <select class="lang-select" id="select-lang">
+                <select class="lang-select" id="select-lang" style="flex-shrink: 0; white-space: nowrap;">
                     <option value="burmese" selected>🇲🇲 မြန်မာ (Auto Multi-Voice 👫)</option>
                     <option value="burmese_thiha">🇲🇲 မြန်မာ (Thiha - Male 👨)</option>
                     <option value="burmese_nilar">🇲🇲 မြန်မာ (Nilar - Female 👩)</option>
@@ -1282,11 +1283,11 @@
                     <option value="english_guy">🇺🇸 English (Guy - Male 👨)</option>
                     <option value="english_jenny">🇺🇸 English (Jenny - Female 👩)</option>
                 </select>
-                <select class="lang-select" id="select-tts-engine" onchange="updateEngineSetting(this.value)" title="Choose TTS Engine">
+                <select class="lang-select" id="select-tts-engine" onchange="updateEngineSetting(this.value)" title="Choose TTS Engine" style="flex-shrink: 0; white-space: nowrap;">
                     <option value="edge_tts" selected>⚡ Edge TTS ($0 Fast)</option>
                     <option value="f5_tts">🧬 F5-TTS (Voice Cloning)</option>
                 </select>
-                <button class="btn-primary" id="btn-start" onclick="startJob()">
+                <button class="btn-primary" id="btn-start" onclick="startJob()" style="flex-shrink: 0; white-space: nowrap;">
                     <span id="btn-start-text">▶ Start Pipeline</span>
                 </button>
             </div>
