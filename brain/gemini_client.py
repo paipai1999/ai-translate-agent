@@ -428,13 +428,18 @@ def upload_video_file(video_path: str, api_key) -> tuple:
         }
         start_payload = json.dumps({"file": {"display_name": os.path.basename(video_path)}}).encode("utf-8")
         
-        req1 = urllib.request.Request(start_url, data=start_payload, headers=start_headers, method="POST")
-        try:
-            with urllib.request.urlopen(req1) as res1:
-                upload_url = res1.headers.get("X-Goog-Upload-URL")
-        except Exception as e:
-            print(f"[WARN] Upload start failed for key {_mask_key(key)}: {e}")
-            continue
+        upload_url = None
+        for start_attempt in range(3):
+            try:
+                req1 = urllib.request.Request(start_url, data=start_payload, headers=start_headers, method="POST")
+                with urllib.request.urlopen(req1, timeout=30) as res1:
+                    upload_url = res1.headers.get("X-Goog-Upload-URL")
+                if upload_url:
+                    break
+            except Exception as e:
+                print(f"[WARN] Upload start attempt {start_attempt+1}/3 failed for key {_mask_key(key)}: {e}")
+                if start_attempt < 2:
+                    time.sleep(2 * (start_attempt + 1))
             
         if not upload_url:
             continue
@@ -447,15 +452,20 @@ def upload_video_file(video_path: str, api_key) -> tuple:
             "Content-Length": str(file_size)
         }
         
-        try:
-            with open(video_path, "rb") as f:
-                req2 = urllib.request.Request(upload_url, data=f, headers=upload_headers, method="POST")
-                with urllib.request.urlopen(req2, timeout=600) as res2:
-                    res_data = json.loads(res2.read().decode("utf-8"))
-                    file_name = res_data.get("file", {}).get("name")
-        except Exception as e:
-            print(f"[WARN] Upload finalization failed: {e}")
-            continue
+        file_name = None
+        for upload_attempt in range(3):
+            try:
+                with open(video_path, "rb") as f:
+                    req2 = urllib.request.Request(upload_url, data=f, headers=upload_headers, method="POST")
+                    with urllib.request.urlopen(req2, timeout=600) as res2:
+                        res_data = json.loads(res2.read().decode("utf-8"))
+                        file_name = res_data.get("file", {}).get("name")
+                if file_name:
+                    break
+            except Exception as e:
+                print(f"[WARN] Upload streaming attempt {upload_attempt+1}/3 failed: {e}")
+                if upload_attempt < 2:
+                    time.sleep(3 * (upload_attempt + 1))
             
         if not file_name:
             continue
@@ -467,7 +477,7 @@ def upload_video_file(video_path: str, api_key) -> tuple:
             check_url = f"https://generativelanguage.googleapis.com/v1beta/{file_name}"
             try:
                 req_check = urllib.request.Request(check_url, headers={"x-goog-api-key": key}, method="GET")
-                with urllib.request.urlopen(req_check, timeout=15) as r:
+                with urllib.request.urlopen(req_check, timeout=30) as r:
                     info = json.loads(r.read().decode("utf-8"))
                     state = info.get("state")
                     if state == "ACTIVE":
@@ -479,7 +489,7 @@ def upload_video_file(video_path: str, api_key) -> tuple:
                         print(f"[WARN] Video processing FAILED on Google servers for {file_name}. Trying next API key.")
                         break
             except Exception as e:
-                print(f"[WARN] Check status failed: {e}")
+                print(f"[WARN] Check status attempt failed (will retry): {e}")
                 
     raise Exception("All Gemini API keys failed to upload the video.")
 

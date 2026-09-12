@@ -218,25 +218,57 @@ class QAAgent:
                 ffmpeg_bin = get_ffmpeg_exe()
             except Exception:
                 ffmpeg_bin = "ffmpeg"
+
+        # Calculate dynamic timeout based on video file size (minimum 360s = 6 mins, up to 20 mins)
+        file_size_mb = os.path.getsize(input_video_path) / (1024 * 1024) if os.path.exists(input_video_path) else 0
+        calc_timeout = max(360, min(1200, int(file_size_mb * 3)))
+
+        # Detect hardware acceleration if available
+        encoder_args = ["-c:v", "libx264", "-crf", "32", "-preset", "ultrafast"]
+        try:
+            from agents.video_merger_agent import detect_hardware_encoder
+            hw_enc = detect_hardware_encoder()
+            if hw_enc == "h264_nvenc":
+                encoder_args = ["-c:v", "h264_nvenc", "-preset", "p1", "-cq", "32"]
+            elif hw_enc == "h264_qsv":
+                encoder_args = ["-c:v", "h264_qsv", "-global_quality", "32", "-preset", "veryfast"]
+        except Exception:
+            pass
+
         cmd = [
             ffmpeg_bin, "-y",
             "-i", input_video_path,
             "-vf", "scale=-2:360",
-            "-c:v", "libx264",
-            "-crf", "32",
-            "-preset", "veryfast",
+            *encoder_args,
             "-c:a", "aac",
             "-b:a", "64k",
             "-movflags", "+faststart",
             preview_path
         ]
         try:
-            print(f"[*] QAAgent: Creating lightweight 360p QA preview video from {os.path.basename(input_video_path)}...")
-            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
+            print(f"[*] QAAgent: Creating lightweight 360p QA preview video from {os.path.basename(input_video_path)} (timeout={calc_timeout}s)...")
+            res = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=calc_timeout)
             if res.returncode == 0 and os.path.exists(preview_path) and os.path.getsize(preview_path) > 1000:
                 mb = os.path.getsize(preview_path) / (1024 * 1024)
                 print(f"[OK] QAAgent: 360p QA preview ready ({mb:.1f} MB) for ultra-fast Gemini upload.")
                 return preview_path
+
+            # If hardware encoding returned non-zero, retry once with CPU libx264 ultrafast
+            if encoder_args[1] != "libx264":
+                cpu_cmd = [
+                    ffmpeg_bin, "-y",
+                    "-i", input_video_path,
+                    "-vf", "scale=-2:360",
+                    "-c:v", "libx264", "-crf", "32", "-preset", "ultrafast",
+                    "-c:a", "aac", "-b:a", "64k",
+                    "-movflags", "+faststart",
+                    preview_path
+                ]
+                res = subprocess.run(cpu_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=calc_timeout)
+                if res.returncode == 0 and os.path.exists(preview_path) and os.path.getsize(preview_path) > 1000:
+                    mb = os.path.getsize(preview_path) / (1024 * 1024)
+                    print(f"[OK] QAAgent: 360p QA preview ready via CPU fallback ({mb:.1f} MB).")
+                    return preview_path
         except Exception as e:
             print(f"[WARN] QAAgent: Preview video creation failed: {e}")
         return None
