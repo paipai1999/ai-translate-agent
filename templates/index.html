@@ -1397,38 +1397,38 @@
         <!-- ── Thumbnail Title & Watermark Branding Strip ── -->
         <div class="branding-strip">
             <!-- Thumbnail Title Section -->
-            <div style="background:rgba(255,255,255,0.03); padding:0.75rem 1rem; border-radius:10px; border:1px solid rgba(255,255,255,0.08);">
+            <div style="background:white; padding:0.85rem 1.1rem; border-radius:12px; border:1px solid rgba(0,0,0,0.07); box-shadow:0 4px 12px rgba(0,0,0,0.02);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
                     <span style="font-size:0.85rem; font-weight:700; color:var(--text);">🖼️ Thumbnail မြန်မာ Title:</span>
-                    <span id="thumb-mode-badge" style="font-size:0.72rem; padding:2px 8px; border-radius:4px; background:rgba(0,255,136,0.15); color:#00ff88; font-weight:600;">🤖 Auto (AI Generated)</span>
+                    <span id="thumb-mode-badge" style="font-size:0.72rem; padding:2px 8px; border-radius:4px; background:rgba(46,213,115,0.14); color:var(--success); font-weight:700; border:1px solid rgba(46,213,115,0.3);">🤖 Auto (AI Generated)</span>
                 </div>
                 <input type="text" id="input-thumb-title" placeholder="အလွတ်ထားပါက AI က Auto ရေးပေးမည် (သို့) မိမိစိတ်ကြိုက် Title ရိုက်ထည့်ပါ..." 
                        oninput="updateThumbBadge(this.value)"
-                       style="width:100%; box-sizing:border-box; padding:0.5rem 0.75rem; font-size:0.82rem; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:6px; color:#fff;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.06);">
+                       style="width:100%; box-sizing:border-box; padding:0.6rem 0.85rem; font-size:0.85rem; background:#f8fafc; border:1px solid rgba(0,0,0,0.12); border-radius:8px; color:var(--text); transition:border-color 0.2s;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px; padding-top:6px; border-top:1px solid rgba(0,0,0,0.06);">
                     <label style="font-size:0.82rem; font-weight:600; color:var(--text); cursor:pointer; display:flex; align-items:center; gap:0.4rem;">
                         <input type="checkbox" id="chk-thumb-intro" onchange="updateThumbnailIntroSetting(this.checked)">
                         ⏱️ 3s Thumbnail Intro ထည့်မည် (ဗီဒီယိုအစတွင် ၃ စက္ကန့်ပြသရန်)
                     </label>
                 </div>
-                <div style="font-size:0.73rem; color:var(--muted); margin-top:4px;">
+                <div style="font-size:0.75rem; color:var(--muted); margin-top:4px;">
                     💡 အလွတ်ထားပါက AI က SEO High-CTR မြန်မာခေါင်းစဉ်ကို Auto ထုတ်ယူပေးမည်။ Intro ကို အမှန်ခြစ်ထားမှသာ ဗီဒီယိုအစ၌ Thumbnail ပုံ ၃ စက္ကန့် ပါဝင်မည်။
                 </div>
             </div>
 
             <!-- Watermark Branding Section -->
-            <div style="background:rgba(255,255,255,0.03); padding:0.75rem 1rem; border-radius:10px; border:1px solid rgba(255,255,255,0.08);">
+            <div style="background:white; padding:0.85rem 1.1rem; border-radius:12px; border:1px solid rgba(0,0,0,0.07); box-shadow:0 4px 12px rgba(0,0,0,0.02);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
                     <label style="font-size:0.85rem; font-weight:700; color:var(--text); cursor:pointer; display:flex; align-items:center; gap:0.4rem;">
                         <input type="checkbox" id="chk-watermark" checked onchange="toggleWatermarkControls(this.checked)">
                         🛡️ Watermark (ရေစာထိုးမည်)
                     </label>
-                    <button type="button" onclick="saveWatermarkDefault()" style="background:transparent; border:none; color:#38bdf8; font-size:0.75rem; cursor:pointer; padding:0; text-decoration:underline;">💾 Save Default</button>
+                    <button type="button" onclick="saveWatermarkDefault()" style="background:transparent; border:none; color:var(--accent); font-size:0.75rem; font-weight:600; cursor:pointer; padding:0; text-decoration:underline;">💾 Save Default</button>
                 </div>
                 <div id="watermark-inputs-wrap" style="display:flex; gap:0.5rem; align-items:center;">
-                    <input type="text" id="input-watermark-text" value="PAI AI Movie Translate" placeholder="Channel Name or Branding..."
-                           style="flex:1; box-sizing:border-box; padding:0.5rem 0.75rem; font-size:0.82rem; background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15); border-radius:6px; color:#fff;">
-                    <select id="select-watermark-opacity" style="padding:0.5rem 0.5rem; font-size:0.82rem; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.15); border-radius:6px; color:#fff;">
+                    <input type="text" id="input-watermark-text" value="Pai Ai Movie Studio" placeholder="Channel Name or Branding..."
+                           style="flex:1; box-sizing:border-box; padding:0.6rem 0.85rem; font-size:0.85rem; background:#f8fafc; border:1px solid rgba(0,0,0,0.12); border-radius:8px; color:var(--text);">
+                    <select id="select-watermark-opacity" style="padding:0.6rem 0.6rem; font-size:0.82rem; background:#f8fafc; border:1px solid rgba(0,0,0,0.12); border-radius:8px; color:var(--text);">
                         <option value="0.2">20% အလွန်ပါး</option>
                         <option value="0.4" selected>40% သင့်တင့် (Recommended)</option>
                         <option value="0.6">60% ထင်ရှား</option>
@@ -1436,32 +1436,32 @@
                         <option value="1.0">100% Solid</option>
                     </select>
                 </div>
-                <div style="font-size:0.73rem; color:var(--muted); margin-top:4px;">
+                <div style="font-size:0.75rem; color:var(--muted); margin-top:4px;">
                     📌 ဗီဒီယို၏ ညာဘက်အပေါ်ထောင့် (Top-Right) တွင် Transparent ရေစာအဖြစ် ထိုးပေးမည်။
                 </div>
             </div>
 
             <!-- Video Size & Aspect Ratio Selector Section -->
-            <div style="background:rgba(255,255,255,0.03); padding:0.75rem 1rem; border-radius:10px; border:1px solid rgba(255,255,255,0.08); margin-top:0.6rem;">
+            <div style="background:white; padding:0.85rem 1.1rem; border-radius:12px; border:1px solid rgba(0,0,0,0.07); box-shadow:0 4px 12px rgba(0,0,0,0.02); margin-top:0.6rem;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
                     <span style="font-size:0.85rem; font-weight:700; color:var(--text); display:flex; align-items:center; gap:0.4rem;">
                         📐 Video Size / Aspect Ratio (ဗီဒီယို အရွယ်အစား):
                     </span>
-                    <span id="video-format-badge" style="font-size:0.72rem; padding:2px 8px; border-radius:4px; background:rgba(0,255,136,0.15); color:#00ff88; font-weight:600;">✨ Dual Export (16:9 + 9:16)</span>
+                    <span id="video-format-badge" style="font-size:0.72rem; padding:2px 8px; border-radius:4px; background:rgba(46,213,115,0.14); color:var(--success); font-weight:700; border:1px solid rgba(46,213,115,0.3);">✨ Dual Export (16:9 + 9:16)</span>
                 </div>
                 <select id="select-video-format" onchange="updateVideoFormatBadge(this.value)"
-                        style="width:100%; box-sizing:border-box; padding:0.5rem 0.75rem; font-size:0.85rem; background:rgba(0,0,0,0.45); border:1px solid rgba(255,255,255,0.15); border-radius:6px; color:#fff; font-weight:600;">
+                        style="width:100%; box-sizing:border-box; padding:0.6rem 0.85rem; font-size:0.85rem; background:#f8fafc; border:1px solid rgba(0,0,0,0.12); border-radius:8px; color:var(--text); font-weight:600;">
                     <option value="both" selected>🎬 Both (16:9 Landscape + 9:16 Vertical Reels) — နှစ်မျိုးစလုံး (Recommended)</option>
                     <option value="16:9">📺 16:9 Only (Standard Landscape — YouTube / Facebook Video)</option>
                     <option value="9:16">📱 9:16 Only (Vertical Canvas — Facebook Reels / TikTok / Shorts)</option>
                 </select>
-                <div id="video-format-desc" style="font-size:0.73rem; color:var(--muted); margin-top:4px;">
+                <div id="video-format-desc" style="font-size:0.75rem; color:var(--muted); margin-top:4px;">
                     📌 16:9 YouTube မူရင်းဗီဒီယိုနှင့် Facebook Reels / Shorts အတွက် 9:16 ဒေါင်လိုက် Canvas ဗီဒီယို (၂) မျိုးစလုံးကို တစ်ပြိုင်နက် ထုတ်ပေးမည်။
                 </div>
             </div>
 
             <!-- Subtitle Style Presets Section -->
-            <div id="sub-style-card" style="background:rgba(255,255,255,0.03); padding:0.75rem 1rem; border-radius:10px; border:1px solid rgba(255,255,255,0.08); margin-top:0.6rem; transition:opacity 0.2s ease;">
+            <div id="sub-style-card" style="background:white; padding:0.85rem 1.1rem; border-radius:12px; border:1px solid rgba(0,0,0,0.07); box-shadow:0 4px 12px rgba(0,0,0,0.02); margin-top:0.6rem; transition:opacity 0.2s ease;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem; flex-wrap:wrap; gap:0.4rem;">
                     <span style="font-size:0.85rem; font-weight:700; color:var(--text); display:flex; align-items:center; gap:0.4rem;">
                         🎨 Subtitle Style Presets (စာတန်းထိုး ဒီဇိုင်းပုံစံများ):
