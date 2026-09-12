@@ -219,7 +219,7 @@ def main():
         "--watermark-text",
         dest="watermark_text",
         default=None,
-        help="Custom watermark text to overlay on the video (default: PAI AI Movie Translate)"
+        help="Custom watermark text to overlay on the video (default: Pai Ai Movie Studio)"
     )
     parser.add_argument(
         "--no-watermark",

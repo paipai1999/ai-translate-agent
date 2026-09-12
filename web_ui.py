@@ -661,7 +661,7 @@ class SubtitleConfigRequest(BaseModel):
 
 class BrandingConfigRequest(BaseModel):
     watermark_enabled: bool = True
-    watermark_text: str = "PAI AI Movie Translate"
+    watermark_text: str = "Pai Ai Movie Studio"
     watermark_opacity: float = 0.4
     watermark_margin: int = 30
     watermark_font_size: int = 40

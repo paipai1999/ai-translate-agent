@@ -87,7 +87,7 @@ DEFAULT_CONFIG = {
     },
     "watermark": {
         "enabled": True,
-        "text": "PAI AI Movie Translate",
+        "text": "Pai Ai Movie Studio",
         "opacity": 0.5,
         "margin": 30,
         "font_size": 40,

@@ -578,7 +578,7 @@ class VideoMergerAgent:
         # Apply the requested watermark to every rendered format, including
         # 9:16-only exports. Previously reels-only jobs silently skipped it.
         if wm_enabled:
-            wm_text = wm_override.get("text") or wm_cfg.get("text", "PAI AI Movie Translate")
+            wm_text = wm_override.get("text") or wm_cfg.get("text", "Pai Ai Movie Studio")
             wm_opacity = float(wm_override.get("opacity") if wm_override.get("opacity") is not None else wm_cfg.get("opacity", 0.85))
             wm_font_size = int(wm_override.get("font_size") or wm_cfg.get("font_size", 28))
             wm_margin = int(wm_override.get("margin") or wm_cfg.get("margin", 25))
@@ -2218,7 +2218,7 @@ class VideoMergerAgent:
         wm_cfg = config_data.get("watermark", {})
         wm_override = getattr(state, "watermark_override", {}) or {}
         wm_brand_enabled = wm_override.get("enabled", wm_cfg.get("enabled", True))
-        wm_brand_text = wm_override.get("text") or wm_cfg.get("text", "PAI AI Movie Recap")
+        wm_brand_text = wm_override.get("text") or wm_cfg.get("text", "Pai Ai Movie Studio")
 
         # Resolve subtitle preset for Reels
         sub_cfg = config_data.get("subtitle_overlay", {})
