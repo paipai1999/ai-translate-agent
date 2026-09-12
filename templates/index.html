@@ -679,14 +679,14 @@
             background: rgba(15, 23, 42, 0.65);
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
-            z-index: 1000;
+            z-index: 99999;
             display: none;
             align-items: center;
             justify-content: center;
             padding: 1.5rem;
         }
         .modal-backdrop.active {
-            display: flex;
+            display: flex !important;
         }
         .modal-dialog {
             background: var(--bg2);
@@ -1747,13 +1747,19 @@
 <script>
     function openCookiesModal() {
         const modal = document.getElementById('cookies-modal-backdrop');
-        if (modal) modal.classList.add('active');
+        if (modal) {
+            modal.classList.add('active');
+            modal.style.display = 'flex';
+        }
         checkCookiesStatus();
     }
 
     function closeCookiesModal() {
         const modal = document.getElementById('cookies-modal-backdrop');
-        if (modal) modal.classList.remove('active');
+        if (modal) {
+            modal.classList.remove('active');
+            modal.style.display = 'none';
+        }
     }
 
     function switchCookiesTab(tab) {
@@ -3375,13 +3381,19 @@
     // ── Health Check Modal & Logic ──
     function openHealthModal() {
         const modal = document.getElementById('health-modal-backdrop');
-        if (modal) modal.classList.add('active');
+        if (modal) {
+            modal.classList.add('active');
+            modal.style.display = 'flex';
+        }
         runHealthCheck();
     }
 
     function closeHealthModal() {
         const modal = document.getElementById('health-modal-backdrop');
-        if (modal) modal.classList.remove('active');
+        if (modal) {
+            modal.classList.remove('active');
+            modal.style.display = 'none';
+        }
     }
 
     async function runHealthCheck() {
@@ -3477,13 +3489,19 @@
     // ── Queue Modal & Logic ──
     function openQueueModal() {
         const modal = document.getElementById('queue-modal-backdrop');
-        if (modal) modal.classList.add('active');
+        if (modal) {
+            modal.classList.add('active');
+            modal.style.display = 'flex';
+        }
         checkQueueStatus(true);
     }
 
     function closeQueueModal() {
         const modal = document.getElementById('queue-modal-backdrop');
-        if (modal) modal.classList.remove('active');
+        if (modal) {
+            modal.classList.remove('active');
+            modal.style.display = 'none';
+        }
     }
 
     async function checkQueueStatus(refreshModal = false) {
