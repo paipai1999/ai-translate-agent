@@ -709,6 +709,10 @@ class VideoMergerAgent:
                     flt_parts.append(cg_str)
                     last_v = "[v_graded]"
 
+                # Split clean stream BEFORE applying 16:9 watermark and subtitles so persistent_clean_path
+                # is truly clean (no duplicate watermark when exported to 9:16 Reels Canvas)
+                flt_parts.append(f"{last_v}split=2[v_for_wm][v_for_clean]")
+
                 if wm_input_idx is not None:
                     if wm_pos == "bottom_left":
                         pos_str = f"{wm_margin}:main_h-overlay_h-{wm_margin}"
@@ -720,17 +724,17 @@ class VideoMergerAgent:
                         pos_str = f"(main_w-overlay_w)/2:{wm_margin}"
                     else:
                         pos_str = f"main_w-overlay_w-{wm_margin}:{wm_margin}"
-                    flt_parts.append(f"{last_v}[{wm_input_idx}:v]overlay={pos_str}[v_clean]")
-                    last_v = "[v_clean]"
-
-                flt_parts.append(f"{last_v}split=2[v_for_sub][v_for_clean]")
+                    flt_parts.append(f"[v_for_wm][{wm_input_idx}:v]overlay={pos_str}[v_wm_done]")
+                    v_sub_in = "[v_wm_done]"
+                else:
+                    v_sub_in = "[v_for_wm]"
 
                 if has_ass:
                     ass_basename = os.path.basename(target_ass_path)
-                    flt_parts.append(f"[v_for_sub]ass={ass_basename}[v_subbed]")
+                    flt_parts.append(f"{v_sub_in}ass={ass_basename}[v_subbed]")
                     r_stream = "[v_subbed]"
                 else:
-                    r_stream = "[v_for_sub]"
+                    r_stream = v_sub_in
 
                 # Dynamic Audio Ducking & Compositing
                 duck_cfg = config_data.get("audio_ducking", {})
@@ -846,16 +850,19 @@ class VideoMergerAgent:
                 except Exception as spe:
                     print(f"[WARN] Single-pass execution exception: {spe}")
 
-        if single_pass_success:
             if has_thumb_intro:
                 print(f"[*] VideoMerger: Prepending {thumb_duration:.1f}s thumbnail intro with Pure FFmpeg...")
-                self._prepend_thumbnail_intro_ffmpeg(thumbnail_path, final_output, thumb_duration=thumb_duration)
+                ok1 = self._prepend_thumbnail_intro_ffmpeg(thumbnail_path, final_output, thumb_duration=thumb_duration)
+                ok2 = False
                 if os.path.exists(persistent_clean_path):
-                    self._prepend_thumbnail_intro_ffmpeg(thumbnail_path, persistent_clean_path, thumb_duration=thumb_duration)
+                    ok2 = self._prepend_thumbnail_intro_ffmpeg(thumbnail_path, persistent_clean_path, thumb_duration=thumb_duration)
                     try:
                         shutil.copy2(persistent_clean_path, clean_video_path)
                     except Exception:
                         pass
+                state.thumbnail_intro_applied = bool(ok1 or ok2)
+            else:
+                state.thumbnail_intro_applied = False
             return state
 
         # ── 10. Fallback Legacy Path (Only if Single-Pass failed) ──
@@ -905,18 +912,23 @@ class VideoMergerAgent:
                 print(f"[WARN] Failed to generate FFmpeg thumbnail intro: {err}")
                 return False
 
+            enc_info = detect_hardware_encoder()
+            codec = enc_info.get("codec", "libx264")
+            preset = enc_info.get("preset", "veryfast")
+            quality_args = ["-b:v", "6M", "-maxrate", "9M", "-bufsize", "12M"] if enc_info.get("type") == "gpu" else ["-crf", "20"]
+
             concat_cmd = [
                 ffmpeg_bin, "-y",
                 "-i", intro_ts,
                 "-i", os.path.abspath(video_path),
                 "-filter_complex", "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[v][a]",
                 "-map", "[v]", "-map", "[a]",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                "-c:v", codec, "-preset", preset, *quality_args,
                 "-c:a", "aac", "-b:a", "192k",
                 "-movflags", "+faststart",
                 concat_out
             ]
-            res2 = subprocess.run(concat_cmd, capture_output=True, timeout=300)
+            res2 = subprocess.run(concat_cmd, capture_output=True, timeout=600)
             if res2.returncode == 0 and os.path.exists(concat_out) and os.path.getsize(concat_out) > 1000:
                 shutil.move(concat_out, video_path)
                 print(f"🎉 [OK] VideoMerger: Prepended {thumb_duration:.1f}s thumbnail intro with Pure FFmpeg!")
@@ -2252,9 +2264,27 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 burn_reels_subs = False
 
         thumb_offset = 0.0
-        if getattr(state, "thumbnail_intro_enabled", False):
+        if getattr(state, "thumbnail_intro_applied", None) is not None:
+            if state.thumbnail_intro_applied:
+                thumb_cfg = config_data.get("thumbnail_intro", {})
+                thumb_offset = float(thumb_cfg.get("duration_sec", 3.0))
+        elif getattr(state, "thumbnail_intro_enabled", False):
+            src_dur = 0.0
+            try:
+                import cv2
+                cap = cv2.VideoCapture(source_video_path)
+                frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
+                if fps > 0:
+                    src_dur = frames / fps
+                cap.release()
+            except Exception:
+                pass
+            orig_dur = getattr(state, "duration_sec", 0.0) or 0.0
             thumb_cfg = config_data.get("thumbnail_intro", {})
-            thumb_offset = float(thumb_cfg.get("duration_sec", 3.0))
+            thumb_dur = float(thumb_cfg.get("duration_sec", 3.0))
+            if orig_dur > 0 and src_dur >= orig_dur + (thumb_dur * 0.5):
+                thumb_offset = thumb_dur
 
         if burn_reels_subs and subtitle_timings:
             for item in subtitle_timings:
@@ -2263,13 +2293,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     dur_s   = float(item[1])
                     raw_txt = str(item[2]).strip()
                     if not raw_txt: continue
-                    chunks = self._chunk_burmese_narration(raw_txt, max_chars_per_chunk=48)
+                    chunks = self._chunk_burmese_narration(raw_txt, max_chars_per_chunk=72)
                     if not chunks: continue
                     seg_dur = dur_s / len(chunks)
                     for i, chunk in enumerate(chunks):
                         seg_start = start_s + i * seg_dur
                         seg_end   = seg_start + seg_dur - 0.05
-                        safe_chunk = chunk.replace('\\', '').replace('{', '').replace('}', '')
+                        safe_chunk = chunk.replace('\\', '').replace('{', '').replace('}', '').strip()
+                        if not safe_chunk: continue
                         ass_text  = self._wrap_burmese_text(safe_chunk, max_chars=24)
                         t_start   = self._sec_to_ass_ts(seg_start)
                         t_end     = self._sec_to_ass_ts(seg_end)
