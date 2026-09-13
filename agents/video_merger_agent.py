@@ -1038,8 +1038,8 @@ class VideoMergerAgent:
                 font_title = font_thanks = font_sub = ImageFont.load_default()
 
             draw.text((w // 2, by + int(50 * scale_factor)), "Pai Ai Movie Studio", fill=(255, 255, 255), font=font_title, anchor="mm")
-            draw.text((w // 2, by + badge_h + int(60 * scale_factor)), "ကျေးဇူးတင်ပါသည်", fill=(234, 179, 8), font=font_thanks, anchor="mm")
-            draw.text((w // 2, by + badge_h + int(120 * scale_factor)), "နောက်ထပ် ဇာတ်ကားကောင်းများစွာအတွက် Like & Follow လုပ်ထားပေးကြပါဦးခင်ဗျာ", fill=(203, 213, 225), font=font_sub, anchor="mm")
+            draw.text((w // 2, by + badge_h + int(60 * scale_factor)), "ကျေးဇူးတင်ပါတယ်", fill=(234, 179, 8), font=font_thanks, anchor="mm")
+            draw.text((w // 2, by + badge_h + int(120 * scale_factor)), "နောက်ထပ် ဇာတ်ကားကောင်းများစွာအတွက် Like & Follow လုပ်ထားပေးကြပါဦးခင်ဗျား", fill=(203, 213, 225), font=font_sub, anchor="mm")
 
             img.save(outro_img_path, "PNG")
 
