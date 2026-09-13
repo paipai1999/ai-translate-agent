@@ -28,6 +28,10 @@ def _ensure_linux_cuda_ld_path():
     """Ensure Linux dynamic linker finds NVIDIA CUDA & NVENC driver libraries."""
     if not sys.platform.startswith("linux"):
         return
+    import glob
+    import subprocess
+    import shutil
+
     ld_candidates = [
         "/usr/lib/x86_64-linux-gnu",
         "/usr/local/cuda/lib64",
@@ -41,6 +45,27 @@ def _ensure_linux_cuda_ld_path():
     extra_ld = [p for p in ld_candidates if os.path.exists(p) and p not in cur_ld]
     if extra_ld:
         os.environ["LD_LIBRARY_PATH"] = ":".join(extra_ld) + ((":" + cur_ld) if cur_ld else "")
+
+    # Auto-repair libnvidia-encode.so.1 symlink if missing but versioned library exists on Kaggle/Ubuntu
+    try:
+        target_link = "/usr/lib/x86_64-linux-gnu/libnvidia-encode.so.1"
+        if not os.path.exists(target_link):
+            matches = glob.glob("/usr/lib/x86_64-linux-gnu/libnvidia-encode.so*") + \
+                      glob.glob("/usr/local/nvidia/lib64/libnvidia-encode.so*") + \
+                      glob.glob("/usr/lib64/libnvidia-encode.so*")
+            valid_libs = [m for m in matches if not m.endswith(".so.1") and os.path.isfile(m)]
+            if valid_libs:
+                target_lib = sorted(valid_libs)[-1]
+                try:
+                    os.symlink(target_lib, target_link)
+                except Exception:
+                    try:
+                        shutil.copy2(target_lib, target_link)
+                    except Exception:
+                        pass
+        subprocess.run(["ldconfig"], capture_output=True, timeout=5)
+    except Exception:
+        pass
 
 def _auto_setup_nvenc_linux() -> str:
     """Optionally cache a BtbN NVENC build locally without modifying system binaries."""
@@ -204,7 +229,7 @@ def detect_hardware_encoder() -> dict:
         {"codec": "h264_nvenc", "label": "NVIDIA GPU (NVENC)", "type": "gpu", "preset": "p4"},
         {"codec": "h264_qsv", "label": "Intel QuickSync (QSV)", "type": "gpu", "preset": "faster"},
         {"codec": "h264_amf", "label": "AMD Radeon (AMF)", "type": "gpu", "preset": "speed"},
-        {"codec": "libx264", "label": "CPU Multi-Core (libx264)", "type": "cpu", "preset": "faster"},
+        {"codec": "libx264", "label": "CPU Multi-Core (libx264)", "type": "cpu", "preset": "veryfast"},
     ]
 
     chosen = candidates[-1]
@@ -695,9 +720,11 @@ class VideoMergerAgent:
 
             # --- FILTERGRAPH GENERATOR (Modular for safe fallbacks) ---
             def _build_filtergraph(include_blur: bool):
+                # 30 FPS Cap: Cinema standard is 24-30 FPS. Capping 60 FPS down to 30 FPS cuts frames & encode time by 50%
+                fps_cap = "fps=30," if float(video_fps) > 32.0 else ""
                 scale_flt = "scale=-2:720," if self.resolution == "720p" else ""
                 flt_parts = [
-                    f"[0:v]{scale_flt}crop=w='trunc(iw/2)*2':h='trunc(ih/2)*2'[v_base]"
+                    f"[0:v]{fps_cap}{scale_flt}crop=w='trunc(iw/2)*2':h='trunc(ih/2)*2'[v_base]"
                 ]
                 last_v = "[v_base]"
 
@@ -2511,18 +2538,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         bg_w = w_target // 4
         bg_h = h_target // 4
 
+        # 30 FPS Cap: Reels, TikTok & Shorts are natively 30 FPS
+        src_info = _get_video_info(source_video_path)
+        reels_fps = src_info.get("fps", 30.0)
+        reels_fps_cap = "fps=30," if float(reels_fps) > 32.0 else ""
+
         # Scale movie foreground to canvas width cleanly across any input resolution
         filter_complex = (
-            f"[0:v]scale={bg_w}:{bg_h}:force_original_aspect_ratio=increase,"
+            f"[0:v]{reels_fps_cap}scale={bg_w}:{bg_h}:force_original_aspect_ratio=increase,"
             f"crop={bg_w}:{bg_h},boxblur=12:3,"
             f"scale={w_target}:{h_target}[bg];"
-            f"[0:v]scale={w_target}:-2[fg];"
+            f"[0:v]{reels_fps_cap}scale={w_target}:-2[fg];"
             f"[bg][fg]overlay=0:({h_target}-h)/2,"
             f"ass={ass_basename}[out]"
         )
 
         codec = enc_info["codec"]
-        preset = enc_info.get("preset", "faster")
+        preset = enc_info.get("preset", "veryfast")
         quality_args = ["-b:v", "6M", "-maxrate", "9M", "-bufsize", "12M"] if enc_info["type"] == "gpu" else ["-crf", "20"]
         cmd = [
             ffmpeg_bin, "-y",
