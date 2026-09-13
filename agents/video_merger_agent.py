@@ -1884,10 +1884,13 @@ class VideoMergerAgent:
         ass_path = os.path.join(output_dir, "myanmar_subs.ass")
 
         def _sec_to_srt_ts(sec: float) -> str:
-            ms = int((sec % 1) * 1000)
-            s = int(sec)
-            m, s = divmod(s, 60)
-            h, m = divmod(m, 60)
+            total_ms = int(round(max(0.0, float(sec)) * 1000))
+            ms = total_ms % 1000
+            total_s = total_ms // 1000
+            s = total_s % 60
+            total_m = total_s // 60
+            m = total_m % 60
+            h = total_m // 60
             return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
         lines = []

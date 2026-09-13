@@ -117,7 +117,7 @@ def num_to_burmese(num: int) -> str:
     if num < 0:
         return 'အနှုတ် ' + num_to_burmese(-num)
 
-    if num >= 10_000_000:
+    if num >= 1_000_000:
         millions = num // 1_000_000
         rem = num % 1_000_000
         res = num_to_burmese(millions) + 'သန်း'
@@ -166,8 +166,8 @@ def num_to_burmese(num: int) -> str:
         prefix = DIGITS[tt] + 'သောင်း'
         return prefix + (' ' + num_to_burmese(rem) if rem > 0 else '')
 
-    # Lakh / Hundred-thousands: 100,000 - 9,999,999 (သိန်း)
-    if num < 10000000:
+    # Lakh / Hundred-thousands: 100,000 - 999,999 (သိန်း)
+    if num < 1000000:
         lakh = num // 100000
         rem = num % 100000
         prefix = num_to_burmese(lakh) + 'သိန်း'

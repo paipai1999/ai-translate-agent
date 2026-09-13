@@ -773,7 +773,6 @@ class MasterAgent:
                         self.state.phase_durations["Phase 7: QA Review"] = 0.0
                 else:
                     print("[*] QA Phase: Disabled (set qa.enabled=true in config.json to enable)")
-                    self.state.warnings.append("QA disabled by configuration")
                     self.state.phase_durations["Phase 7: QA Review"] = 0.0
             else:
                 print("[*] Phase 7: QA Review skipped.")

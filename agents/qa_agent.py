@@ -4,7 +4,11 @@ import re
 from brain.memory import MovieState
 from brain.prompts import QA_SYNC_SYSTEM_PROMPT, QA_LANGUAGE_SYSTEM_PROMPT, OUTPUT_VIDEO_EXTRACT_SYSTEM_PROMPT
 from brain.gemini_client import upload_video_file, ask_gemini_with_video, delete_video_file, call_gemini
-from brain.burmese_utils import replace_numbers_with_burmese, transliterate_english_acronyms
+from brain.burmese_utils import (
+    replace_numbers_with_burmese,
+    transliterate_english_acronyms,
+    sanitize_burmese_narration,
+)
 
 
 class QAAgent:
@@ -169,6 +173,7 @@ class QAAgent:
                             if getattr(state, "language", "burmese").lower() in ["burmese", "mm", "myanmar"]:
                                 new_text = replace_numbers_with_burmese(new_text)
                                 new_text = transliterate_english_acronyms(new_text)
+                                new_text = sanitize_burmese_narration(new_text)
                             state.generated_script[idx]["narration"] = new_text
                             state.generated_script[idx]["qa_rewritten_for_length"] = True
                             rewritten_count += 1
@@ -470,6 +475,7 @@ class QAAgent:
                 if getattr(state, "language", "burmese").lower() in ["burmese", "mm", "myanmar"]:
                     rewritten_text = replace_numbers_with_burmese(rewritten_text)
                     rewritten_text = transliterate_english_acronyms(rewritten_text)
+                    rewritten_text = sanitize_burmese_narration(rewritten_text)
                 block["narration"] = rewritten_text
                 block["qa_rewritten"] = True
                 print(f"[QA] Block {sid} rewritten (score was below {threshold})")

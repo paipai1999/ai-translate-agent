@@ -223,7 +223,7 @@ class ThumbnailAgent:
                     # Clean up leftover English letters while preserving numbers (0-9 and Myanmar digits)
                     title = re.sub(r'[A-Za-z]', '', best_part).strip()
                     # Clean up random leftover spaces or punctuation
-                    title = re.sub(r'[\s+]', ' ', title).strip(" .,!?'\"()[]{}")
+                    title = re.sub(r'\s+', ' ', title).strip(" .,!?'\"()[]{}")
                     print(f"[*] ThumbnailAgent: Auto-generated pure Burmese thumbnail text from SEO: '{title}'")
                 else:
                     title = full_title.split("|")[0].strip()
