@@ -279,6 +279,30 @@ def main():
         help="Disable 3-second thumbnail intro at start of video"
     )
     parser.add_argument(
+        "--trim-end",
+        type=float,
+        default=None,
+        help="Manual seconds to trim from the end of the video to discard original outro"
+    )
+    parser.add_argument(
+        "--no-smart-trim",
+        action="store_true",
+        default=False,
+        help="Disable automatic smart outro trimming at the end of video"
+    )
+    parser.add_argument(
+        "--outro-card",
+        action="store_true",
+        default=None,
+        help="Append 3-second 'Pai AI Movie Studio' branded Outro Card at video end"
+    )
+    parser.add_argument(
+        "--no-outro-card",
+        action="store_true",
+        default=None,
+        help="Disable 3-second outro card"
+    )
+    parser.add_argument(
         "--source-lang", "--source-language",
         dest="source_lang",
         choices=["auto", "zh", "en", "th", "ko", "ja"],
@@ -366,6 +390,7 @@ def main():
 
     watermark_enabled = False if args.no_watermark else None
     thumb_intro = True if args.thumbnail_intro else (False if args.no_thumbnail_intro else None)
+    outro_card_val = True if args.outro_card else (False if args.no_outro_card else None)
     should_resume = not args.fresh
 
     detect_scenes_flag = True if args.detect_scenes else (False if args.skip_scenes else None)
@@ -405,6 +430,9 @@ def main():
                 watermark_text=args.watermark_text,
                 video_format=chosen_format,
                 thumbnail_intro=thumb_intro,
+                trim_end=args.trim_end,
+                no_smart_trim=args.no_smart_trim,
+                outro_card=outro_card_val,
                 source_language=args.source_lang,
                 script_engine=args.script_engine,
                 resume=should_resume,

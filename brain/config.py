@@ -130,6 +130,12 @@ DEFAULT_CONFIG = {
         "enabled": False,                  # If True, prepends 3-second freeze-frame thumbnail intro
         "duration_sec": 3.0
     },
+    "outro_protection": {
+        "auto_trim": True,                 # Automatically cut trailing dead outro / YouTube subscribe screen after narration ends
+        "anti_subscribe_zoom": True,       # Apply subtle 10% center zoom in the final 12s to push corner subscribe cards offscreen
+        "outro_card": False,               # Append 3-second Pai AI Movie Studio branded Outro Card
+        "trim_end_seconds": 0.0            # Manual fixed seconds to trim from video end (0.0 = use auto_trim)
+    },
     "logging": {
         "level": "INFO",                   # DEBUG | INFO | WARNING
         "save_log_file": True

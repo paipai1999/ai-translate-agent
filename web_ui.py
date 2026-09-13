@@ -308,6 +308,9 @@ def pipeline_worker(
     resume=True,
     tts_voice=None,
     script_engine="recap",
+    trim_end=None,
+    no_smart_trim=False,
+    outro_card=False,
 ):
     current_job_id.set(job_id)
     cancel_events[job_id] = threading.Event()
@@ -403,6 +406,9 @@ def pipeline_worker(
             source_language=source_language,
             script_engine=script_engine,
             resume=resume,
+            trim_end=trim_end,
+            no_smart_trim=no_smart_trim,
+            outro_card=outro_card,
             cancel_event=cancel_events.get(job_id),
             skip_demucs=skip_demucs,
             detect_scenes=detect_scenes,
@@ -634,6 +640,9 @@ class StartRequest(BaseModel):
     detect_scenes: Optional[bool] = False
     script_engine: Optional[str] = "recap"
     resume: Optional[bool] = True
+    trim_end: Optional[float] = None
+    no_smart_trim: Optional[bool] = False
+    outro_card: Optional[bool] = False
 
 class BatchStartRequest(BaseModel):
     inputs: List[str]
@@ -1062,6 +1071,9 @@ async def start_pipeline(req: StartRequest):
             req.resume if req.resume is not None else True,
             req.tts_voice,
             req.script_engine or "recap",
+            req.trim_end,
+            req.no_smart_trim or False,
+            req.outro_card or False,
         ),
         "name": str(input_source),
         "source": str(input_source),

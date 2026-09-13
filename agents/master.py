@@ -105,6 +105,9 @@ class MasterAgent:
         cancel_event=None,
         skip_demucs: bool = None,
         detect_scenes: bool = None,
+        trim_end: float = None,
+        no_smart_trim: bool = None,
+        outro_card: bool = None,
     ):
         self.movie_path = movie_path
         self.resume = bool(resume)
@@ -139,6 +142,15 @@ class MasterAgent:
         self.state.video_format = self.video_format
         self.state.source_language = str(source_language or "auto").lower().strip()
         self.state.script_engine = self.script_engine
+
+        # Outro & Subscribe Protection Settings
+        self.state.trim_end = float(trim_end) if trim_end is not None else None
+        self.state.no_smart_trim = bool(no_smart_trim) if no_smart_trim is not None else False
+        if outro_card is not None:
+            self.state.outro_card = bool(outro_card)
+        else:
+            self.state.outro_card = cfg.get("outro_protection", {}).get("outro_card", False)
+
         if thumbnail_intro is not None:
             self.state.thumbnail_intro_enabled = bool(thumbnail_intro)
         else:

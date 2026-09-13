@@ -470,6 +470,25 @@ class VideoMergerAgent:
 
         state.subtitle_timings = subtitle_timings
 
+        # ── 3b. Smart Outro & Subscribe Protection ───────────────────────────
+        outro_cfg = config_data.get("outro_protection", {})
+        auto_trim_enabled = bool(outro_cfg.get("auto_trim", True)) and not getattr(state, "no_smart_trim", False)
+        manual_trim_sec = float(getattr(state, "trim_end", None) or outro_cfg.get("trim_end_seconds", 0.0) or 0.0)
+        anti_sub_zoom_enabled = bool(outro_cfg.get("anti_subscribe_zoom", True))
+        has_outro_card = bool(getattr(state, "outro_card", False) or outro_cfg.get("outro_card", False))
+
+        effective_video_dur = video_dur
+        if manual_trim_sec > 0.0 and video_dur > manual_trim_sec + 5.0:
+            effective_video_dur = max(5.0, video_dur - manual_trim_sec)
+            print(f"[OK] VideoMerger: Manual Outro Trim applied (-{manual_trim_sec:.1f}s) -> Render length: {effective_video_dur:.1f}s")
+        elif auto_trim_enabled and clips_with_timing and video_dur > 15.0:
+            last_narration_end = max([place_time + dur for _, place_time, dur in clips_with_timing])
+            trailing_gap = video_dur - last_narration_end
+            if trailing_gap > 3.0:
+                # Add 2.0s graceful buffer after final spoken word, discarding trailing channel outro/subscribe cards
+                effective_video_dur = min(video_dur, last_narration_end + 2.0)
+                print(f"[OK] VideoMerger (Smart Outro Cut): Trimmed trailing outro from {video_dur:.1f}s -> {effective_video_dur:.1f}s (Cleaned {trailing_gap:.1f}s of source outro).")
+
         # ── 4. Linear PCM Voiceover Track Assembly in C-speed (~2s) ───────────
         temp_dir = os.path.abspath("temp")
         os.makedirs(temp_dir, exist_ok=True)
@@ -480,9 +499,9 @@ class VideoMergerAgent:
         assembled_vo_path = os.path.join(temp_dir, f"{safe_id}_vo_track.wav")
         has_voiceover = False
         if clips_with_timing:
-            print(f"[*] VideoMerger: Fast-assembling linear voiceover PCM track ({len(clips_with_timing)} clips) across {video_dur:.1f}s in C-memory...")
+            print(f"[*] VideoMerger: Fast-assembling linear voiceover PCM track ({len(clips_with_timing)} clips) across {effective_video_dur:.1f}s in C-memory...")
             try:
-                target_len = max(video_dur, curr_t)
+                target_len = max(effective_video_dur, curr_t)
                 _assemble_voiceover_track(clips_with_timing, target_len, assembled_vo_path)
                 if os.path.exists(assembled_vo_path) and os.path.getsize(assembled_vo_path) > 1000:
                     has_voiceover = True
@@ -711,6 +730,16 @@ class VideoMergerAgent:
                     flt_parts.append(cg_str)
                     last_v = "[v_graded]"
 
+                # Anti-Subscribe Edge Zoom: subtly zoom in 9% during the closing 12 seconds to push YouTube end-screen cards offscreen
+                if anti_sub_zoom_enabled and effective_video_dur > 25.0:
+                    zoom_start_t = max(0.0, effective_video_dur - 12.0)
+                    flt_parts.append(
+                        f"{last_v}crop=w='if(gte(t,{zoom_start_t:.2f}), trunc(iw*0.91/2)*2, trunc(iw/2)*2)':"
+                        f"h='if(gte(t,{zoom_start_t:.2f}), trunc(ih*0.91/2)*2, trunc(ih/2)*2)':"
+                        f"x='(iw-ow)/2':y='(ih-oh)/2',scale=iw:ih[v_zoomed]"
+                    )
+                    last_v = "[v_zoomed]"
+
                 # Split clean stream BEFORE applying 16:9 watermark and subtitles so persistent_clean_path
                 # is truly clean (no duplicate watermark when exported to 9:16 Reels Canvas)
                 flt_parts.append(f"{last_v}split=2[v_for_wm][v_for_clean]")
@@ -742,7 +771,7 @@ class VideoMergerAgent:
                 duck_cfg = config_data.get("audio_ducking", {})
                 duck_enabled = duck_cfg.get("enabled", True)
                 ambient_vol = float(duck_cfg.get("ambient_volume", 0.35))
-                target_dur_str = f"{video_dur:.2f}" if video_dur > 0 else "600.00"
+                target_dur_str = f"{effective_video_dur:.2f}" if effective_video_dur > 0 else "600.00"
 
                 if vo_input_idx is not None and (bg_input_idx is not None or bg_source_type == "orig"):
                     if bg_source_type == "bgm":
@@ -777,7 +806,7 @@ class VideoMergerAgent:
 
                 return ";".join(flt_parts), r_stream
 
-            dur_sec = video_dur if video_dur > 0 else (getattr(state, "duration_sec", 0.0) if state else 0.0)
+            dur_sec = effective_video_dur if effective_video_dur > 0 else (getattr(state, "duration_sec", 0.0) if state else 0.0)
             dyn_timeout = max(2400, int((dur_sec or 600.0) * 4.0))
 
             def _build_sp_cmd(curr_codec, curr_preset, curr_quality, curr_blur):
@@ -787,11 +816,13 @@ class VideoMergerAgent:
                     *sp_inputs,
                     "-filter_complex", flt_str,
                     "-map", r_stream, "-map", "[a_master1]",
+                    "-t", f"{effective_video_dur:.2f}",
                     "-c:v", curr_codec, "-preset", curr_preset, *curr_quality,
                     "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                     "-c:a", "aac", "-b:a", "192k",
                     os.path.abspath(final_output),
                     "-map", "[v_for_clean]", "-map", "[a_master2]",
+                    "-t", f"{effective_video_dur:.2f}",
                     "-c:v", curr_codec, "-preset", curr_preset, *curr_quality,
                     "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                     "-c:a", "aac", "-b:a", "192k",
@@ -865,6 +896,21 @@ class VideoMergerAgent:
                 state.thumbnail_intro_applied = bool(ok1 or ok2)
             else:
                 state.thumbnail_intro_applied = False
+
+            if has_outro_card:
+                print("[*] VideoMerger: Appending 3.0s 'Pai AI Movie Studio' branded Outro Card...")
+                ok_out1 = self._append_outro_card_ffmpeg(final_output, outro_duration=3.0)
+                ok_out2 = False
+                if os.path.exists(persistent_clean_path):
+                    ok_out2 = self._append_outro_card_ffmpeg(persistent_clean_path, outro_duration=3.0)
+                    try:
+                        shutil.copy2(persistent_clean_path, clean_video_path)
+                    except Exception:
+                        pass
+                state.outro_card_applied = bool(ok_out1 or ok_out2)
+            else:
+                state.outro_card_applied = False
+
             return state
 
         # ── 10. Fallback Legacy Path (Only if Single-Pass failed) ──
@@ -939,6 +985,106 @@ class VideoMergerAgent:
             print(f"[WARN] VideoMerger: FFmpeg thumbnail intro prepend failed: {te}")
         finally:
             for p in [intro_ts, concat_out]:
+                if os.path.exists(p):
+                    try: os.remove(p)
+                    except Exception: pass
+        return False
+
+    @staticmethod
+    def _append_outro_card_ffmpeg(video_path: str, outro_duration: float = 3.0) -> bool:
+        """Appends a 3-second 'Pai AI Movie Studio' branded Outro Card to the rendered video."""
+        ffmpeg_bin = _get_ffmpeg_bin()
+        if not ffmpeg_bin or not os.path.exists(video_path):
+            return False
+
+        try:
+            import cv2
+            cap = cv2.VideoCapture(video_path)
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1920
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or 1080
+            fps = float(cap.get(cv2.CAP_PROP_FPS) or 24.0)
+            if fps <= 0 or fps > 120:
+                fps = 24.0
+            cap.release()
+        except Exception:
+            w, h, fps = 1920, 1080, 24.0
+
+        tmp_dir = os.path.dirname(os.path.abspath(video_path))
+        base_name, _ = os.path.splitext(os.path.basename(video_path))
+        outro_img_path = os.path.join(tmp_dir, f"{base_name}_outro_card.png")
+        outro_ts = os.path.join(tmp_dir, f"{base_name}_outro_tmp.mp4")
+        concat_out = os.path.join(tmp_dir, f"{base_name}_with_outro.mp4")
+
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+            img = Image.new('RGB', (w, h), (15, 23, 42))
+            draw = ImageDraw.Draw(img)
+
+            # Responsive badge based on resolution
+            scale_factor = min(w / 1920.0, h / 1080.0)
+            badge_w = int(720 * scale_factor)
+            badge_h = int(140 * scale_factor)
+            bx = (w - badge_w) // 2
+            by = (h - badge_h) // 2 - int(60 * scale_factor)
+            radius = int(24 * scale_factor)
+            draw.rounded_rectangle([bx, by, bx + badge_w, by + badge_h], radius=radius, fill=(30, 41, 59), outline=(234, 179, 8), width=max(2, int(4 * scale_factor)))
+
+            font_path = os.path.join('assets', 'fonts', 'Padauk.ttf')
+            try:
+                font_title = ImageFont.truetype(font_path, max(16, int(52 * scale_factor)))
+                font_thanks = ImageFont.truetype(font_path, max(14, int(42 * scale_factor)))
+                font_sub = ImageFont.truetype(font_path, max(12, int(32 * scale_factor)))
+            except Exception:
+                font_title = font_thanks = font_sub = ImageFont.load_default()
+
+            draw.text((w // 2, by + int(50 * scale_factor)), "Pai Ai Movie Studio", fill=(255, 255, 255), font=font_title, anchor="mm")
+            draw.text((w // 2, by + badge_h + int(60 * scale_factor)), "ကျေးဇူးတင်ပါသည်", fill=(234, 179, 8), font=font_thanks, anchor="mm")
+            draw.text((w // 2, by + badge_h + int(120 * scale_factor)), "နောက်ထပ် ဇာတ်ကားကောင်းများစွာအတွက် Like & Follow လုပ်ထားပေးကြပါဦးခင်ဗျာ", fill=(203, 213, 225), font=font_sub, anchor="mm")
+
+            img.save(outro_img_path, "PNG")
+
+            # Create 3-second video clip with fade in & fade out
+            outro_cmd = [
+                ffmpeg_bin, "-y",
+                "-loop", "1", "-framerate", str(fps), "-t", str(outro_duration),
+                "-i", os.path.abspath(outro_img_path),
+                "-f", "lavfi", "-t", str(outro_duration), "-i", "anullsrc=r=44100:cl=stereo",
+                "-vf", f"scale={w}:{h},fade=t=in:st=0:d=0.5,fade=t=out:st={outro_duration-0.5:.2f}:d=0.5,format=yuv420p",
+                "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", "192k",
+                outro_ts
+            ]
+            res1 = subprocess.run(outro_cmd, capture_output=True, timeout=60)
+            if res1.returncode != 0 or not os.path.exists(outro_ts):
+                err = res1.stderr[-300:] if res1.stderr else ""
+                print(f"[WARN] Failed to generate FFmpeg outro card: {err}")
+                return False
+
+            enc_info = detect_hardware_encoder()
+            codec = enc_info.get("codec", "libx264")
+            preset = enc_info.get("preset", "veryfast")
+            quality_args = ["-b:v", "6M", "-maxrate", "9M", "-bufsize", "12M"] if enc_info.get("type") == "gpu" else ["-crf", "20"]
+
+            concat_cmd = [
+                ffmpeg_bin, "-y",
+                "-i", os.path.abspath(video_path),
+                "-i", outro_ts,
+                "-filter_complex", "[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[v][a]",
+                "-map", "[v]", "-map", "[a]",
+                "-c:v", codec, "-preset", preset, *quality_args,
+                "-c:a", "aac", "-b:a", "192k",
+                "-movflags", "+faststart",
+                concat_out
+            ]
+            res2 = subprocess.run(concat_cmd, capture_output=True, timeout=600)
+            if res2.returncode == 0 and os.path.exists(concat_out) and os.path.getsize(concat_out) > 1000:
+                shutil.move(concat_out, video_path)
+                print(f"🎉 [OK] VideoMerger: Appended {outro_duration:.1f}s 'Pai AI Movie Studio' Outro Card!")
+                return True
+        except Exception as te:
+            print(f"[WARN] VideoMerger: FFmpeg outro card append failed: {te}")
+        finally:
+            for p in [outro_img_path, outro_ts, concat_out]:
                 if os.path.exists(p):
                     try: os.remove(p)
                     except Exception: pass

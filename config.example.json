@@ -115,5 +115,11 @@
     "enabled": false,
     "duration_sec": 3.0
   },
+  "outro_protection": {
+    "auto_trim": true,
+    "anti_subscribe_zoom": true,
+    "outro_card": false,
+    "trim_end_seconds": 0.0
+  },
   "logging": {"level": "INFO", "save_log_file": true}
 }
