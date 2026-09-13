@@ -1608,6 +1608,54 @@ def serve_output(path: str = Query("")):
 
     return FileResponse(full_path)
 
+@app.get("/api/download/zip")
+@app.get("/api/outputs/zip")
+def download_project_zip(movie: str = Query("")):
+    """Packages all finished recap assets for a given movie into a single fast-downloadable .zip archive."""
+    import zipfile
+    import re
+
+    if not movie:
+        raise HTTPException(status_code=400, detail="Movie project name required")
+
+    safe_movie = os.path.normpath(movie).strip("/\\")
+    if safe_movie.startswith("..") or os.path.isabs(safe_movie):
+        raise HTTPException(status_code=400, detail="Invalid movie directory")
+
+    outputs_dir = os.path.abspath("outputs")
+    proj_dir = os.path.normpath(os.path.join(outputs_dir, safe_movie))
+    if os.path.commonpath([outputs_dir, proj_dir]) != outputs_dir or not os.path.isdir(proj_dir):
+        raise HTTPException(status_code=404, detail="Movie project output directory not found")
+
+    temp_dir = os.path.abspath("temp")
+    os.makedirs(temp_dir, exist_ok=True)
+    clean_base = re.sub(r'[^a-zA-Z0-9_\-]', '_', safe_movie)[:60].strip('_')
+    zip_filename = f"{clean_base}_Bundle.zip"
+    zip_path = os.path.join(temp_dir, f"{clean_base}_bundle.zip")
+
+    excluded_names = {"state.json", "checkpoint.json", "temp", "temp_test_dl"}
+
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(proj_dir):
+            dirs[:] = [d for d in dirs if d not in ["voiceover", "temp", "__pycache__"]]
+            for f in sorted(files):
+                if f in excluded_names or f.endswith(".tmp") or f.endswith(".part"):
+                    continue
+                file_full = os.path.join(root, f)
+                rel_in_zip = os.path.relpath(file_full, proj_dir)
+                # Store pre-compressed video files directly for instant 0-second zipping; compress text/subtitles
+                if f.lower().endswith(('.mp4', '.mkv', '.webm', '.avi', '.mov')):
+                    zf.write(file_full, arcname=rel_in_zip, compress_type=zipfile.ZIP_STORED)
+                else:
+                    zf.write(file_full, arcname=rel_in_zip, compress_type=zipfile.ZIP_DEFLATED)
+
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=zip_filename,
+        headers={"Content-Disposition": f'attachment; filename="{zip_filename}"'}
+    )
+
 @app.get("/api/movies")
 def list_movies():
     movies_dir = "movies"

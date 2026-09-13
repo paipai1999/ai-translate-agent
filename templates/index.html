@@ -3031,9 +3031,11 @@
                 }
 
                 let bodyHtml = `
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; padding-bottom:0.6rem; border-bottom:1px solid rgba(255,255,255,0.07);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem; padding-bottom:0.6rem; border-bottom:1px solid rgba(255,255,255,0.07); flex-wrap:wrap; gap:0.5rem;">
                         <h3 style="margin:0;">🎬 ${movie}</h3>
-                        <div style="display:flex; gap:0.5rem;">
+                        <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+                            <a href="/api/download/zip?movie=${safeMovie}" class="btn-success" style="padding:0.32rem 0.75rem; font-size:0.78rem; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; gap:0.3rem; border-radius:8px; background:linear-gradient(135deg, #10b981 0%, #059669 100%); color:#fff; box-shadow:0 3px 10px rgba(16,185,129,0.3);" download title="Download all video, thumbnail, subtitles & script in one ZIP">📦 Download All (ZIP)</a>
+                            <button type="button" class="btn-nav" style="padding:0.32rem 0.75rem; font-size:0.78rem; font-weight:700; background:linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); color:#fff; border-radius:8px; border:none; cursor:pointer; display:inline-flex; align-items:center; gap:0.3rem; box-shadow:0 3px 10px rgba(99,102,241,0.3);" onclick="saveToDirectory('${safeMovie}')" title="Choose a folder on your PC to save all files directly">📁 Save to Folder</button>
                             <a href="/api/logs/${safeMovie}" target="_blank" class="download-btn" style="padding:0.3rem 0.6rem; font-size:0.75rem; text-decoration:none;">📄 View Log</a>
                             <button class="btn-delete" onclick="deleteItem('outputs','${safeMovie}')">🗑️ Delete</button>
                         </div>
@@ -3252,6 +3254,46 @@
             if (btnText) btnText.textContent = origText;
             input.value = '';
         }
+    async function saveToDirectory(movie) {
+        if ('showDirectoryPicker' in window) {
+            try {
+                const dirHandle = await window.showDirectoryPicker();
+                showToast('📁 Folder selected. Fetching assets...', 'info');
+
+                const resp = await fetch(`/api/download?path=${encodeURIComponent(movie)}`);
+                if (!resp.ok) throw new Error('Could not list project files');
+                const data = await resp.json();
+                const files = data.files || [];
+
+                let count = 0;
+                for (const f of files) {
+                    const fname = f.name;
+                    if (['voiceover', 'temp', 'state.json', 'checkpoint.json'].includes(fname) || fname.endsWith('.tmp')) continue;
+                    showToast(`Saving ${fname}...`, 'info');
+                    const fileResp = await fetch(f.url);
+                    if (!fileResp.ok) continue;
+                    const blob = await fileResp.blob();
+                    const fileHandle = await dirHandle.getFileHandle(fname, { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                    count++;
+                }
+                showToast(`✅ Successfully saved ${count} files to your PC folder!`, 'success');
+                return;
+            } catch (err) {
+                if (err.name === 'AbortError') return;
+                console.warn('Native folder save failed or cancelled, falling back to ZIP:', err);
+            }
+        }
+        // Fallback for browsers without File System Access API
+        showToast('📦 Triggering 1-Click ZIP bundle download...', 'info');
+        const a = document.createElement('a');
+        a.href = `/api/download/zip?movie=${encodeURIComponent(movie)}`;
+        a.download = `${movie}_Bundle.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     }
 
     async function deleteItem(type, name) {
