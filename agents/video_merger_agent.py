@@ -1020,26 +1020,46 @@ class VideoMergerAgent:
             img = Image.new('RGB', (w, h), (15, 23, 42))
             draw = ImageDraw.Draw(img)
 
-            # Responsive badge based on resolution
-            scale_factor = min(w / 1920.0, h / 1080.0)
-            badge_w = int(720 * scale_factor)
-            badge_h = int(140 * scale_factor)
-            bx = (w - badge_w) // 2
-            by = (h - badge_h) // 2 - int(60 * scale_factor)
-            radius = int(24 * scale_factor)
-            draw.rounded_rectangle([bx, by, bx + badge_w, by + badge_h], radius=radius, fill=(30, 41, 59), outline=(234, 179, 8), width=max(2, int(4 * scale_factor)))
+            # Responsive badge and text layout based on aspect ratio (16:9 vs 9:16)
+            is_portrait = h > w
+            if is_portrait:
+                badge_w = int(w * 0.84)
+                badge_h = int(badge_w * 0.22)
+                bx = (w - badge_w) // 2
+                by = (h - badge_h) // 2 - int(h * 0.06)
+                radius = 28
+                border_w = 4
+                font_title_sz = max(18, int(w * 0.055))
+                font_thanks_sz = max(16, int(w * 0.048))
+                font_sub_sz = max(14, int(w * 0.038))
+                sub_offset = int(h * 0.09)
+            else:
+                scale_factor = min(w / 1920.0, h / 1080.0)
+                badge_w = int(720 * scale_factor)
+                badge_h = int(140 * scale_factor)
+                bx = (w - badge_w) // 2
+                by = (h - badge_h) // 2 - int(60 * scale_factor)
+                radius = int(24 * scale_factor)
+                border_w = max(2, int(4 * scale_factor))
+                font_title_sz = max(16, int(52 * scale_factor))
+                font_thanks_sz = max(14, int(42 * scale_factor))
+                font_sub_sz = max(12, int(32 * scale_factor))
+                sub_offset = int(120 * scale_factor)
+
+            draw.rounded_rectangle([bx, by, bx + badge_w, by + badge_h], radius=radius, fill=(30, 41, 59), outline=(234, 179, 8), width=border_w)
 
             font_path = os.path.join('assets', 'fonts', 'Padauk.ttf')
             try:
-                font_title = ImageFont.truetype(font_path, max(16, int(52 * scale_factor)))
-                font_thanks = ImageFont.truetype(font_path, max(14, int(42 * scale_factor)))
-                font_sub = ImageFont.truetype(font_path, max(12, int(32 * scale_factor)))
+                font_title = ImageFont.truetype(font_path, font_title_sz)
+                font_thanks = ImageFont.truetype(font_path, font_thanks_sz)
+                font_sub = ImageFont.truetype(font_path, font_sub_sz)
             except Exception:
                 font_title = font_thanks = font_sub = ImageFont.load_default()
 
-            draw.text((w // 2, by + int(50 * scale_factor)), "Pai Ai Movie Studio", fill=(255, 255, 255), font=font_title, anchor="mm")
-            draw.text((w // 2, by + badge_h + int(60 * scale_factor)), "ကျေးဇူးတင်ပါတယ်", fill=(234, 179, 8), font=font_thanks, anchor="mm")
-            draw.text((w // 2, by + badge_h + int(120 * scale_factor)), "နောက်ထပ် ဇာတ်ကားကောင်းများစွာအတွက် Like & Follow လုပ်ထားပေးကြပါဦးခင်ဗျား", fill=(203, 213, 225), font=font_sub, anchor="mm")
+            draw.text((w // 2, by + badge_h // 2), "Pai Ai Movie Studio", fill=(255, 255, 255), font=font_title, anchor="mm")
+            draw.text((w // 2, by + badge_h + (int(h * 0.04) if is_portrait else int(60 * scale_factor))), "ကျေးဇူးတင်ပါတယ်", fill=(234, 179, 8), font=font_thanks, anchor="mm")
+            subtext = "နောက်ထပ် ဇာတ်ကားကောင်းများစွာအတွက်\nLike & Follow လုပ်ထားပေးကြပါဦးခင်ဗျား" if is_portrait else "နောက်ထပ် ဇာတ်ကားကောင်းများစွာအတွက် Like & Follow လုပ်ထားပေးကြပါဦးခင်ဗျား"
+            draw.multiline_text((w // 2, by + badge_h + sub_offset), subtext, fill=(203, 213, 225), font=font_sub, anchor="mm", align="center", spacing=12)
 
             img.save(outro_img_path, "PNG")
 
@@ -2380,8 +2400,29 @@ class VideoMergerAgent:
         reels_sub_outline_col = p_data.get("outline_color", "&H00000000")
         reels_sub_back = p_data.get("back_color", "&HB0000000")
         
-        brand_events = [f"Dialogue: 0,0:00:00.00,9:59:59.99,ReelsBrand,,0,0,0,,🎬 {wm_brand_text}"] if wm_brand_enabled else []
-        hook_events = [f"Dialogue: 0,0:00:00.00,9:59:59.99,ReelsHook,,0,0,0,,{wrapped_title}"]
+        hook_end_s = "9:59:59.99"
+        if getattr(state, "outro_card", False) or getattr(state, "outro_card_applied", False):
+            # End top hook title 3s before video finishes so outro card is displayed cleanly
+            src_dur = 0.0
+            try:
+                import cv2
+                cap = cv2.VideoCapture(source_video_path)
+                frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+                fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
+                if fps > 0:
+                    src_dur = frames / fps
+                cap.release()
+            except Exception:
+                pass
+            if src_dur > 5.0:
+                movie_end = max(1.0, src_dur - 3.0)
+                h = int(movie_end // 3600)
+                m = int((movie_end % 3600) // 60)
+                s = movie_end % 60
+                hook_end_s = f"{h}:{m:02d}:{s:05.2f}"
+
+        brand_events = [f"Dialogue: 0,0:00:00.00,{hook_end_s},ReelsBrand,,0,0,0,,🎬 {wm_brand_text}"] if wm_brand_enabled else []
+        hook_events = [f"Dialogue: 0,0:00:00.00,{hook_end_s},ReelsHook,,0,0,0,,{wrapped_title}"]
         events_str = "\n".join(brand_events + hook_events)
 
         ass_content = f"""[Script Info]
